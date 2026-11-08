@@ -108,8 +108,7 @@ class MainActivity : AppCompatActivity() {
             val formattedTime = PlaybackStore.formatTime(savedPositionMs)
             AlertDialog.Builder(this)
                 .setTitle(getString(R.string.resume_dialog_title))
-                .setMessage("توقفت في «$title» عند الدقيقة ($formattedTime).
-هل تريد استئناف المشاهدة أم البدء من جديد؟")
+                .setMessage("توقفت في «$title» عند الدقيقة ($formattedTime). هل تريد استئناف المشاهدة أم البدء من جديد؟")
                 .setPositiveButton("استئناف من ($formattedTime)") { _, _ ->
                     launchPlayer(uri, title, startPositionMs = savedPositionMs)
                 }

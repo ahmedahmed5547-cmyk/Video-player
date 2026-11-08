@@ -72,7 +72,7 @@ class PlayerActivity : AppCompatActivity() {
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
-            mediaPlayer.addSlave(Media.Slave.Type.Subtitle, it, true)
+            mediaPlayer.addSlave(0, it, true)
             showToastIndicator("تم تحميل ملف الترجمة بنجاح")
         }
     }
@@ -404,8 +404,8 @@ class PlayerActivity : AppCompatActivity() {
     private fun promptOnlineSubtitleSearch(provider: String) {
         val cleanQuery = currentVideoTitle
             .substringBeforeLast(".")
-            .replace(Regex("[._\-]"), " ")
-            .replace(Regex("\b(1080p|720p|480p|2160p|4K|BluRay|WEB-DL|WEBRip|x264|x265|HEVC|10bit)\b", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("[._-]"), " ")
+            .replace(Regex("(1080p|720p|480p|2160p|4K|BluRay|WEB-DL|WEBRip|x264|x265|HEVC|10bit)", RegexOption.IGNORE_CASE), "")
             .trim()
 
         val input = EditText(this).apply {
