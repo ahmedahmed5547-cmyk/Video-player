@@ -75,7 +75,7 @@
 
     <!-- Subtitle Menu & Multi-Provider Search -->
     <string name="sub_menu_auto_search">🔍 Auto-Search Subtitles Online (Multi-Source)</string>
-    <string name="sub_menu_web_search">🌐 Interactive Web Subtitle Finder (SubDL / OpenSub)</string>
+    <string name="sub_menu_web_search">✏️ Enter Movie/Series Name for Auto-Download</string>
     <string name="sub_menu_load_local">📂 Load Subtitle File from Device (SAF)</string>
     <string name="sub_menu_style">🎨 Customize Subtitle Font, Size, Color &amp; Outline</string>
     <string name="sub_menu_languages">🗣️ Subtitle Languages (%1$s)</string>

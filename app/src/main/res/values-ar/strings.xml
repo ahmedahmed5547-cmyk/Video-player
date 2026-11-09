@@ -75,7 +75,7 @@
 
     <!-- Subtitle Menu & Multi-Provider Search -->
     <string name="sub_menu_auto_search">🔍 بحث تلقائي متعدد المصادر عن الترجمة (Auto-Fallback)</string>
-    <string name="sub_menu_web_search">🌐 متصفح تحميل الترجمة المدمج (SubDL / OpenSub)</string>
+    <string name="sub_menu_web_search">✏️ كتابة اسم الفيلم أو المسلسل للتنزيل التلقائي</string>
     <string name="sub_menu_load_local">📂 اختيار ملف ترجمة من الهاتف (SRT / VTT / ASS)</string>
     <string name="sub_menu_style">🎨 تخصيص حجم ولون وشفافية وظل الترجمة</string>
     <string name="sub_menu_languages">🗣️ لغات الترجمة المفضلة (%1$s)</string>

@@ -817,21 +817,27 @@ class PlayerActivity : AppCompatActivity() {
 
         val preferredLangsStr = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(",") { it.uppercase() }
 
+        // 1. Instant 1-Click Automatic Search & Auto-Download (MX Player Style — No browser!)
         items.add(getString(R.string.sub_menu_auto_search))
         trackIds.add(-998)
 
+        // 2. Search by typing custom movie/series name (if video file is named e.g. VID_1234.mp4)
         items.add(getString(R.string.sub_menu_web_search))
         trackIds.add(-994)
 
+        // 3. Load local file from device
         items.add(getString(R.string.sub_menu_load_local))
         trackIds.add(-999)
 
+        // 4. Preferred Subtitle Languages
         items.add(getString(R.string.sub_menu_languages, preferredLangsStr))
         trackIds.add(-993)
 
+        // 5. Subtitle Styling (Font, Size, Color, Opacity, Outline)
         items.add(getString(R.string.sub_menu_style))
         trackIds.add(-996)
 
+        // 6. Reset Subtitle Position
         items.add(getString(R.string.sub_menu_reset_pos))
         trackIds.add(-992)
 
@@ -851,8 +857,8 @@ class PlayerActivity : AppCompatActivity() {
             .setTitle(getString(R.string.subtitles))
             .setItems(items.toTypedArray()) { _, which ->
                 when (val selectedId = trackIds[which]) {
-                    -998 -> runAutomaticMultiSourceSubtitleSearch()
-                    -994 -> showInAppSubtitleDownloaderDialog()
+                    -998 -> runAutomaticMultiSourceSubtitleSearch(customQuery = null)
+                    -994 -> showCustomTitleAutoSearchDialog()
                     -999 -> subtitlePickerLauncher.launch(arrayOf("*/*"))
                     -993 -> showPlayerSubtitleLanguagePicker()
                     -996 -> showSubtitleLiveStyleDialog()
@@ -873,10 +879,40 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * Requirement 2: Automatic Multi-Source Subtitle Search with Coroutine Parallel Fallback,
-     * Auto-Apply of #1 Best Match, and Manual Selection Dialog!
+     * MX Player-style custom title input that still searches and downloads 100% automatically in the background (no website!).
      */
-    private fun runAutomaticMultiSourceSubtitleSearch() {
+    private fun showCustomTitleAutoSearchDialog() {
+        val defaultClean = currentVideoTitle
+            .substringBeforeLast(".")
+            .replace(Regex("[._\-\[\]()]"), " ")
+            .replace(Regex("\b(2160p|1080p|720p|480p|4K|BluRay|WEBRip|WEB-DL|x264|x265|HEVC|10bit)\b", RegexOption.IGNORE_CASE), "")
+            .trim()
+
+        val input = EditText(this).apply {
+            setText(defaultClean)
+            setPadding(48, 32, 48, 32)
+            setSingleLine(true)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.sub_menu_auto_search))
+            .setView(input)
+            .setPositiveButton(getString(R.string.subtitles)) { _, _ ->
+                val q = input.text.toString().trim()
+                if (q.isNotEmpty()) {
+                    runAutomaticMultiSourceSubtitleSearch(customQuery = q)
+                }
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    /**
+     * Requirement 2: 100% Background Automatic Multi-Source Subtitle Search & Auto-Download (Zero Browser!).
+     * Searches OpenSubtitles-v3, OpenSubtitles-REST, Podnapisi, YIFY, SubDL, and Addic7ed in parallel,
+     * downloads and extracts the best match automatically in the background, and activates it on the video!
+     */
+    private fun runAutomaticMultiSourceSubtitleSearch(customQuery: String? = null) {
         val uri = currentVideoUri ?: return
         binding.playerLoadingBar.visibility = View.VISIBLE
         showToastIndicator(getString(R.string.searching_subtitles_progress))
@@ -885,7 +921,8 @@ class PlayerActivity : AppCompatActivity() {
             val outcome = SubtitleSearchEngine.searchAndAutoDownload(
                 context = this@PlayerActivity,
                 videoUri = uri,
-                rawTitle = currentVideoTitle
+                rawTitle = currentVideoTitle,
+                customSearchQuery = customQuery
             )
             binding.playerLoadingBar.visibility = View.GONE
 
@@ -910,12 +947,12 @@ class PlayerActivity : AppCompatActivity() {
                         SubtitleSearchOutcome.ErrorType.NOT_FOUND -> R.string.sub_err_not_found
                     }
                     showToastIndicator(getString(msgRes))
-                    // Offer fallback to interactive web finder if public REST APIs had no match
+                    // If automatic filename didn't match (e.g. file is named VID_001.mp4), let user type the movie name for automatic search!
                     AlertDialog.Builder(this@PlayerActivity)
                         .setTitle(getString(R.string.subtitles))
                         .setMessage(getString(msgRes))
                         .setPositiveButton(getString(R.string.sub_menu_web_search)) { _, _ ->
-                            showInAppSubtitleDownloaderDialog()
+                            showCustomTitleAutoSearchDialog()
                         }
                         .setNeutralButton(getString(R.string.sub_menu_load_local)) { _, _ ->
                             subtitlePickerLauncher.launch(arrayOf("*/*"))
