@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <application
+        android:name=".PureVideoApp"
+        android:allowBackup="true"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:roundIcon="@drawable/ic_launcher_foreground"
+        android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.PureVideoPlayer"
+        tools:targetApi="34">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".PlayerActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
+            android:exported="true"
+            android:supportsPictureInPicture="true"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/Theme.PureVideoPlayer.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="application/x-matroska" />
+            </intent-filter>
+        </activity>
+
+        <!-- AndroidX Per-App Locale Persistence Service for Android 12 and below -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
+        </service>
+    </application>
+
+</manifest>

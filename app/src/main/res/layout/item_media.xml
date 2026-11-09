@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="10dp"
+    android:layoutDirection="locale"
+    app:cardBackgroundColor="@color/surface_dark"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="2dp"
+    app:strokeWidth="0dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="14dp">
+
+        <ImageView
+            android:id="@+id/ivIcon"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@color/bg_dark"
+            android:padding="10dp"
+            android:src="@android:drawable/ic_media_play"
+            app:tint="@color/accent_blue" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textAlignment="viewStart"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textAlignment="viewStart"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>
