@@ -13,10 +13,13 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.text.BidiFormatter
 import android.util.Rational
 import android.util.TypedValue
 import android.view.GestureDetector
+import android.view.Gravity
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -30,25 +33,26 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.SeekBar
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
 import com.pureplayer.video.databinding.ActivityPlayerBinding
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
-import java.nio.charset.Charset
 import java.util.Locale
-import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import java.util.zip.ZipInputStream
 import kotlin.math.abs
 
 class PlayerActivity : AppCompatActivity() {
@@ -58,9 +62,9 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var mediaPlayer: MediaPlayer
     private lateinit var audioManager: AudioManager
     private lateinit var gestureDetector: GestureDetector
+    private lateinit var subtitleScaleDetector: ScaleGestureDetector
 
     private var activePfd: ParcelFileDescriptor? = null
-    private val bgExecutor = Executors.newSingleThreadExecutor()
 
     private val handler = Handler(Looper.getMainLooper())
     private var isLocked = false
@@ -71,29 +75,26 @@ class PlayerActivity : AppCompatActivity() {
     private var speedBeforeHold = 1.0f
 
     private var currentVideoUri: Uri? = null
-    private var currentVideoTitle = "فيديو"
+    private var currentVideoTitle = "Video"
     private var pendingStartPositionMs = 0L
     private var hasAppliedInitialSeek = false
 
-    // External Custom Draggable Subtitles & Sync Offset
+    // External Custom Draggable Subtitles & Sync Offset (100ms precision)
     private var externalSubtitleCues = listOf<SubtitleCue>()
     private var subtitleSyncOffsetMs = 0L
     private var isDraggingSubtitle = false
-    private var dragInitialY = 0f
-    private var dragInitialTranslationY = 0f
+    private var isPinchingSubtitle = false
+    private var dragStartRawX = 0f
+    private var dragStartRawY = 0f
+    private var dragStartTransX = 0f
+    private var dragStartTransY = 0f
 
-    // Gesture accumulators for smooth Volume & Brightness control
     private var gestureVolumeAccumulator = 0f
 
     private val orientationModes = intArrayOf(
         ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR,
         ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
         ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-    )
-    private val orientationLabels = arrayOf(
-        "🔄 تلقائي (Auto)",
-        "🔒 عرضي (Landscape)",
-        "📱 طولي (Portrait)"
     )
     private var currentOrientationIndex = 1
 
@@ -104,7 +105,6 @@ class PlayerActivity : AppCompatActivity() {
         MediaPlayer.ScaleType.SURFACE_16_9,
         MediaPlayer.ScaleType.SURFACE_4_3
     )
-    private val scaleNames = arrayOf("تلقائي", "احتواء الشاشة", "ملء الشاشة", "16:9", "4:3")
     private var currentScaleIndex = 0
 
     private val subtitlePickerLauncher = registerForActivityResult(
@@ -117,7 +117,7 @@ class PlayerActivity : AppCompatActivity() {
         if (mediaPlayer.isPlaying) {
             saveCurrentPositionNow()
             mediaPlayer.pause()
-            showToastIndicator("⏰ توقف الفيديو تلقائياً (مؤقت النوم)")
+            showToastIndicator(getString(R.string.pro_sleep_30))
         }
     }
 
@@ -137,7 +137,7 @@ class PlayerActivity : AppCompatActivity() {
                 }
                 updateDraggableSubtitleText(time)
             }
-            handler.postDelayed(this, 250)
+            handler.postDelayed(this, 200)
         }
     }
 
@@ -158,18 +158,47 @@ class PlayerActivity : AppCompatActivity() {
 
         currentOrientationIndex = PlaybackStore.getDefaultOrientationIndex(this)
         requestedOrientation = orientationModes[currentOrientationIndex]
-        binding.btnOrientation.text = orientationLabels[currentOrientationIndex]
+        binding.btnOrientation.text = getOrientationLabel(currentOrientationIndex)
+
+        currentVideoUri = intent.data
+        currentVideoTitle = intent.getStringExtra("VIDEO_TITLE") ?: currentVideoUri?.lastPathSegment ?: "Video"
+        pendingStartPositionMs = intent.getLongExtra("START_POSITION_MS", 0L)
+        binding.tvVideoTitle.text = currentVideoTitle
+
+        // Restore per-video subtitle sync offset and cached subtitle if available
+        currentVideoUri?.let { uri ->
+            subtitleSyncOffsetMs = PlaybackStore.getVideoSubtitleSyncMs(this, uri)
+            val cachedSubPath = PlaybackStore.getVideoSubtitleCachePath(this, uri)
+            if (!cachedSubPath.isNullOrEmpty()) {
+                val file = File(cachedSubPath)
+                if (file.exists()) {
+                    val cues = SubtitleParser.parseFromFile(file)
+                    if (cues.isNotEmpty()) {
+                        externalSubtitleCues = cues
+                    }
+                }
+            }
+        }
 
         applyThemeAndSubtitleStyle()
-        setupDraggableSubtitleTouch()
+        setupFluidDraggableAndPinchSubtitle()
 
-        // High-performance 64-bit flagship decoding options
-        // Flagship 64-bit HDR10 / HLG / 10-bit HEVC & AV1 Hardware Rendering + Dynamic Tonemapping
+        // Restore percentage-based subtitle position whenever container size changes (fullscreen / rotation)
+        binding.playerRoot.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            val w = right - left
+            val h = bottom - top
+            if (w > 0 && h > 0 && (w != (oldRight - oldLeft) || h != (oldBottom - oldTop))) {
+                binding.tvDraggableSubtitle.post {
+                    restoreSubtitlePositionFromPercentage()
+                }
+            }
+        }
+
         val hdrMode = PlaybackStore.getHdrModeIndex(this)
         val toneMapAlgo = when (hdrMode) {
-            1 -> "reinhard" // Vivid HDR Boost
-            2 -> "mobius"   // Balanced SDR Tonemapping
-            else -> "hable" // Cinema Natural HDR10 / HLG (Filmic Hable)
+            1 -> "reinhard"
+            2 -> "mobius"
+            else -> "hable"
         }
         val options = arrayListOf(
             "--avcodec-skiploopfilter", "0",
@@ -186,11 +215,14 @@ class PlayerActivity : AppCompatActivity() {
             when (event.type) {
                 MediaPlayer.Event.Playing -> {
                     binding.btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
+                    if (externalSubtitleCues.isNotEmpty()) {
+                        mediaPlayer.spuTrack = -1
+                    }
                     if (!hasAppliedInitialSeek) {
                         hasAppliedInitialSeek = true
                         if (pendingStartPositionMs > 0L) {
                             mediaPlayer.time = pendingStartPositionMs
-                            showToastIndicator("تم الاستئناف عند ${formatTime(pendingStartPositionMs)}")
+                            showToastIndicator(getString(R.string.resume_from_format, formatTime(pendingStartPositionMs)))
                         }
                     }
                 }
@@ -200,14 +232,10 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
 
-        currentVideoUri = intent.data
-        currentVideoTitle = intent.getStringExtra("VIDEO_TITLE") ?: currentVideoUri?.lastPathSegment ?: "فيديو"
-        pendingStartPositionMs = intent.getLongExtra("START_POSITION_MS", 0L)
-        binding.tvVideoTitle.text = currentVideoTitle
-
         val targetUri = currentVideoUri
         if (targetUri != null) {
             binding.vlcVideoLayout.post {
+                restoreSubtitlePositionFromPercentage()
                 startVideoPlaybackSafely(targetUri)
             }
         } else {
@@ -216,6 +244,24 @@ class PlayerActivity : AppCompatActivity() {
 
         setupControls()
         setupTouchGestures()
+    }
+
+    private fun getOrientationLabel(index: Int): String {
+        return when (index) {
+            0 -> getString(R.string.orientation_auto)
+            1 -> getString(R.string.orientation_landscape)
+            else -> getString(R.string.orientation_portrait)
+        }
+    }
+
+    private fun getScaleLabel(index: Int): String {
+        return when (index) {
+            0 -> getString(R.string.scale_best_fit)
+            1 -> getString(R.string.scale_fit_screen)
+            2 -> getString(R.string.scale_fill)
+            3 -> getString(R.string.scale_16_9)
+            else -> getString(R.string.scale_4_3)
+        }
     }
 
     private fun startVideoPlaybackSafely(uri: Uri) {
@@ -235,7 +281,6 @@ class PlayerActivity : AppCompatActivity() {
                 Media(libVLC, uri)
             }
 
-            // Enable Hardware Acceleration with automatic Software fallback (true, false) so every codec plays!
             media.setHWDecoderEnabled(true, false)
             mediaPlayer.media = media
             media.release()
@@ -256,78 +301,197 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun loadExternalSubtitleUri(uri: Uri) {
-        val parsed = SubtitleParser.parseFromUri(this, uri)
-        if (parsed.isNotEmpty()) {
-            externalSubtitleCues = parsed
-            mediaPlayer.spuTrack = -1
-            binding.tvDraggableSubtitle.visibility = View.VISIBLE
-            binding.tvDraggableSubtitle.text = "تم تفعيل الترجمة (اضغط مطولاً لتحريكها لأعلى أو أسفل)"
-            showToastIndicator("تم تحميل الترجمة (${parsed.size} جملة) — اضغط مطولاً عليها لتحريك مكانها")
-        } else {
-            mediaPlayer.addSlave(0, uri, true)
-            showToastIndicator("تم تحميل ملف الترجمة")
+        lifecycleScope.launch {
+            val bytes = withContext(Dispatchers.IO) {
+                contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            }
+            if (bytes != null && bytes.isNotEmpty()) {
+                val cues = withContext(Dispatchers.Default) {
+                    SubtitleParser.parseFromBytes(bytes)
+                }
+                if (cues.isNotEmpty()) {
+                    // Cache loaded subtitle file per-video in internal storage
+                    currentVideoUri?.let { vUri ->
+                        withContext(Dispatchers.IO) {
+                            val cacheDir = File(filesDir, "subtitles_cache").apply { mkdirs() }
+                            val localCopy = File(cacheDir, "local_${vUri.hashCode()}.srt")
+                            localCopy.writeBytes(bytes)
+                            PlaybackStore.saveVideoSubtitleCachePath(this@PlayerActivity, vUri, localCopy.absolutePath)
+                        }
+                    }
+                    applyLoadedSubtitleCues(cues)
+                    showToastIndicator(getString(R.string.sub_loaded_count_format, cues.size))
+                } else {
+                    showToastIndicator(getString(R.string.sub_err_corrupted))
+                }
+            } else {
+                mediaPlayer.addSlave(0, uri, true)
+            }
         }
     }
 
+    private fun applyLoadedSubtitleCues(cues: List<SubtitleCue>) {
+        externalSubtitleCues = cues
+        mediaPlayer.spuTrack = -1
+        binding.tvDraggableSubtitle.visibility = View.VISIBLE
+        restoreSubtitlePositionFromPercentage()
+        updateDraggableSubtitleText(mediaPlayer.time)
+    }
+
+    /**
+     * Proper RTL rendering for Arabic subtitles & LTR for English subtitles.
+     */
     private fun updateDraggableSubtitleText(currentTimeMs: Long) {
         if (externalSubtitleCues.isEmpty()) return
-        if (isDraggingSubtitle) return
+        if (isDraggingSubtitle || isPinchingSubtitle) return
 
         val adjustedTime = currentTimeMs - subtitleSyncOffsetMs
         val activeCue = externalSubtitleCues.firstOrNull {
             adjustedTime >= it.startMs && adjustedTime <= it.endMs
         }
         if (activeCue != null) {
-            binding.tvDraggableSubtitle.text = activeCue.text
+            val rawText = activeCue.text
+            val containsArabic = rawText.any { it in '\u0600'..'\u06FF' }
+            binding.tvDraggableSubtitle.textDirection = if (containsArabic) {
+                View.TEXT_DIRECTION_RTL
+            } else {
+                View.TEXT_DIRECTION_LTR
+            }
+            val formatted = if (containsArabic) {
+                BidiFormatter.getInstance(true).unicodeWrap(rawText)
+            } else {
+                rawText
+            }
+            binding.tvDraggableSubtitle.text = formatted
             binding.tvDraggableSubtitle.visibility = View.VISIBLE
         } else {
             binding.tvDraggableSubtitle.visibility = View.GONE
         }
     }
 
-    private fun setupDraggableSubtitleTouch() {
-        binding.tvDraggableSubtitle.translationY = PlaybackStore.getSubVerticalOffsetPx(this)
+    /**
+     * Requirement 1 & 5:
+     * - Touching the subtitle text makes it immediately draggable (no re-layout on move; uses translationX & translationY).
+     * - Stays exactly where the user releases their finger and NEVER snaps back.
+     * - Clamped strictly inside video bounds so it cannot go off-screen.
+     * - Saved as a percentage of the container size (works across fullscreen, rotation, and any screen size).
+     * - Supports Pinch-to-Zoom directly on the subtitle to resize font smoothly!
+     */
+    private fun setupFluidDraggableAndPinchSubtitle() {
+        subtitleScaleDetector = ScaleGestureDetector(
+            this,
+            object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                    isPinchingSubtitle = true
+                    return true
+                }
 
-        binding.tvDraggableSubtitle.setOnLongClickListener {
-            if (isLocked) return@setOnLongClickListener false
-            isDraggingSubtitle = true
-            binding.tvDraggableSubtitle.setBackgroundColor(Color.parseColor("#CC0284C7"))
-            showToastIndicator("↕️ اسحب الترجمة لأعلى أو لأسفل لتغيير مكانها")
-            true
-        }
+                override fun onScale(detector: ScaleGestureDetector): Boolean {
+                    val currentSp = PlaybackStore.getSubSizeSp(this@PlayerActivity)
+                    val newSp = (currentSp * detector.scaleFactor).coerceIn(12f, 46f)
+                    PlaybackStore.setSubSizeSp(this@PlayerActivity, newSp)
+                    binding.tvDraggableSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, newSp)
+                    showToastIndicator("${newSp.toInt()}sp")
+                    return true
+                }
+
+                override fun onScaleEnd(detector: ScaleGestureDetector) {
+                    isPinchingSubtitle = false
+                }
+            }
+        )
 
         binding.tvDraggableSubtitle.setOnTouchListener { view, event ->
+            if (isLocked) return@setOnTouchListener false
+            view.parent?.requestDisallowInterceptTouchEvent(true)
+            subtitleScaleDetector.onTouchEvent(event)
+
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    dragInitialY = event.rawY
-                    dragInitialTranslationY = view.translationY
-                    false
+                    isDraggingSubtitle = true
+                    dragStartRawX = event.rawX
+                    dragStartRawY = event.rawY
+                    dragStartTransX = view.translationX
+                    dragStartTransY = view.translationY
+                    view.setBackgroundColor(Color.parseColor("#CC0284C7"))
+                    true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (isDraggingSubtitle) {
-                        val deltaY = event.rawY - dragInitialY
-                        val maxUp = -(binding.playerRoot.height * 0.78f)
-                        val newTransY = (dragInitialTranslationY + deltaY).coerceIn(maxUp, 120f)
-                        view.translationY = newTransY
-                        PlaybackStore.setSubVerticalOffsetPx(this, newTransY)
-                        true
-                    } else {
-                        false
+                    if (!subtitleScaleDetector.isInProgress && isDraggingSubtitle && event.pointerCount == 1) {
+                        val parentW = binding.playerRoot.width.toFloat().coerceAtLeast(1f)
+                        val parentH = binding.playerRoot.height.toFloat().coerceAtLeast(1f)
+
+                        val deltaX = event.rawX - dragStartRawX
+                        val deltaY = event.rawY - dragStartRawY
+
+                        // Compute safe clamping bounds so the subtitle never goes off-screen
+                        val halfRemainingW = ((parentW - view.width) / 2f).coerceAtLeast(0f)
+                        val minTransX = -halfRemainingW + 8f
+                        val maxTransX = halfRemainingW - 8f
+
+                        val topBound = -(view.top.toFloat() - 16f).coerceAtLeast(0f)
+                        val bottomBound = (parentH - view.bottom.toFloat() - 16f).coerceAtLeast(0f)
+
+                        val clampedX = (dragStartTransX + deltaX).coerceIn(
+                            minOf(minTransX, maxTransX),
+                            maxOf(minTransX, maxTransX)
+                        )
+                        val clampedY = (dragStartTransY + deltaY).coerceIn(
+                            minOf(topBound, bottomBound),
+                            maxOf(topBound, bottomBound)
+                        )
+
+                        view.translationX = clampedX
+                        view.translationY = clampedY
                     }
+                    true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (isDraggingSubtitle) {
                         isDraggingSubtitle = false
+                        val parentW = binding.playerRoot.width.toFloat().coerceAtLeast(1f)
+                        val parentH = binding.playerRoot.height.toFloat().coerceAtLeast(1f)
+                        val pctX = (view.translationX / parentW).coerceIn(-0.48f, 0.48f)
+                        val pctY = (view.translationY / parentH).coerceIn(-0.85f, 0.08f)
+                        PlaybackStore.saveSubPositionPercent(this, pctX, pctY)
                         applyThemeAndSubtitleStyle()
-                        showToastIndicator("✅ تم تثبيت مكان الترجمة")
-                        true
-                    } else {
-                        false
+                        showToastIndicator(
+                            getString(
+                                R.string.sub_drag_saved_toast,
+                                ((pctX + 0.5f) * 100).toInt(),
+                                ((1f + pctY) * 100).toInt()
+                            )
+                        )
                     }
+                    true
                 }
-                else -> false
+                else -> true
             }
         }
+    }
+
+    private fun restoreSubtitlePositionFromPercentage() {
+        val parentW = binding.playerRoot.width.toFloat()
+        val parentH = binding.playerRoot.height.toFloat()
+        if (parentW <= 0f || parentH <= 0f) return
+
+        val pctX = PlaybackStore.getSubPositionPercentX(this)
+        val pctY = PlaybackStore.getSubPositionPercentY(this)
+
+        val view = binding.tvDraggableSubtitle
+        val halfRemainingW = ((parentW - view.width) / 2f).coerceAtLeast(0f)
+        val targetX = (pctX * parentW).coerceIn(-halfRemainingW, halfRemainingW)
+        val targetY = (pctY * parentH).coerceIn(-(parentH * 0.85f), parentH * 0.08f)
+
+        view.translationX = targetX
+        view.translationY = targetY
+    }
+
+    private fun resetSubtitlePositionNow() {
+        PlaybackStore.resetSubPosition(this)
+        binding.tvDraggableSubtitle.translationX = 0f
+        binding.tvDraggableSubtitle.translationY = 0f
+        showToastIndicator(getString(R.string.sub_position_reset_toast))
     }
 
     private fun applyThemeAndSubtitleStyle() {
@@ -337,17 +501,20 @@ class PlayerActivity : AppCompatActivity() {
         binding.btnOrientation.setTextColor(accent)
         binding.btnSpeed.setTextColor(accent)
         binding.btnSubFontUp.setTextColor(accent)
+        binding.btnResetSubPos.setTextColor(accent)
 
         val subSizeSp = PlaybackStore.getSubSizeSp(this)
         val subColor = PlaybackStore.getSubColorValue(this)
-        val subBg = PlaybackStore.isSubBgEnabled(this)
+        val subBgColor = PlaybackStore.getSubBackgroundColor(this)
+        val subOutlinePx = PlaybackStore.getSubOutlinePx(this)
+        val subTypeface = PlaybackStore.getSubTypeface(this)
 
         binding.tvDraggableSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, subSizeSp)
         binding.tvDraggableSubtitle.setTextColor(subColor)
-        binding.tvDraggableSubtitle.setBackgroundColor(
-            if (subBg) Color.parseColor("#AA000000") else Color.TRANSPARENT
-        )
-        binding.tvDraggableSubtitle.translationY = PlaybackStore.getSubVerticalOffsetPx(this)
+        binding.tvDraggableSubtitle.typeface = subTypeface
+        binding.tvDraggableSubtitle.setBackgroundColor(subBgColor)
+        binding.tvDraggableSubtitle.setShadowLayer(subOutlinePx.coerceAtLeast(1f), 2f, 2f, Color.BLACK)
+        restoreSubtitlePositionFromPercentage()
     }
 
     private fun saveCurrentPositionNow() {
@@ -357,6 +524,15 @@ class PlayerActivity : AppCompatActivity() {
         if (time > 0L) {
             PlaybackStore.saveProgress(this, uri, currentVideoTitle, time, length)
         }
+    }
+
+    private fun adjustSubtitleSyncBy(deltaMs: Long) {
+        subtitleSyncOffsetMs += deltaMs
+        currentVideoUri?.let { uri ->
+            PlaybackStore.saveVideoSubtitleSyncMs(this, uri, subtitleSyncOffsetMs)
+        }
+        updateDraggableSubtitleText(mediaPlayer.time)
+        showToastIndicator(getString(R.string.sub_sync_offset_format, subtitleSyncOffsetMs))
     }
 
     private fun setupControls() {
@@ -380,45 +556,60 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         binding.btnSubFontUp.setOnClickListener {
-            val newSize = (PlaybackStore.getSubSizeSp(this) + 2f).coerceAtMost(42f)
+            val newSize = (PlaybackStore.getSubSizeSp(this) + 2f).coerceAtMost(46f)
             PlaybackStore.setSubSizeSp(this, newSize)
             applyThemeAndSubtitleStyle()
             binding.tvDraggableSubtitle.visibility = View.VISIBLE
             if (binding.tvDraggableSubtitle.text.isNullOrEmpty()) {
-                binding.tvDraggableSubtitle.text = "معاينة حجم خط الترجمة (${newSize.toInt()}sp)"
+                binding.tvDraggableSubtitle.text = getString(R.string.style_preview_sample)
             }
-            showToastIndicator("حجم الترجمة: ${newSize.toInt()}sp")
+            showToastIndicator("${newSize.toInt()}sp")
             scheduleHideControls()
         }
 
         binding.btnSubFontDown.setOnClickListener {
-            val newSize = (PlaybackStore.getSubSizeSp(this) - 2f).coerceAtLeast(14f)
+            val newSize = (PlaybackStore.getSubSizeSp(this) - 2f).coerceAtLeast(12f)
             PlaybackStore.setSubSizeSp(this, newSize)
             applyThemeAndSubtitleStyle()
             binding.tvDraggableSubtitle.visibility = View.VISIBLE
             if (binding.tvDraggableSubtitle.text.isNullOrEmpty()) {
-                binding.tvDraggableSubtitle.text = "معاينة حجم خط الترجمة (${newSize.toInt()}sp)"
+                binding.tvDraggableSubtitle.text = getString(R.string.style_preview_sample)
             }
-            showToastIndicator("حجم الترجمة: ${newSize.toInt()}sp")
+            showToastIndicator("${newSize.toInt()}sp")
             scheduleHideControls()
         }
 
-        // Rewind 15 Seconds
+        // On-Screen 100ms Subtitle Sync Buttons (-100ms / +100ms)
+        binding.btnSubSyncMinus.setOnClickListener {
+            adjustSubtitleSyncBy(-100L)
+            scheduleHideControls()
+        }
+
+        binding.btnSubSyncPlus.setOnClickListener {
+            adjustSubtitleSyncBy(100L)
+            scheduleHideControls()
+        }
+
+        // On-Screen Reset Subtitle Position Button
+        binding.btnResetSubPos.setOnClickListener {
+            resetSubtitlePositionNow()
+            scheduleHideControls()
+        }
+
         binding.btnRewind.setOnClickListener {
             val newTime = (mediaPlayer.time - 15_000L).coerceAtLeast(0L)
             mediaPlayer.time = newTime
             saveCurrentPositionNow()
-            showToastIndicator("⏪ -15 ثانية")
+            showToastIndicator(getString(R.string.toast_rewind_15))
             scheduleHideControls()
         }
 
-        // Forward 15 Seconds
         binding.btnForward.setOnClickListener {
             val length = mediaPlayer.length
             val newTime = (mediaPlayer.time + 15_000L).coerceAtMost(if (length > 0) length else Long.MAX_VALUE)
             mediaPlayer.time = newTime
             saveCurrentPositionNow()
-            showToastIndicator("⏩ +15 ثانية")
+            showToastIndicator(getString(R.string.toast_forward_15))
             scheduleHideControls()
         }
 
@@ -426,21 +617,22 @@ class PlayerActivity : AppCompatActivity() {
             isLocked = true
             binding.controlsContainer.visibility = View.GONE
             binding.btnUnlock.visibility = View.VISIBLE
-            showToastIndicator("🔒 الشاشة مقفلة")
+            showToastIndicator(getString(R.string.toast_locked))
         }
 
         binding.btnUnlock.setOnClickListener {
             isLocked = false
             binding.btnUnlock.visibility = View.GONE
             showControls()
-            showToastIndicator("🔓 تم فتح القفل")
+            showToastIndicator(getString(R.string.toast_unlocked))
         }
 
         binding.btnOrientation.setOnClickListener {
             currentOrientationIndex = (currentOrientationIndex + 1) % orientationModes.size
             requestedOrientation = orientationModes[currentOrientationIndex]
-            binding.btnOrientation.text = orientationLabels[currentOrientationIndex]
-            showToastIndicator("وضع الشاشة: ${orientationLabels[currentOrientationIndex]}")
+            val label = getOrientationLabel(currentOrientationIndex)
+            binding.btnOrientation.text = label
+            showToastIndicator(label)
             scheduleHideControls()
         }
 
@@ -451,7 +643,7 @@ class PlayerActivity : AppCompatActivity() {
         binding.btnAspectRatio.setOnClickListener {
             currentScaleIndex = (currentScaleIndex + 1) % scaleTypes.size
             mediaPlayer.videoScale = scaleTypes[currentScaleIndex]
-            showToastIndicator("الأبعاد: ${scaleNames[currentScaleIndex]}")
+            showToastIndicator(getScaleLabel(currentScaleIndex))
             scheduleHideControls()
         }
 
@@ -497,16 +689,6 @@ class PlayerActivity : AppCompatActivity() {
         })
     }
 
-    /**
-     * Complete Gesture System:
-     * - Double Tap RIGHT side of screen -> Forward +15 seconds
-     * - Double Tap LEFT side of screen -> Rewind -15 seconds
-     * - Double Tap CENTER -> Play / Pause
-     * - Swipe on RIGHT half -> Volume Up / Down
-     * - Swipe on LEFT half -> Brightness Up / Down
-     * - Horizontal Swipe -> Smooth video seeking
-     * - Long Press on Video -> 2.0x Turbo Speed while holding finger down!
-     */
     private fun setupTouchGestures() {
         gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
 
@@ -529,19 +711,17 @@ class PlayerActivity : AppCompatActivity() {
                 val screenWidth = binding.playerRoot.width
                 val length = mediaPlayer.length
                 when {
-                    // Right side of screen -> Forward +15 seconds
                     e.x > (screenWidth * 0.60f) -> {
                         val newTime = (mediaPlayer.time + 15_000L).coerceAtMost(if (length > 0) length else Long.MAX_VALUE)
                         mediaPlayer.time = newTime
                         saveCurrentPositionNow()
-                        showToastIndicator("⏩ +15 ثانية")
+                        showToastIndicator(getString(R.string.toast_forward_15))
                     }
-                    // Left side of screen -> Rewind -15 seconds
                     e.x < (screenWidth * 0.40f) -> {
                         val newTime = (mediaPlayer.time - 15_000L).coerceAtLeast(0L)
                         mediaPlayer.time = newTime
                         saveCurrentPositionNow()
-                        showToastIndicator("⏪ -15 ثانية")
+                        showToastIndicator(getString(R.string.toast_rewind_15))
                     }
                     else -> {
                         binding.btnPlayPause.performClick()
@@ -551,12 +731,12 @@ class PlayerActivity : AppCompatActivity() {
             }
 
             override fun onLongPress(e: MotionEvent) {
-                if (isLocked || isDraggingSubtitle) return
+                if (isLocked || isDraggingSubtitle || isPinchingSubtitle) return
                 if (mediaPlayer.isPlaying) {
                     isHoldSpeedActive = true
                     speedBeforeHold = currentSpeed
                     mediaPlayer.rate = 2.0f
-                    showToastIndicator("⚡ سرعة مضاعفة 2.0x (استمر بالضغط)")
+                    showToastIndicator(getString(R.string.toast_speed_hold))
                 }
             }
 
@@ -566,13 +746,12 @@ class PlayerActivity : AppCompatActivity() {
                 distanceX: Float,
                 distanceY: Float
             ): Boolean {
-                if (isLocked || isDraggingSubtitle || isHoldSpeedActive || e1 == null) return false
+                if (isLocked || isDraggingSubtitle || isPinchingSubtitle || isHoldSpeedActive || e1 == null) return false
 
                 val screenWidth = binding.playerRoot.width.toFloat().coerceAtLeast(1f)
                 val screenHeight = binding.playerRoot.height.toFloat().coerceAtLeast(1f)
 
                 if (abs(distanceY) >= abs(distanceX)) {
-                    // Vertical Swipe: Right Half = Volume, Left Half = Brightness
                     val delta = distanceY / screenHeight
                     if (e1.x > screenWidth / 2f) {
                         adjustVolumeSmooth(delta)
@@ -580,7 +759,6 @@ class PlayerActivity : AppCompatActivity() {
                         adjustBrightnessSmooth(delta)
                     }
                 } else {
-                    // Horizontal Swipe: Smooth Video Seek
                     val seekDeltaMs = (-distanceX / screenWidth * 90_000L).toLong()
                     val length = mediaPlayer.length
                     if (length > 0) {
@@ -603,7 +781,7 @@ class PlayerActivity : AppCompatActivity() {
                 if (isHoldSpeedActive) {
                     isHoldSpeedActive = false
                     mediaPlayer.rate = speedBeforeHold
-                    showToastIndicator("السرعة العادية: ${speedBeforeHold}x")
+                    showToastIndicator(getString(R.string.toast_speed_normal, speedBeforeHold.toString()))
                 }
             }
             gestureDetector.onTouchEvent(event)
@@ -618,7 +796,7 @@ class PlayerActivity : AppCompatActivity() {
         val targetVol = (gestureVolumeAccumulator * maxVol).toInt().coerceIn(0, maxVol)
         audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
         val percent = (gestureVolumeAccumulator * 100).toInt()
-        showToastIndicator("🔊 الصوت: $percent%")
+        showToastIndicator(getString(R.string.toast_volume_format, percent))
     }
 
     private fun adjustBrightnessSmooth(delta: Float) {
@@ -629,7 +807,7 @@ class PlayerActivity : AppCompatActivity() {
         layoutParams.screenBrightness = brightness
         window.attributes = layoutParams
         val percent = (brightness * 100).toInt()
-        showToastIndicator("☀️ الإضاءة: $percent%")
+        showToastIndicator(getString(R.string.toast_brightness_format, percent))
     }
 
     private fun showSubtitlesDialog() {
@@ -637,22 +815,35 @@ class PlayerActivity : AppCompatActivity() {
         val items = mutableListOf<String>()
         val trackIds = mutableListOf<Int>()
 
-        items.add(getString(R.string.in_app_sub_search))
+        val preferredLangsStr = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(",") { it.uppercase() }
+
+        items.add(getString(R.string.sub_menu_auto_search))
         trackIds.add(-998)
 
-        items.add(getString(R.string.load_external_sub))
+        items.add(getString(R.string.sub_menu_web_search))
+        trackIds.add(-994)
+
+        items.add(getString(R.string.sub_menu_load_local))
         trackIds.add(-999)
 
-        items.add(getString(R.string.customize_subtitles))
+        items.add(getString(R.string.sub_menu_languages, preferredLangsStr))
+        trackIds.add(-993)
+
+        items.add(getString(R.string.sub_menu_style))
         trackIds.add(-996)
 
-        if (externalSubtitleCues.isNotEmpty()) {
-            items.add(getString(R.string.disable_subtitles))
+        items.add(getString(R.string.sub_menu_reset_pos))
+        trackIds.add(-992)
+
+        if (externalSubtitleCues.isNotEmpty() || mediaPlayer.spuTrack != -1) {
+            items.add(getString(R.string.sub_menu_disable))
             trackIds.add(-995)
         }
 
+        // Detect and list embedded subtitle tracks in the video
         for (track in spuTracks) {
-            items.add(track.name ?: "Track ${track.id}")
+            val tName = track.name ?: "Track ${track.id}"
+            items.add(getString(R.string.sub_embedded_prefix, tName))
             trackIds.add(track.id)
         }
 
@@ -660,14 +851,16 @@ class PlayerActivity : AppCompatActivity() {
             .setTitle(getString(R.string.subtitles))
             .setItems(items.toTypedArray()) { _, which ->
                 when (val selectedId = trackIds[which]) {
-                    -998 -> showInAppSubtitleDownloaderDialog()
+                    -998 -> runAutomaticMultiSourceSubtitleSearch()
+                    -994 -> showInAppSubtitleDownloaderDialog()
                     -999 -> subtitlePickerLauncher.launch(arrayOf("*/*"))
-                    -996 -> showQuickSubtitleColorDialog()
+                    -993 -> showPlayerSubtitleLanguagePicker()
+                    -996 -> showSubtitleLiveStyleDialog()
+                    -992 -> resetSubtitlePositionNow()
                     -995 -> {
                         externalSubtitleCues = emptyList()
                         binding.tvDraggableSubtitle.visibility = View.GONE
                         mediaPlayer.spuTrack = -1
-                        showToastIndicator("تم إيقاف الترجمة")
                     }
                     else -> {
                         externalSubtitleCues = emptyList()
@@ -680,17 +873,258 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * Built-in In-App Subtitle Search & Direct Downloader inside the video player!
-     * Opens an embedded browser window right over the player, searches Subdl / OpenSubtitles in Arabic,
-     * and when the user clicks ANY download button (.srt or .zip), automatically downloads, unzips in memory,
-     * and activates the Arabic subtitle on the video immediately!
+     * Requirement 2: Automatic Multi-Source Subtitle Search with Coroutine Parallel Fallback,
+     * Auto-Apply of #1 Best Match, and Manual Selection Dialog!
      */
+    private fun runAutomaticMultiSourceSubtitleSearch() {
+        val uri = currentVideoUri ?: return
+        binding.playerLoadingBar.visibility = View.VISIBLE
+        showToastIndicator(getString(R.string.searching_subtitles_progress))
+
+        lifecycleScope.launch {
+            val outcome = SubtitleSearchEngine.searchAndAutoDownload(
+                context = this@PlayerActivity,
+                videoUri = uri,
+                rawTitle = currentVideoTitle
+            )
+            binding.playerLoadingBar.visibility = View.GONE
+
+            when (outcome) {
+                is SubtitleSearchOutcome.Success -> {
+                    applyLoadedSubtitleCues(outcome.autoAppliedCues)
+                    showToastIndicator(
+                        getString(
+                            R.string.sub_auto_applied_format,
+                            outcome.bestItem.providerName,
+                            outcome.bestItem.languageCode.uppercase()
+                        )
+                    )
+                    showManualSubtitleResultsDialog(outcome.results)
+                }
+                is SubtitleSearchOutcome.Error -> {
+                    val msgRes = when (outcome.errorType) {
+                        SubtitleSearchOutcome.ErrorType.NO_INTERNET -> R.string.sub_err_no_internet
+                        SubtitleSearchOutcome.ErrorType.TIMEOUT -> R.string.sub_err_timeout
+                        SubtitleSearchOutcome.ErrorType.RATE_LIMIT -> R.string.sub_err_rate_limit
+                        SubtitleSearchOutcome.ErrorType.CORRUPTED_FILE -> R.string.sub_err_corrupted
+                        SubtitleSearchOutcome.ErrorType.NOT_FOUND -> R.string.sub_err_not_found
+                    }
+                    showToastIndicator(getString(msgRes))
+                    // Offer fallback to interactive web finder if public REST APIs had no match
+                    AlertDialog.Builder(this@PlayerActivity)
+                        .setTitle(getString(R.string.subtitles))
+                        .setMessage(getString(msgRes))
+                        .setPositiveButton(getString(R.string.sub_menu_web_search)) { _, _ ->
+                            showInAppSubtitleDownloaderDialog()
+                        }
+                        .setNeutralButton(getString(R.string.sub_menu_load_local)) { _, _ ->
+                            subtitlePickerLauncher.launch(arrayOf("*/*"))
+                        }
+                        .setNegativeButton(getString(R.string.close), null)
+                        .show()
+                }
+            }
+        }
+    }
+
+    private fun showManualSubtitleResultsDialog(results: List<SubtitleResultItem>) {
+        if (results.size <= 1) return
+        val displayItems = results.take(12).mapIndexed { idx, item ->
+            val badge = when (item.matchQuality) {
+                MatchQuality.HASH_MATCH -> "★ HASH"
+                MatchQuality.EXACT_TITLE -> "✓ EXACT"
+                MatchQuality.FUZZY_TITLE -> "~ MATCH"
+            }
+            "${idx + 1}. [${item.languageCode.uppercase()} • ${item.providerName} • $badge] ${item.title}"
+        }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.sub_results_dialog_title))
+            .setItems(displayItems) { _, which ->
+                val chosen = results[which]
+                binding.playerLoadingBar.visibility = View.VISIBLE
+                lifecycleScope.launch {
+                    val pair = SubtitleSearchEngine.downloadAndCacheSubtitle(this@PlayerActivity, chosen)
+                    binding.playerLoadingBar.visibility = View.GONE
+                    if (pair != null && pair.second.isNotEmpty()) {
+                        currentVideoUri?.let { vUri ->
+                            PlaybackStore.saveVideoSubtitleCachePath(this@PlayerActivity, vUri, pair.first.absolutePath)
+                        }
+                        applyLoadedSubtitleCues(pair.second)
+                        showToastIndicator(getString(R.string.sub_loaded_count_format, pair.second.size))
+                    } else {
+                        showToastIndicator(getString(R.string.sub_err_corrupted))
+                    }
+                }
+            }
+            .setNegativeButton(getString(R.string.close), null)
+            .show()
+    }
+
+    private fun showPlayerSubtitleLanguagePicker() {
+        val langCodes = arrayOf("ar", "en", "fr", "es", "tr", "hi", "ur")
+        val langLabels = arrayOf(
+            getString(R.string.sub_lang_ar),
+            getString(R.string.sub_lang_en),
+            getString(R.string.sub_lang_fr),
+            getString(R.string.sub_lang_es),
+            getString(R.string.sub_lang_tr),
+            getString(R.string.sub_lang_hi),
+            getString(R.string.sub_lang_ur)
+        )
+        val currentPreferred = PlaybackStore.getPreferredSubtitleLanguages(this).toMutableList()
+        val checked = BooleanArray(langCodes.size) { currentPreferred.contains(langCodes[it]) }
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.sub_lang_dialog_title))
+            .setMultiChoiceItems(langLabels, checked) { _, which, isChecked ->
+                val code = langCodes[which]
+                if (isChecked) {
+                    if (!currentPreferred.contains(code)) currentPreferred.add(code)
+                } else {
+                    currentPreferred.remove(code)
+                }
+            }
+            .setPositiveButton(getString(R.string.save)) { _, _ ->
+                val finalOrder = if (currentPreferred.isEmpty()) listOf("ar", "en") else currentPreferred
+                PlaybackStore.setPreferredSubtitleLanguages(this, finalOrder)
+                showToastIndicator(
+                    getString(R.string.sub_lang_priority_saved, finalOrder.joinToString(" → ") { it.uppercase() })
+                )
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    private fun showSubtitleLiveStyleDialog() {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 28, 48, 20)
+        }
+
+        var currentSize = PlaybackStore.getSubSizeSp(this)
+        var currentOpacity = PlaybackStore.getSubBgOpacityPct(this)
+        var currentOutline = PlaybackStore.getSubOutlinePx(this)
+        var selectedColorIdx = PlaybackStore.getSubColorIndex(this)
+
+        val tvPreview = TextView(this).apply {
+            text = getString(R.string.style_preview_sample)
+            gravity = Gravity.CENTER
+            setPadding(24, 14, 24, 14)
+        }
+
+        fun updateLive() {
+            tvPreview.setTextSize(TypedValue.COMPLEX_UNIT_SP, currentSize)
+            val c = when (selectedColorIdx) {
+                1 -> Color.parseColor("#FACC15")
+                2 -> Color.parseColor("#38BDF8")
+                3 -> Color.parseColor("#4ADE80")
+                else -> Color.WHITE
+            }
+            tvPreview.setTextColor(c)
+            val alpha = ((currentOpacity / 100.0) * 255).toInt().coerceIn(0, 255)
+            tvPreview.setBackgroundColor(Color.argb(alpha, 0, 0, 0))
+            tvPreview.setShadowLayer(currentOutline.coerceAtLeast(1f), 2f, 2f, Color.BLACK)
+        }
+        updateLive()
+
+        val tvSizeLabel = TextView(this).apply {
+            text = getString(R.string.style_size_label, currentSize.toInt())
+            setPadding(0, 12, 0, 4)
+        }
+        val sizeSeek = SeekBar(this).apply {
+            max = 32
+            progress = (currentSize - 12f).toInt().coerceIn(0, 32)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                    currentSize = 12f + p
+                    tvSizeLabel.text = getString(R.string.style_size_label, currentSize.toInt())
+                    updateLive()
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        }
+
+        val tvOpacityLabel = TextView(this).apply {
+            text = getString(R.string.style_bg_opacity_label, currentOpacity)
+            setPadding(0, 12, 0, 4)
+        }
+        val opacitySeek = SeekBar(this).apply {
+            max = 100
+            progress = currentOpacity
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                    currentOpacity = p
+                    tvOpacityLabel.text = getString(R.string.style_bg_opacity_label, currentOpacity)
+                    updateLive()
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        }
+
+        val tvOutlineLabel = TextView(this).apply {
+            text = getString(R.string.style_outline_label, currentOutline.toInt())
+            setPadding(0, 12, 0, 4)
+        }
+        val outlineSeek = SeekBar(this).apply {
+            max = 12
+            progress = currentOutline.toInt().coerceIn(0, 12)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                    currentOutline = p.toFloat()
+                    tvOutlineLabel.text = getString(R.string.style_outline_label, currentOutline.toInt())
+                    updateLive()
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        }
+
+        val colorNames = arrayOf(
+            getString(R.string.style_color_white),
+            getString(R.string.style_color_yellow),
+            getString(R.string.style_color_cyan),
+            getString(R.string.style_color_green)
+        )
+
+        container.addView(tvPreview)
+        container.addView(tvSizeLabel)
+        container.addView(sizeSeek)
+        container.addView(tvOpacityLabel)
+        container.addView(opacitySeek)
+        container.addView(tvOutlineLabel)
+        container.addView(outlineSeek)
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.style_dialog_title))
+            .setView(container)
+            .setSingleChoiceItems(colorNames, selectedColorIdx) { _, which ->
+                selectedColorIdx = which
+                updateLive()
+            }
+            .setPositiveButton(getString(R.string.save)) { _, _ ->
+                PlaybackStore.setSubSizeSp(this, currentSize)
+                PlaybackStore.setSubBgOpacityPct(this, currentOpacity)
+                PlaybackStore.setSubOutlinePx(this, currentOutline)
+                PlaybackStore.setSubColorIndex(this, selectedColorIdx)
+                applyThemeAndSubtitleStyle()
+            }
+            .setNeutralButton(getString(R.string.reset)) { _, _ ->
+                resetSubtitlePositionNow()
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
     private fun showInAppSubtitleDownloaderDialog() {
-        val cleanQuery = currentVideoTitle
-            .substringBeforeLast(".")
-            .replace(Regex("[._-]"), " ")
-            .replace(Regex("(1080p|720p|480p|2160p|4K|BluRay|WEB-DL|WEBRip|x264|x265|HEVC|10bit)", RegexOption.IGNORE_CASE), "")
-            .trim()
+        val cleanQuery = SubtitleSearchEngine.buildSearchRequest(
+            this,
+            currentVideoUri ?: Uri.EMPTY,
+            currentVideoTitle,
+            PlaybackStore.getPreferredSubtitleLanguages(this)
+        ).cleanQuery
 
         val rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -709,18 +1143,12 @@ class PlayerActivity : AppCompatActivity() {
         val etQuery = EditText(this).apply {
             setText(cleanQuery)
             setTextColor(Color.WHITE)
-            hint = "اسم الفيلم أو المسلسل..."
             setHintTextColor(Color.GRAY)
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
 
-        val btnSearchSubdl = Button(this).apply {
-            text = "Subdl"
-        }
-
-        val btnSearchOpenSub = Button(this).apply {
-            text = "OpenSub"
-        }
+        val btnSearchSubdl = Button(this).apply { text = "SubDL" }
+        val btnSearchOpenSub = Button(this).apply { text = "OpenSub" }
 
         searchRow.addView(etQuery)
         searchRow.addView(btnSearchSubdl)
@@ -746,19 +1174,19 @@ class PlayerActivity : AppCompatActivity() {
         rootLayout.addView(webView)
 
         val dialog = AlertDialog.Builder(this)
-            .setTitle("🔍 بحث وتنزيل مباشر للترجمة (اضغط تحميل في الموقع وسيتم تفعيلها تلقائياً)")
+            .setTitle(getString(R.string.sub_menu_web_search))
             .setView(rootLayout)
-            .setNeutralButton("اختيار ملف من الجهاز") { _, _ ->
+            .setNeutralButton(getString(R.string.sub_menu_load_local)) { _, _ ->
                 subtitlePickerLauncher.launch(arrayOf("*/*"))
             }
-            .setNegativeButton("إغلاق", null)
+            .setNegativeButton(getString(R.string.close), null)
             .create()
 
         webView.webChromeClient = WebChromeClient()
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
-                if (url.endsWith(".srt", ignoreCase = true) || url.endsWith(".zip", ignoreCase = true) || url.contains("dl.subdl.com") || url.contains("/subtitleserve/")) {
+                if (url.endsWith(".srt", ignoreCase = true) || url.endsWith(".vtt", ignoreCase = true) || url.endsWith(".ass", ignoreCase = true) || url.endsWith(".zip", ignoreCase = true) || url.contains("dl.subdl.com") || url.contains("/subtitleserve/")) {
                     downloadAndApplySubtitleUrl(url, dialog)
                     return true
                 }
@@ -780,8 +1208,10 @@ class PlayerActivity : AppCompatActivity() {
 
         btnSearchOpenSub.setOnClickListener {
             val q = Uri.encode(etQuery.text.toString().trim())
+            val firstLang = PlaybackStore.getPreferredSubtitleLanguages(this).firstOrNull() ?: "ar"
+            val iso3 = if (firstLang == "ar") "ara" else "eng"
             progressBar.visibility = View.VISIBLE
-            webView.loadUrl("https://www.opensubtitles.org/ar/search2/sublanguageid-ara/moviename-$q")
+            webView.loadUrl("https://www.opensubtitles.org/$firstLang/search2/sublanguageid-$iso3/moviename-$q")
         }
 
         dialog.show()
@@ -790,100 +1220,69 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun downloadAndApplySubtitleUrl(downloadUrl: String, dialog: AlertDialog) {
-        showToastIndicator("⏳ جاري تنزيل وفك ضغط الترجمة تلقائياً...")
-        bgExecutor.execute {
-            try {
-                val conn = URL(downloadUrl).openConnection() as HttpURLConnection
-                conn.instanceFollowRedirects = true
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-                conn.connectTimeout = 12_000
-                conn.readTimeout = 12_000
-
-                val rawBytes = conn.inputStream.use { it.readBytes() }
-                var srtBytes: ByteArray? = null
-
-                // Check if downloaded file is a ZIP archive (PK header 0x50 0x4B)
-                if (rawBytes.size > 4 && rawBytes[0] == 0x50.toByte() && rawBytes[1] == 0x4B.toByte()) {
-                    ZipInputStream(ByteArrayInputStream(rawBytes)).use { zis ->
-                        var entry = zis.nextEntry
-                        while (entry != null) {
-                            val name = entry.name.lowercase(Locale.ROOT)
-                            if (!entry.isDirectory && (name.endsWith(".srt") || name.endsWith(".ass") || name.endsWith(".ssa") || name.endsWith(".sub"))) {
-                                val buffer = ByteArrayOutputStream()
-                                zis.copyTo(buffer)
-                                srtBytes = buffer.toByteArray()
-                                break
-                            }
-                            entry = zis.nextEntry
-                        }
-                    }
-                } else {
-                    srtBytes = rawBytes
+        binding.playerLoadingBar.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            val dummyItem = SubtitleResultItem(
+                id = "web_${downloadUrl.hashCode()}",
+                title = currentVideoTitle,
+                providerName = "Web",
+                languageCode = PlaybackStore.getPreferredSubtitleLanguages(this@PlayerActivity).firstOrNull() ?: "ar",
+                downloadUrl = downloadUrl,
+                formatExt = "srt",
+                matchQuality = MatchQuality.EXACT_TITLE,
+                rating = 10.0,
+                downloadCount = 100
+            )
+            val pair = SubtitleSearchEngine.downloadAndCacheSubtitle(this@PlayerActivity, dummyItem)
+            binding.playerLoadingBar.visibility = View.GONE
+            if (pair != null && pair.second.isNotEmpty()) {
+                currentVideoUri?.let { vUri ->
+                    PlaybackStore.saveVideoSubtitleCachePath(this@PlayerActivity, vUri, pair.first.absolutePath)
                 }
-
-                val finalBytes = srtBytes
-                if (finalBytes != null && finalBytes.isNotEmpty()) {
-                    val cues = SubtitleParser.parseFromBytes(finalBytes)
-                    handler.post {
-                        if (cues.isNotEmpty()) {
-                            externalSubtitleCues = cues
-                            mediaPlayer.spuTrack = -1
-                            binding.tvDraggableSubtitle.visibility = View.VISIBLE
-                            binding.tvDraggableSubtitle.text = "✅ تم تنزيل وتفعيل الترجمة بنجاح!"
-                            showToastIndicator("✅ تم تنزيل وتفعيل الترجمة (${cues.size} جملة)")
-                            dialog.dismiss()
-                        } else {
-                            showToastIndicator("⚠️ تعذر قراءة ملف الترجمة، جرب ملفاً آخر")
-                        }
-                    }
-                }
-            } catch (_: Exception) {
-                handler.post {
-                    showToastIndicator("⚠️ تعذر التحميل المباشر، جرب رابطاً آخر")
-                }
+                applyLoadedSubtitleCues(pair.second)
+                showToastIndicator(getString(R.string.sub_loaded_count_format, pair.second.size))
+                dialog.dismiss()
+            } else {
+                showToastIndicator(getString(R.string.sub_err_corrupted))
             }
         }
     }
 
     private fun showMoreProOptionsDialog() {
         val proOptions = arrayOf(
-            "🌈 إعدادات عرض الألوان الفائقة (HDR10 / HLG / Dolby)",
-            "⏱️ تقديم توقيت الترجمة (+0.5 ثانية)",
-            "⏱️ تأخير توقيت الترجمة (-0.5 ثانية)",
-            "⏰ مؤقت النوم (إيقاف بعد 30 دقيقة)",
-            "⏰ مؤقت النوم (إيقاف بعد 60 دقيقة)",
-            "🖼️ تشغيل في نافذة عائمة (Picture-in-Picture)",
-            "↕️ إعادة مكان الترجمة للوضع الافتراضي"
+            getString(R.string.pro_sync_earlier),
+            getString(R.string.pro_sync_later),
+            getString(R.string.pro_sync_reset),
+            getString(R.string.pro_reset_sub_pos),
+            getString(R.string.pro_hdr_mode),
+            getString(R.string.pro_sleep_30),
+            getString(R.string.pro_sleep_60),
+            getString(R.string.pro_pip)
         )
         AlertDialog.Builder(this)
-            .setTitle("🛠️ أدوات التحكم الاحترافية (HDR & Pro)")
+            .setTitle(getString(R.string.pro_tools_title))
             .setItems(proOptions) { _, which ->
                 when (which) {
-                    0 -> showHdrModeSelectorDialog()
-                    1 -> {
-                        subtitleSyncOffsetMs += 500L
-                        showToastIndicator("مزامنة الترجمة: +${subtitleSyncOffsetMs / 1000.0} ثانية")
-                    }
+                    0 -> adjustSubtitleSyncBy(-100L)
+                    1 -> adjustSubtitleSyncBy(100L)
                     2 -> {
-                        subtitleSyncOffsetMs -= 500L
-                        showToastIndicator("مزامنة الترجمة: ${subtitleSyncOffsetMs / 1000.0} ثانية")
+                        subtitleSyncOffsetMs = 0L
+                        currentVideoUri?.let { PlaybackStore.saveVideoSubtitleSyncMs(this, it, 0L) }
+                        showToastIndicator(getString(R.string.sub_sync_offset_format, 0L))
                     }
-                    3 -> {
+                    3 -> resetSubtitlePositionNow()
+                    4 -> showHdrModeSelectorDialog()
+                    5 -> {
                         handler.removeCallbacks(sleepTimerRunnable)
                         handler.postDelayed(sleepTimerRunnable, 30 * 60 * 1000L)
-                        showToastIndicator("⏰ تم ضبط مؤقت النوم بعد 30 دقيقة")
+                        showToastIndicator(getString(R.string.pro_sleep_30))
                     }
-                    4 -> {
+                    6 -> {
                         handler.removeCallbacks(sleepTimerRunnable)
                         handler.postDelayed(sleepTimerRunnable, 60 * 60 * 1000L)
-                        showToastIndicator("⏰ تم ضبط مؤقت النوم بعد 60 دقيقة")
+                        showToastIndicator(getString(R.string.pro_sleep_60))
                     }
-                    5 -> enterPipModeNow()
-                    6 -> {
-                        PlaybackStore.setSubVerticalOffsetPx(this, 0f)
-                        applyThemeAndSubtitleStyle()
-                        showToastIndicator("تمت إعادة مكان الترجمة للأسفل")
-                    }
+                    7 -> enterPipModeNow()
                 }
             }
             .show()
@@ -891,16 +1290,16 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun showHdrModeSelectorDialog() {
         val hdrModes = arrayOf(
-            "🌟 سينمائي أصلي (HDR10 / HLG Native Hable)",
-            "🔥 ألوان مشبعة زاهية (HDR Vivid Boost)",
-            "⚖️ موازنة سطوع تلقائية للشاشات العادية (HDR-to-SDR Tonemapping)"
+            "🌟 HDR10 / HLG Cinema Natural (Hable)",
+            "🔥 HDR Vivid Boost (Reinhard)",
+            "⚖️ HDR-to-SDR Balanced Tonemapping (Mobius)"
         )
         val current = PlaybackStore.getHdrModeIndex(this)
         AlertDialog.Builder(this)
-            .setTitle("🌈 وضع معالجة ألوان HDR (10-bit)")
+            .setTitle(getString(R.string.pro_hdr_mode))
             .setSingleChoiceItems(hdrModes, current) { dialog, which ->
                 PlaybackStore.setHdrModeIndex(this, which)
-                showToastIndicator("✅ تم تفعيل وضع: ${hdrModes[which]}")
+                showToastIndicator(hdrModes[which])
                 dialog.dismiss()
             }
             .show()
@@ -913,9 +1312,7 @@ class PlayerActivity : AppCompatActivity() {
                     .setAspectRatio(Rational(16, 9))
                     .build()
                 enterPictureInPictureMode(params)
-            } catch (_: Exception) {
-                showToastIndicator("النافذة العائمة غير مدعومة في هذا الوضع")
-            }
+            } catch (_: Exception) {}
         }
     }
 
@@ -928,38 +1325,13 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun showQuickSubtitleColorDialog() {
-        val colors = arrayOf(
-            "⚪ خط أبيض مع خلفية شفافة",
-            "🟡 خط أصفر سينمائي مع خلفية",
-            "🔵 خط سماوي",
-            "🟢 خط أخضر",
-            "↕️ إعادة مكان الترجمة للأسفل"
-        )
-        AlertDialog.Builder(this)
-            .setTitle("لون ومكان الترجمة (أو اضغط مطولاً على الترجمة لتحريكها)")
-            .setItems(colors) { _, which ->
-                if (which == 4) {
-                    PlaybackStore.setSubVerticalOffsetPx(this, 0f)
-                } else {
-                    PlaybackStore.setSubColorIndex(this, which)
-                }
-                applyThemeAndSubtitleStyle()
-                binding.tvDraggableSubtitle.visibility = View.VISIBLE
-                if (binding.tvDraggableSubtitle.text.isNullOrEmpty()) {
-                    binding.tvDraggableSubtitle.text = "معاينة شكل الترجمة (اضغط مطولاً عليها لتحريكها لأعلى أو أسفل)"
-                }
-            }
-            .show()
-    }
-
     private fun showAudioTracksDialog() {
         val audioTracks = mediaPlayer.audioTracks ?: emptyArray()
         if (audioTracks.isEmpty()) {
-            showToastIndicator("لا توجد مسارات صوتية إضافية")
+            showToastIndicator(getString(R.string.toast_no_extra_audio))
             return
         }
-        val names = audioTracks.map { it.name ?: "مسار ${it.id}" }.toTypedArray()
+        val names = audioTracks.map { it.name ?: "Track ${it.id}" }.toTypedArray()
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.audio_tracks))
             .setItems(names) { _, which ->
@@ -1045,7 +1417,6 @@ class PlayerActivity : AppCompatActivity() {
         saveCurrentPositionNow()
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
-        bgExecutor.shutdownNow()
         mediaPlayer.release()
         libVLC.release()
         try {

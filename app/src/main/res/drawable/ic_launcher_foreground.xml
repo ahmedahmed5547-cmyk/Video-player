@@ -4,16 +4,18 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Outer Modern Rounded Play Shield -->
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M18,0 L90,0 C100,0 108,8 108,18 L108,90 C108,100 100,108 90,108 L18,108 C8,108 0,100 0,90 L0,18 C0,8 8,0 18,0 Z" />
+    <path
+        android:fillColor="#1E293B"
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="2.5"
+        android:pathData="M54,52m-34,0a34,34 0,1 1,68 0a34,34 0,1 1,-68 0" />
     <path
         android:fillColor="#38BDF8"
-        android:pathData="M42,35 C42,32.5 44.8,31 47,32.4 L73,49.4 C75,50.7 75,53.3 73,54.6 L47,71.6 C44.8,73 42,71.5 42,69 Z" />
-    <!-- Inner Bright Accent Play Core -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M46,41 L66,52 L46,63 Z" />
-    <!-- Cinema Subtitle Bar Indicator Below Play Icon -->
+        android:pathData="M43,35 L71,52 L43,69 Z" />
     <path
         android:fillColor="#FACC15"
-        android:pathData="M36,77 L72,77 C73.1,77 74,77.9 74,79 C74,80.1 73.1,81 72,81 L36,81 C34.9,81 34,80.1 34,79 C34,77.9 34,77 36,77 Z" />
+        android:pathData="M34,82 L74,82 L74,87 L34,87 Z" />
 </vector>

@@ -6,9 +6,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_dark"
-    android:layoutDirection="rtl">
+    android:layoutDirection="locale">
 
-    <!-- Top App Bar -->
     <LinearLayout
         android:id="@+id/topBar"
         android:layout_width="match_parent"
@@ -24,7 +23,7 @@
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="رجوع"
+            android:contentDescription="@string/back_button_desc"
             android:src="@android:drawable/ic_menu_revert"
             android:visibility="gone"
             app:tint="@color/text_primary" />
@@ -61,7 +60,6 @@
             app:tint="@color/accent_blue" />
     </LinearLayout>
 
-    <!-- SwipeRefresh + RecyclerView -->
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/swipeRefresh"
         android:layout_width="match_parent"
@@ -79,7 +77,6 @@
 
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-    <!-- Empty / Permission State -->
     <LinearLayout
         android:id="@+id/emptyLayout"
         android:layout_width="wrap_content"
@@ -110,7 +107,6 @@
             android:text="@string/grant_permission" />
     </LinearLayout>
 
-    <!-- Bottom-Right Floating Button (Start in RTL = Right side) -->
     <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
         android:id="@+id/fabResumeLast"
         android:layout_width="wrap_content"
@@ -125,6 +121,6 @@
         app:icon="@android:drawable/ic_media_play"
         app:iconTint="@color/bg_dark"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

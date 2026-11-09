@@ -52,7 +52,7 @@ class MediaAdapter(
                 is VideoFolder -> {
                     binding.ivIcon.setImageResource(android.R.drawable.ic_menu_agenda)
                     binding.tvTitle.text = item.name
-                    binding.tvSubtitle.text = "${item.videos.size} فيديو"
+                    binding.tvSubtitle.text = ctx.getString(R.string.videos_count_format, item.videos.size)
                     binding.root.setOnClickListener { onFolderClick(item) }
                 }
                 is VideoItem -> {
@@ -61,7 +61,11 @@ class MediaAdapter(
                     val durationStr = formatDuration(item.duration)
                     val sizeMb = String.format(Locale.US, "%.1f MB", item.size / (1024.0 * 1024.0))
                     val savedPos = PlaybackStore.getSavedPosition(ctx, item.uri)
-                    val resumeBadge = if (savedPos > 3_000L) "  •  ⏸ توقف عند ${PlaybackStore.formatTime(savedPos)}" else ""
+                    val resumeBadge = if (savedPos > 3_000L) {
+                        "  •  ⏸ " + ctx.getString(R.string.stopped_at_format, PlaybackStore.formatTime(savedPos))
+                    } else {
+                        ""
+                    }
                     binding.tvSubtitle.text = "$durationStr  •  $sizeMb$resumeBadge"
                     binding.root.setOnClickListener { onVideoClick(item) }
                 }

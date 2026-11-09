@@ -5,15 +5,18 @@ import android.content.ContentUris
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -51,7 +54,7 @@ class MainActivity : AppCompatActivity() {
                     Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             } catch (_: Exception) {}
-            handleVideoSelection(it, it.lastPathSegment ?: "فيديو خارجي")
+            handleVideoSelection(it, it.lastPathSegment ?: getString(R.string.open_external_file))
         }
     }
 
@@ -92,7 +95,7 @@ class MainActivity : AppCompatActivity() {
         if (lastVideo != null) {
             val (uri, title, positionMs) = lastVideo
             val timeFormatted = PlaybackStore.formatTime(positionMs)
-            binding.fabResumeLast.text = "▶ استئناف ($timeFormatted)"
+            binding.fabResumeLast.text = getString(R.string.resume_fab_format, timeFormatted)
             binding.fabResumeLast.visibility = View.VISIBLE
             binding.fabResumeLast.setOnClickListener {
                 launchPlayer(uri, title, startPositionMs = positionMs)
@@ -125,14 +128,14 @@ class MainActivity : AppCompatActivity() {
             val formattedTime = PlaybackStore.formatTime(savedPositionMs)
             AlertDialog.Builder(this)
                 .setTitle(getString(R.string.resume_dialog_title))
-                .setMessage("توقفت في «$title» عند الدقيقة ($formattedTime). هل تريد استئناف المشاهدة أم البدء من البداية؟")
-                .setPositiveButton("استئناف من ($formattedTime)") { _, _ ->
+                .setMessage(getString(R.string.resume_dialog_message, title, formattedTime))
+                .setPositiveButton(getString(R.string.resume_from_format, formattedTime)) { _, _ ->
                     launchPlayer(uri, title, startPositionMs = savedPositionMs)
                 }
                 .setNegativeButton(getString(R.string.start_from_beginning)) { _, _ ->
                     launchPlayer(uri, title, startPositionMs = 0L)
                 }
-                .setNeutralButton("إلغاء", null)
+                .setNeutralButton(getString(R.string.cancel), null)
                 .show()
         } else {
             launchPlayer(uri, title, startPositionMs = 0L)
@@ -174,38 +177,111 @@ class MainActivity : AppCompatActivity() {
 
     private fun showProSettingsDialog() {
         val options = arrayOf(
-            "🎨 تغيير ثيم وألوان التطبيق (Themes)",
-            "🔠 تخصيص حجم ولون وخلفية الترجمة",
-            "🔄 الوضع الافتراضي لدوران شاشة الفيديو",
-            "↕️ إعادة ضبط مكان الترجمة للوضع الافتراضي"
+            getString(R.string.setting_app_language),
+            getString(R.string.setting_subtitle_languages),
+            getString(R.string.setting_app_theme),
+            getString(R.string.setting_subtitle_style),
+            getString(R.string.setting_default_orientation),
+            getString(R.string.setting_reset_sub_position)
         )
         AlertDialog.Builder(this)
-            .setTitle("⚙️ إعدادات Pure Video Player الاحترافية")
+            .setTitle(getString(R.string.settings_header))
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> showThemeSelectorDialog()
-                    1 -> showSubtitleStyleDialog()
-                    2 -> showDefaultOrientationDialog()
-                    3 -> {
-                        PlaybackStore.setSubVerticalOffsetPx(this, 0f)
+                    0 -> showAppLanguageDialog()
+                    1 -> showSubtitleLanguagePriorityDialog()
+                    2 -> showThemeSelectorDialog()
+                    3 -> showSubtitleStyleDialog()
+                    4 -> showDefaultOrientationDialog()
+                    5 -> {
+                        PlaybackStore.resetSubPosition(this)
+                        Toast.makeText(this, getString(R.string.sub_position_reset_toast), Toast.LENGTH_SHORT).show()
                     }
                 }
             }
-            .setNegativeButton("إغلاق", null)
+            .setNegativeButton(getString(R.string.close), null)
+            .show()
+    }
+
+    /**
+     * Requirement 4: App Language Switcher (Arabic / English / System Default)
+     * Uses AndroidX AppCompatDelegate.setApplicationLocales() to switch UI & RTL/LTR direction immediately without app restart.
+     */
+    private fun showAppLanguageDialog() {
+        val labels = arrayOf(
+            getString(R.string.lang_system_default),
+            getString(R.string.lang_arabic),
+            getString(R.string.lang_english)
+        )
+        val tags = arrayOf("", "ar", "en")
+        val currentTag = PlaybackStore.getAppLanguageTag(this)
+        val currentIndex = tags.indexOf(currentTag).coerceAtLeast(0)
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.setting_app_language))
+            .setSingleChoiceItems(labels, currentIndex) { dialog, which ->
+                val chosenTag = tags[which]
+                dialog.dismiss()
+                PlaybackStore.setAppLanguageTag(this, chosenTag)
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    /**
+     * Requirement 3: Subtitle Language Picker with multiple preferred languages in priority order.
+     */
+    private fun showSubtitleLanguagePriorityDialog() {
+        val langCodes = arrayOf("ar", "en", "fr", "es", "tr", "hi", "ur")
+        val langLabels = arrayOf(
+            getString(R.string.sub_lang_ar),
+            getString(R.string.sub_lang_en),
+            getString(R.string.sub_lang_fr),
+            getString(R.string.sub_lang_es),
+            getString(R.string.sub_lang_tr),
+            getString(R.string.sub_lang_hi),
+            getString(R.string.sub_lang_ur)
+        )
+
+        val currentPreferred = PlaybackStore.getPreferredSubtitleLanguages(this).toMutableList()
+        val checkedItems = BooleanArray(langCodes.size) { idx ->
+            currentPreferred.contains(langCodes[idx])
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.sub_lang_dialog_title))
+            .setMultiChoiceItems(langLabels, checkedItems) { _, which, isChecked ->
+                val code = langCodes[which]
+                if (isChecked) {
+                    if (!currentPreferred.contains(code)) currentPreferred.add(code)
+                } else {
+                    currentPreferred.remove(code)
+                }
+            }
+            .setPositiveButton(getString(R.string.save)) { _, _ ->
+                val finalOrder = if (currentPreferred.isEmpty()) listOf("ar", "en") else currentPreferred
+                PlaybackStore.setPreferredSubtitleLanguages(this, finalOrder)
+                Toast.makeText(
+                    this,
+                    getString(R.string.sub_lang_priority_saved, finalOrder.joinToString(" → ") { it.uppercase() }),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
     private fun showThemeSelectorDialog() {
         val themes = arrayOf(
-            "💎 الأزرق السماوي (Cyber Blue)",
-            "🌙 أسود ملكي وذهبي (AMOLED Pure Black & Gold)",
-            "🌿 الأخضر الزمردي (Emerald Neon)",
-            "🌹 الأحمر الياقوتي (Crimson Rose)",
-            "🔮 البنفسجي العصري (Material Violet)"
+            getString(R.string.theme_cyber_blue),
+            getString(R.string.theme_amoled_gold),
+            getString(R.string.theme_emerald),
+            getString(R.string.theme_crimson),
+            getString(R.string.theme_violet)
         )
         val current = PlaybackStore.getThemeIndex(this)
         AlertDialog.Builder(this)
-            .setTitle("اختر ثيم التطبيق")
+            .setTitle(getString(R.string.theme_dialog_title))
             .setSingleChoiceItems(themes, current) { dialog, which ->
                 PlaybackStore.setThemeIndex(this, which)
                 applyUserTheme()
@@ -214,74 +290,142 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * Requirement 5: Subtitle Styling Dialog (Size, Color, Background Opacity, Outline/Shadow, Font) with Live Preview!
+     */
     private fun showSubtitleStyleDialog() {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(56, 36, 56, 24)
+            setPadding(48, 32, 48, 24)
         }
 
         var currentSize = PlaybackStore.getSubSizeSp(this)
+        var currentOpacity = PlaybackStore.getSubBgOpacityPct(this)
+        var currentOutline = PlaybackStore.getSubOutlinePx(this)
+        var selectedColorIdx = PlaybackStore.getSubColorIndex(this)
+
+        val tvPreview = TextView(this).apply {
+            text = getString(R.string.style_preview_sample)
+            gravity = Gravity.CENTER
+            setPadding(24, 16, 24, 16)
+        }
+
+        fun updateLivePreview() {
+            tvPreview.setTextSize(TypedValue.COMPLEX_UNIT_SP, currentSize)
+            val c = when (selectedColorIdx) {
+                1 -> Color.parseColor("#FACC15")
+                2 -> Color.parseColor("#38BDF8")
+                3 -> Color.parseColor("#4ADE80")
+                else -> Color.WHITE
+            }
+            tvPreview.setTextColor(c)
+            val alpha = ((currentOpacity / 100.0) * 255).toInt().coerceIn(0, 255)
+            tvPreview.setBackgroundColor(Color.argb(alpha, 0, 0, 0))
+            tvPreview.setShadowLayer(currentOutline.coerceAtLeast(1f), 2f, 2f, Color.BLACK)
+        }
+        updateLivePreview()
+
         val tvSizeLabel = TextView(this).apply {
-            text = "حجم خط الترجمة: ${currentSize.toInt()}sp"
-            textSize = 16f
-            setPadding(0, 0, 0, 12)
+            text = getString(R.string.style_size_label, currentSize.toInt())
+            setPadding(0, 16, 0, 6)
         }
         val sizeSeek = SeekBar(this).apply {
-            max = 28 // 14sp to 42sp
-            progress = (currentSize - 14f).toInt().coerceIn(0, 28)
+            max = 32
+            progress = (currentSize - 12f).toInt().coerceIn(0, 32)
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, p: Int, fromUser: Boolean) {
-                    currentSize = 14f + p
-                    tvSizeLabel.text = "حجم خط الترجمة: ${currentSize.toInt()}sp"
+                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                    currentSize = 12f + p
+                    tvSizeLabel.text = getString(R.string.style_size_label, currentSize.toInt())
+                    updateLivePreview()
                 }
-                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        }
+
+        val tvOpacityLabel = TextView(this).apply {
+            text = getString(R.string.style_bg_opacity_label, currentOpacity)
+            setPadding(0, 14, 0, 6)
+        }
+        val opacitySeek = SeekBar(this).apply {
+            max = 100
+            progress = currentOpacity
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                    currentOpacity = p
+                    tvOpacityLabel.text = getString(R.string.style_bg_opacity_label, currentOpacity)
+                    updateLivePreview()
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        }
+
+        val tvOutlineLabel = TextView(this).apply {
+            text = getString(R.string.style_outline_label, currentOutline.toInt())
+            setPadding(0, 14, 0, 6)
+        }
+        val outlineSeek = SeekBar(this).apply {
+            max = 12
+            progress = currentOutline.toInt().coerceIn(0, 12)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                    currentOutline = p.toFloat()
+                    tvOutlineLabel.text = getString(R.string.style_outline_label, currentOutline.toInt())
+                    updateLivePreview()
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
             })
         }
 
         val tvColorLabel = TextView(this).apply {
-            text = "لون خط الترجمة:"
-            textSize = 16f
+            text = getString(R.string.style_color_label)
             setPadding(0, 16, 0, 8)
         }
 
-        val colorNames = arrayOf("⚪ أبيض ناصع", "🟡 أصفر سينمائي", "🔵 سماوي", "🟢 أخضر")
-        var selectedColorIdx = PlaybackStore.getSubColorIndex(this)
+        val colorNames = arrayOf(
+            getString(R.string.style_color_white),
+            getString(R.string.style_color_yellow),
+            getString(R.string.style_color_cyan),
+            getString(R.string.style_color_green)
+        )
 
+        container.addView(tvPreview)
         container.addView(tvSizeLabel)
         container.addView(sizeSeek)
+        container.addView(tvOpacityLabel)
+        container.addView(opacitySeek)
+        container.addView(tvOutlineLabel)
+        container.addView(outlineSeek)
         container.addView(tvColorLabel)
 
         AlertDialog.Builder(this)
-            .setTitle("تخصيص مظهر الترجمة")
+            .setTitle(getString(R.string.style_dialog_title))
             .setView(container)
             .setSingleChoiceItems(colorNames, selectedColorIdx) { _, which ->
                 selectedColorIdx = which
+                updateLivePreview()
             }
-            .setPositiveButton("حفظ") { _, _ ->
+            .setPositiveButton(getString(R.string.save)) { _, _ ->
                 PlaybackStore.setSubSizeSp(this, currentSize)
+                PlaybackStore.setSubBgOpacityPct(this, currentOpacity)
+                PlaybackStore.setSubOutlinePx(this, currentOutline)
                 PlaybackStore.setSubColorIndex(this, selectedColorIdx)
             }
-            .setNeutralButton(
-                if (PlaybackStore.isSubBgEnabled(this)) "إخفاء الخلفية السوداء" else "تفعيل الخلفية السوداء"
-            ) { _, _ ->
-                PlaybackStore.setSubBgEnabled(this, !PlaybackStore.isSubBgEnabled(this))
-                PlaybackStore.setSubSizeSp(this, currentSize)
-                PlaybackStore.setSubColorIndex(this, selectedColorIdx)
-            }
-            .setNegativeButton("إلغاء", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
     private fun showDefaultOrientationDialog() {
         val modes = arrayOf(
-            "🔄 دوران تلقائي حر (Auto Sensor)",
-            "🔒 عرضي دائماً (Landscape)",
-            "📱 طولي (Portrait)"
+            getString(R.string.orientation_auto),
+            getString(R.string.orientation_landscape),
+            getString(R.string.orientation_portrait)
         )
         val current = PlaybackStore.getDefaultOrientationIndex(this)
         AlertDialog.Builder(this)
-            .setTitle("الوضع الافتراضي عند فتح أي فيديو")
+            .setTitle(getString(R.string.setting_default_orientation))
             .setSingleChoiceItems(modes, current) { dialog, which ->
                 PlaybackStore.setDefaultOrientationIndex(this, which)
                 dialog.dismiss()
@@ -362,8 +506,8 @@ class MainActivity : AppCompatActivity() {
                 val bucketName = if (bucketCol != -1) cursor.getString(bucketCol) else null
                 val folderName = when {
                     !bucketName.isNullOrBlank() -> bucketName
-                    path.isNotEmpty() -> File(path).parentFile?.name ?: "مجلد الفيديوهات"
-                    else -> "مجلد الفيديوهات"
+                    path.isNotEmpty() -> File(path).parentFile?.name ?: "Videos"
+                    else -> "Videos"
                 }
 
                 val contentUri = ContentUris.withAppendedId(
