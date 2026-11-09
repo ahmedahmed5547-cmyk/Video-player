@@ -11,19 +11,12 @@ android {
         applicationId = "com.pureplayer.video"
         minSdk = 24
         targetSdk = 34
-        versionCode = 4
-        versionName = "4.0.0-Pro-64bit"
+        versionCode = 5
+        versionName = "5.0.0-Pro-HDR"
 
-        // Optimize strictly for 64-bit Flagship Processors (arm64-v8a) & modern x86_64
         ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
-        }
-    }
-
-    // Android 15 & Android 16 (16KB page size alignment & high-speed native library loading)
-    packaging {
-        jniLibs {
-            useLegacyPackaging = true
+            abiFilters.add("arm64-v8a")
+            abiFilters.add("x86_64")
         }
     }
 
