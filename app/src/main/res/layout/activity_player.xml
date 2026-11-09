@@ -15,7 +15,28 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Center Gesture Feedback Indicator (Volume / Brightness / Seek / Orientation) -->
+    <!-- Interactive Draggable Custom Subtitle View (Long-press to drag up/down anywhere on screen!) -->
+    <TextView
+        android:id="@+id/tvDraggableSubtitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginHorizontal="32dp"
+        android:layout_marginBottom="68dp"
+        android:background="#AA000000"
+        android:gravity="center"
+        android:paddingHorizontal="18dp"
+        android:paddingVertical="8dp"
+        android:shadowColor="#000000"
+        android:shadowDx="2"
+        android:shadowDy="2"
+        android:shadowRadius="4"
+        android:textColor="@color/white"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
+    <!-- Center Gesture Feedback Indicator -->
     <TextView
         android:id="@+id/tvGestureIndicator"
         android:layout_width="wrap_content"
@@ -57,8 +78,8 @@
             android:background="@color/overlay_dark"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="10dp"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="8dp"
             app:layout_constraintTop_toTopOf="parent">
 
             <ImageButton
@@ -74,12 +95,33 @@
                 android:id="@+id/tvVideoTitle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginHorizontal="12dp"
+                android:layout_marginHorizontal="8dp"
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:textColor="@color/white"
-                android:textSize="16sp"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <!-- Quick Subtitle Font Size Buttons (+A / -A) -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSubFontUp"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="42dp"
+                android:text="A+"
+                android:textColor="@color/accent_blue"
+                android:textStyle="bold" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSubFontDown"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="42dp"
+                android:text="A-"
+                android:textColor="@color/white"
                 android:textStyle="bold" />
 
             <com.google.android.material.button.MaterialButton
@@ -105,6 +147,15 @@
                 android:layout_height="wrap_content"
                 android:text="1.0x"
                 android:textColor="@color/accent_blue" />
+
+            <ImageButton
+                android:id="@+id/btnMorePro"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="خيارات احترافية"
+                android:src="@android:drawable/ic_menu_manage"
+                app:tint="@color/white" />
         </LinearLayout>
 
         <!-- Bottom Bar -->
@@ -167,7 +218,6 @@
                     android:src="@android:drawable/ic_lock_lock"
                     app:tint="@color/white" />
 
-                <!-- Screen Orientation Button (Auto / Landscape / Portrait) -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnOrientation"
                     style="@style/Widget.Material3.Button.TextButton"
@@ -188,7 +238,7 @@
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="تأخير 10 ثواني"
+                    android:contentDescription="تأخير 15 ثانية"
                     android:src="@android:drawable/ic_media_rew"
                     app:tint="@color/white" />
 
@@ -196,7 +246,7 @@
                     android:id="@+id/btnPlayPause"
                     android:layout_width="58dp"
                     android:layout_height="58dp"
-                    android:layout_marginHorizontal="18dp"
+                    android:layout_marginHorizontal="16dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="تشغيل أو إيقاف"
                     android:src="@android:drawable/ic_media_pause"
@@ -207,7 +257,7 @@
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="تقديم 10 ثواني"
+                    android:contentDescription="تقديم 15 ثانية"
                     android:src="@android:drawable/ic_media_ff"
                     app:tint="@color/white" />
 
@@ -217,13 +267,22 @@
                     android:layout_weight="1" />
 
                 <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPip"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🖼️ نافذة"
+                    android:textColor="@color/white"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnAspectRatio"
                     style="@style/Widget.Material3.Button.TextButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/aspect_ratio"
                     android:textColor="@color/white"
-                    android:textSize="13sp" />
+                    android:textSize="12sp" />
 
             </LinearLayout>
 

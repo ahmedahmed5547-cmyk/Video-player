@@ -1,5 +1,6 @@
 package com.pureplayer.video
 
+import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
@@ -41,6 +42,12 @@ class MediaAdapter(
         RecyclerView.ViewHolder(binding.root) {
 
         fun bind(item: Any) {
+            val ctx = binding.root.context
+            val accentColor = PlaybackStore.getAccentColor(ctx)
+            val surfaceColor = PlaybackStore.getSurfaceColor(ctx)
+            binding.root.setCardBackgroundColor(surfaceColor)
+            binding.ivIcon.imageTintList = ColorStateList.valueOf(accentColor)
+
             when (item) {
                 is VideoFolder -> {
                     binding.ivIcon.setImageResource(android.R.drawable.ic_menu_agenda)
@@ -53,7 +60,9 @@ class MediaAdapter(
                     binding.tvTitle.text = item.title
                     val durationStr = formatDuration(item.duration)
                     val sizeMb = String.format(Locale.US, "%.1f MB", item.size / (1024.0 * 1024.0))
-                    binding.tvSubtitle.text = "$durationStr  •  $sizeMb"
+                    val savedPos = PlaybackStore.getSavedPosition(ctx, item.uri)
+                    val resumeBadge = if (savedPos > 3_000L) "  •  ⏸ توقف عند ${PlaybackStore.formatTime(savedPos)}" else ""
+                    binding.tvSubtitle.text = "$durationStr  •  $sizeMb$resumeBadge"
                     binding.root.setOnClickListener { onVideoClick(item) }
                 }
             }

@@ -2,6 +2,7 @@
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/mainRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_dark"
@@ -11,11 +12,11 @@
     <LinearLayout
         android:id="@+id/topBar"
         android:layout_width="match_parent"
-        android:layout_height="60dp"
+        android:layout_height="64dp"
         android:background="@color/surface_dark"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
+        android:paddingHorizontal="14dp"
         app:layout_constraintTop_toTopOf="parent">
 
         <ImageButton
@@ -36,7 +37,7 @@
             android:layout_marginStart="8dp"
             android:text="@string/folders_title"
             android:textColor="@color/text_primary"
-            android:textSize="20sp"
+            android:textSize="19sp"
             android:textStyle="bold" />
 
         <com.google.android.material.button.MaterialButton
@@ -46,8 +47,18 @@
             android:layout_height="wrap_content"
             android:text="@string/open_external_file"
             android:textColor="@color/text_primary"
-            android:textSize="13sp"
+            android:textSize="12sp"
             app:backgroundTint="@color/bg_dark" />
+
+        <ImageButton
+            android:id="@+id/btnSettings"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="6dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/settings_title"
+            android:src="@android:drawable/ic_menu_preferences"
+            app:tint="@color/accent_blue" />
     </LinearLayout>
 
     <!-- SwipeRefresh + RecyclerView -->
@@ -64,7 +75,7 @@
             android:layout_height="match_parent"
             android:clipToPadding="false"
             android:padding="12dp"
-            android:paddingBottom="88dp" />
+            android:paddingBottom="90dp" />
 
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
@@ -99,7 +110,7 @@
             android:text="@string/grant_permission" />
     </LinearLayout>
 
-    <!-- Bottom-Right Floating Button (Start in RTL = Right side of screen) to Immediately Resume Last Video -->
+    <!-- Bottom-Right Floating Button (Start in RTL = Right side) -->
     <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
         android:id="@+id/fabResumeLast"
         android:layout_width="wrap_content"

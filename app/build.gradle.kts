@@ -11,8 +11,20 @@ android {
         applicationId = "com.pureplayer.video"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 4
+        versionName = "4.0.0-Pro-64bit"
+
+        // Optimize strictly for 64-bit Flagship Processors (arm64-v8a) & modern x86_64
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+    }
+
+    // Android 15 & Android 16 (16KB page size alignment & high-speed native library loading)
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     buildTypes {
@@ -47,6 +59,6 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
 
-    // LibVLC Official Engine: Supports MKV, MP4, AVI, FLV, HEVC/H.265, AC3, DTS, SRT, ASS, SSA
+    // LibVLC Official 64-bit Engine: Supports MKV, MP4, AVI, FLV, HEVC/H.265, AV1, AC3, DTS, SRT, ASS, SSA
     implementation("org.videolan.android:libvlc-all:3.6.3")
 }

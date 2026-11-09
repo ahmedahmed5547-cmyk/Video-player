@@ -1,8 +1,9 @@
 <resources>
-    <string name="app_name">مشغل الفيديو النقي</string>
-    <string name="folders_title">مجلدات الفيديو</string>
+    <string name="app_name">Pure Video Player</string>
+    <string name="folders_title">Pure Video Player</string>
     <string name="all_videos">جميع الفيديوهات</string>
-    <string name="open_external_file">فتح فيديو</string>
+    <string name="open_external_file">فتح ملف</string>
+    <string name="settings_title">الإعدادات والمظهر</string>
     <string name="permission_needed">يرجى منح صلاحية الوصول للفيديوهات لعرض مجلدات الفيديو</string>
     <string name="grant_permission">منح الصلاحية</string>
     <string name="no_videos_found">لم يتم العثور على أي مجلدات تحتوي على فيديوهات</string>
@@ -12,9 +13,9 @@
     <string name="aspect_ratio">الأبعاد</string>
     <string name="screen_rotation">الدوران: تلقائي</string>
     <string name="lock_screen">قفل الشاشة</string>
-    <string name="load_external_sub">📂 تحميل ملف ترجمة من الهاتف (SRT / ASS)</string>
-    <string name="search_online_sub_subdl">🌐 تنزيل ترجمة عربية من الإنترنت (Subdl)</string>
-    <string name="search_online_sub_opensub">🌐 البحث عن ترجمة في (OpenSubtitles)</string>
+    <string name="load_external_sub">📂 اختيار ملف ترجمة من الهاتف (SRT / ASS)</string>
+    <string name="in_app_sub_search">🔍 بحث وتحميل مباشر للترجمة من داخل الفيديو</string>
+    <string name="customize_subtitles">🎨 تخصيص حجم ولون ومزامنة الترجمة</string>
     <string name="disable_subtitles">🚫 إيقاف الترجمة</string>
     <string name="resume_last_video">استئناف آخر فيديو</string>
     <string name="resume_dialog_title">استئناف التشغيل؟</string>

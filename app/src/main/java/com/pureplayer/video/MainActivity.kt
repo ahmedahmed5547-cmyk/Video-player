@@ -4,12 +4,16 @@ import android.Manifest
 import android.content.ContentUris
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.view.View
-import android.widget.Toast
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.SeekBar
+import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -25,6 +29,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adapter: MediaAdapter
     private var videoFoldersOnly = listOf<VideoFolder>()
     private var isShowingFolderVideos = false
+    private var currentOpenedFolder: VideoFolder? = null
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -57,12 +62,29 @@ class MainActivity : AppCompatActivity() {
 
         setupRecyclerView()
         setupListeners()
+        applyUserTheme()
         checkPermissionAndLoad()
     }
 
     override fun onResume() {
         super.onResume()
+        applyUserTheme()
         updateResumeLastFab()
+        adapter.notifyDataSetChanged()
+    }
+
+    private fun applyUserTheme() {
+        val accent = PlaybackStore.getAccentColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+
+        binding.mainRoot.setBackgroundColor(bg)
+        binding.topBar.setBackgroundColor(surface)
+        window.statusBarColor = surface
+        window.navigationBarColor = bg
+        binding.btnSettings.imageTintList = ColorStateList.valueOf(accent)
+        binding.fabResumeLast.backgroundTintList = ColorStateList.valueOf(accent)
+        adapter.notifyDataSetChanged()
     }
 
     private fun updateResumeLastFab() {
@@ -73,7 +95,6 @@ class MainActivity : AppCompatActivity() {
             binding.fabResumeLast.text = "▶ استئناف ($timeFormatted)"
             binding.fabResumeLast.visibility = View.VISIBLE
             binding.fabResumeLast.setOnClickListener {
-                // Directly launch the last played video at the exact saved minute/second
                 launchPlayer(uri, title, startPositionMs = positionMs)
             }
         } else {
@@ -85,6 +106,7 @@ class MainActivity : AppCompatActivity() {
         adapter = MediaAdapter(
             onFolderClick = { folder ->
                 isShowingFolderVideos = true
+                currentOpenedFolder = folder
                 binding.tvToolbarTitle.text = "${folder.name} (${folder.videos.size})"
                 binding.btnBackFolder.visibility = View.VISIBLE
                 adapter.submitVideos(folder.videos)
@@ -97,18 +119,13 @@ class MainActivity : AppCompatActivity() {
         binding.recyclerView.adapter = adapter
     }
 
-    /**
-     * When the user selects any video:
-     * Checks if there is a saved playback position for this video.
-     * If yes, asks the user whether to resume from where they stopped or start from the beginning.
-     */
     private fun handleVideoSelection(uri: Uri, title: String) {
         val savedPositionMs = PlaybackStore.getSavedPosition(this, uri)
         if (savedPositionMs > 3_000L) {
             val formattedTime = PlaybackStore.formatTime(savedPositionMs)
             AlertDialog.Builder(this)
                 .setTitle(getString(R.string.resume_dialog_title))
-                .setMessage("توقفت في «$title» عند الدقيقة ($formattedTime). هل تريد استئناف المشاهدة أم البدء من جديد؟")
+                .setMessage("توقفت في «$title» عند الدقيقة ($formattedTime). هل تريد استئناف المشاهدة أم البدء من البداية؟")
                 .setPositiveButton("استئناف من ($formattedTime)") { _, _ ->
                     launchPlayer(uri, title, startPositionMs = savedPositionMs)
                 }
@@ -131,6 +148,10 @@ class MainActivity : AppCompatActivity() {
             openDocumentLauncher.launch(arrayOf("video/*", "application/x-matroska"))
         }
 
+        binding.btnSettings.setOnClickListener {
+            showProSettingsDialog()
+        }
+
         binding.btnGrantPermission.setOnClickListener {
             requestStoragePermission()
         }
@@ -151,8 +172,126 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    private fun showProSettingsDialog() {
+        val options = arrayOf(
+            "🎨 تغيير ثيم وألوان التطبيق (Themes)",
+            "🔠 تخصيص حجم ولون وخلفية الترجمة",
+            "🔄 الوضع الافتراضي لدوران شاشة الفيديو",
+            "↕️ إعادة ضبط مكان الترجمة للوضع الافتراضي"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("⚙️ إعدادات Pure Video Player الاحترافية")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showThemeSelectorDialog()
+                    1 -> showSubtitleStyleDialog()
+                    2 -> showDefaultOrientationDialog()
+                    3 -> {
+                        PlaybackStore.setSubVerticalOffsetPx(this, 0f)
+                    }
+                }
+            }
+            .setNegativeButton("إغلاق", null)
+            .show()
+    }
+
+    private fun showThemeSelectorDialog() {
+        val themes = arrayOf(
+            "💎 الأزرق السماوي (Cyber Blue)",
+            "🌙 أسود ملكي وذهبي (AMOLED Pure Black & Gold)",
+            "🌿 الأخضر الزمردي (Emerald Neon)",
+            "🌹 الأحمر الياقوتي (Crimson Rose)",
+            "🔮 البنفسجي العصري (Material Violet)"
+        )
+        val current = PlaybackStore.getThemeIndex(this)
+        AlertDialog.Builder(this)
+            .setTitle("اختر ثيم التطبيق")
+            .setSingleChoiceItems(themes, current) { dialog, which ->
+                PlaybackStore.setThemeIndex(this, which)
+                applyUserTheme()
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun showSubtitleStyleDialog() {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(56, 36, 56, 24)
+        }
+
+        var currentSize = PlaybackStore.getSubSizeSp(this)
+        val tvSizeLabel = TextView(this).apply {
+            text = "حجم خط الترجمة: ${currentSize.toInt()}sp"
+            textSize = 16f
+            setPadding(0, 0, 0, 12)
+        }
+        val sizeSeek = SeekBar(this).apply {
+            max = 28 // 14sp to 42sp
+            progress = (currentSize - 14f).toInt().coerceIn(0, 28)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, p: Int, fromUser: Boolean) {
+                    currentSize = 14f + p
+                    tvSizeLabel.text = "حجم خط الترجمة: ${currentSize.toInt()}sp"
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+        }
+
+        val tvColorLabel = TextView(this).apply {
+            text = "لون خط الترجمة:"
+            textSize = 16f
+            setPadding(0, 16, 0, 8)
+        }
+
+        val colorNames = arrayOf("⚪ أبيض ناصع", "🟡 أصفر سينمائي", "🔵 سماوي", "🟢 أخضر")
+        var selectedColorIdx = PlaybackStore.getSubColorIndex(this)
+
+        container.addView(tvSizeLabel)
+        container.addView(sizeSeek)
+        container.addView(tvColorLabel)
+
+        AlertDialog.Builder(this)
+            .setTitle("تخصيص مظهر الترجمة")
+            .setView(container)
+            .setSingleChoiceItems(colorNames, selectedColorIdx) { _, which ->
+                selectedColorIdx = which
+            }
+            .setPositiveButton("حفظ") { _, _ ->
+                PlaybackStore.setSubSizeSp(this, currentSize)
+                PlaybackStore.setSubColorIndex(this, selectedColorIdx)
+            }
+            .setNeutralButton(
+                if (PlaybackStore.isSubBgEnabled(this)) "إخفاء الخلفية السوداء" else "تفعيل الخلفية السوداء"
+            ) { _, _ ->
+                PlaybackStore.setSubBgEnabled(this, !PlaybackStore.isSubBgEnabled(this))
+                PlaybackStore.setSubSizeSp(this, currentSize)
+                PlaybackStore.setSubColorIndex(this, selectedColorIdx)
+            }
+            .setNegativeButton("إلغاء", null)
+            .show()
+    }
+
+    private fun showDefaultOrientationDialog() {
+        val modes = arrayOf(
+            "🔄 دوران تلقائي حر (Auto Sensor)",
+            "🔒 عرضي دائماً (Landscape)",
+            "📱 طولي (Portrait)"
+        )
+        val current = PlaybackStore.getDefaultOrientationIndex(this)
+        AlertDialog.Builder(this)
+            .setTitle("الوضع الافتراضي عند فتح أي فيديو")
+            .setSingleChoiceItems(modes, current) { dialog, which ->
+                PlaybackStore.setDefaultOrientationIndex(this, which)
+                dialog.dismiss()
+            }
+            .show()
+    }
+
     private fun showFoldersList() {
         isShowingFolderVideos = false
+        currentOpenedFolder = null
         binding.tvToolbarTitle.text = getString(R.string.folders_title)
         binding.btnBackFolder.visibility = View.GONE
         adapter.submitFolders(videoFoldersOnly)
@@ -248,7 +387,16 @@ class MainActivity : AppCompatActivity() {
         } else {
             binding.emptyLayout.visibility = View.GONE
             binding.recyclerView.visibility = View.VISIBLE
-            showFoldersList()
+            if (isShowingFolderVideos && currentOpenedFolder != null) {
+                val updated = videoFoldersOnly.find { it.name == currentOpenedFolder?.name }
+                if (updated != null) {
+                    adapter.submitVideos(updated.videos)
+                } else {
+                    showFoldersList()
+                }
+            } else {
+                showFoldersList()
+            }
         }
     }
 

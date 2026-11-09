@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Modern Rounded Play Shield -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M42,35 C42,32.5 44.8,31 47,32.4 L73,49.4 C75,50.7 75,53.3 73,54.6 L47,71.6 C44.8,73 42,71.5 42,69 Z" />
+    <!-- Inner Bright Accent Play Core -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M46,41 L66,52 L46,63 Z" />
+    <!-- Cinema Subtitle Bar Indicator Below Play Icon -->
+    <path
+        android:fillColor="#FACC15"
+        android:pathData="M36,77 L72,77 C73.1,77 74,77.9 74,79 C74,80.1 73.1,81 72,81 L36,81 C34.9,81 34,80.1 34,79 C34,77.9 34,77 36,77 Z" />
+</vector>

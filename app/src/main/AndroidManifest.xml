@@ -2,15 +2,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Storage permissions for Android 13+ and older versions -->
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:name=".PureVideoApp"
         android:allowBackup="true"
+        android:extractNativeLibs="true"
+        android:hardwareAccelerated="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.PureVideoPlayer"
@@ -27,8 +32,10 @@
 
         <activity
             android:name=".PlayerActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             android:exported="true"
+            android:supportsPictureInPicture="true"
+            android:colorMode="hdr"
             android:screenOrientation="sensorLandscape"
             android:theme="@style/Theme.PureVideoPlayer.Fullscreen">
             <intent-filter>
