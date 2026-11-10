@@ -82,7 +82,8 @@ object PlaybackStore {
     private const val KEY_THEME_INDEX = "app_theme_index"
     private const val KEY_SUB_SIZE_SP = "sub_font_size_sp"
     private const val KEY_SUB_COLOR_INDEX = "sub_color_index"
-    private const val KEY_SUB_BG_OPACITY = "sub_bg_opacity_pct" // 0..100
+    private const val KEY_SUB_BG_OPACITY = "sub_bg_opacity_pct"
+    private const val KEY_SUB_TEXT_OPACITY = "sub_text_opacity_pct" // 0..100
     private const val KEY_SUB_OUTLINE_PX = "sub_outline_px" // 0..10
     private const val KEY_SUB_X_PCT = "sub_x_percent" // -0.45f .. +0.45f (0f = centered horizontally)
     private const val KEY_SUB_Y_PCT = "sub_y_percent" // -0.82f .. +0.08f (0f = default bottom margin)
@@ -230,13 +231,23 @@ object PlaybackStore {
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit().putInt(KEY_SUB_COLOR_INDEX, idx).apply()
     }
 
+    fun getSubTextOpacityPct(context: Context): Int =
+        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).getInt(KEY_SUB_TEXT_OPACITY, 100)
+
+    fun setSubTextOpacityPct(context: Context, pct: Int) {
+        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit()
+            .putInt(KEY_SUB_TEXT_OPACITY, pct.coerceIn(20, 100)).apply()
+    }
+
     fun getSubColorValue(context: Context): Int {
-        return when (getSubColorIndex(context)) {
+        val baseColor = when (getSubColorIndex(context)) {
             1 -> Color.parseColor("#FACC15")
             2 -> Color.parseColor("#38BDF8")
             3 -> Color.parseColor("#4ADE80")
             else -> Color.WHITE
         }
+        val alpha = ((getSubTextOpacityPct(context) / 100.0) * 255).toInt().coerceIn(50, 255)
+        return Color.argb(alpha, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor))
     }
 
     fun getSubTypeface(context: Context): Typeface {

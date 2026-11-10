@@ -6,6 +6,10 @@ import android.content.pm.ActivityInfo
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.ScrollView
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
@@ -293,7 +297,12 @@ class PlayerActivity : AppCompatActivity() {
             } catch (_: Exception) {}
         }
 
+        if (!viewsAttached) {
+            mediaPlayer.attachViews(binding.vlcVideoLayout, null, true, false)
+            viewsAttached = true
+        }
         mediaPlayer.play()
+        mediaPlayer.videoScale = scaleTypes[currentScaleIndex]
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         handler.removeCallbacks(updateProgressRunnable)
         handler.post(updateProgressRunnable)
@@ -413,7 +422,7 @@ class PlayerActivity : AppCompatActivity() {
                     dragStartRawY = event.rawY
                     dragStartTransX = view.translationX
                     dragStartTransY = view.translationY
-                    view.setBackgroundColor(Color.parseColor("#CC0284C7"))
+                    view.background = GradientDrawable().apply { cornerRadius = 18f; setColor(Color.parseColor("#CC0284C7")) }
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -508,12 +517,26 @@ class PlayerActivity : AppCompatActivity() {
         val subBgColor = PlaybackStore.getSubBackgroundColor(this)
         val subOutlinePx = PlaybackStore.getSubOutlinePx(this)
         val subTypeface = PlaybackStore.getSubTypeface(this)
+        val textAlpha = ((PlaybackStore.getSubTextOpacityPct(this) / 100.0) * 255).toInt().coerceIn(50, 255)
 
         binding.tvDraggableSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, subSizeSp)
         binding.tvDraggableSubtitle.setTextColor(subColor)
         binding.tvDraggableSubtitle.typeface = subTypeface
-        binding.tvDraggableSubtitle.setBackgroundColor(subBgColor)
-        binding.tvDraggableSubtitle.setShadowLayer(subOutlinePx.coerceAtLeast(1f), 2f, 2f, Color.BLACK)
+
+        val bgDrawable = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 18f
+            setColor(subBgColor)
+        }
+        binding.tvDraggableSubtitle.background = bgDrawable
+
+        val shadowAlpha = if (subOutlinePx <= 0.5f) 0 else textAlpha
+        binding.tvDraggableSubtitle.setShadowLayer(
+            subOutlinePx,
+            if (subOutlinePx > 0f) 2f else 0f,
+            if (subOutlinePx > 0f) 2f else 0f,
+            Color.argb(shadowAlpha, 0, 0, 0)
+        )
         restoreSubtitlePositionFromPercentage()
     }
 
@@ -1036,13 +1059,16 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showSubtitleLiveStyleDialog() {
+        val scroll = ScrollView(this)
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(48, 28, 48, 20)
+            setPadding(48, 24, 48, 20)
         }
+        scroll.addView(container)
 
         var currentSize = PlaybackStore.getSubSizeSp(this)
-        var currentOpacity = PlaybackStore.getSubBgOpacityPct(this)
+        var currentBgOpacity = PlaybackStore.getSubBgOpacityPct(this)
+        var currentTextOpacity = PlaybackStore.getSubTextOpacityPct(this)
         var currentOutline = PlaybackStore.getSubOutlinePx(this)
         var selectedColorIdx = PlaybackStore.getSubColorIndex(this)
 
@@ -1053,17 +1079,32 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         fun updateLive() {
+            PlaybackStore.setSubSizeSp(this, currentSize)
+            PlaybackStore.setSubBgOpacityPct(this, currentBgOpacity)
+            PlaybackStore.setSubTextOpacityPct(this, currentTextOpacity)
+            PlaybackStore.setSubOutlinePx(this, currentOutline)
+            PlaybackStore.setSubColorIndex(this, selectedColorIdx)
+
             tvPreview.setTextSize(TypedValue.COMPLEX_UNIT_SP, currentSize)
-            val c = when (selectedColorIdx) {
-                1 -> Color.parseColor("#FACC15")
-                2 -> Color.parseColor("#38BDF8")
-                3 -> Color.parseColor("#4ADE80")
-                else -> Color.WHITE
+            tvPreview.setTextColor(PlaybackStore.getSubColorValue(this))
+            tvPreview.background = GradientDrawable().apply {
+                cornerRadius = 18f
+                setColor(PlaybackStore.getSubBackgroundColor(this@PlayerActivity))
             }
-            tvPreview.setTextColor(c)
-            val alpha = ((currentOpacity / 100.0) * 255).toInt().coerceIn(0, 255)
-            tvPreview.setBackgroundColor(Color.argb(alpha, 0, 0, 0))
-            tvPreview.setShadowLayer(currentOutline.coerceAtLeast(1f), 2f, 2f, Color.BLACK)
+            val textAlpha = ((currentTextOpacity / 100.0) * 255).toInt().coerceIn(50, 255)
+            val shadowAlpha = if (currentOutline <= 0.5f) 0 else textAlpha
+            tvPreview.setShadowLayer(
+                currentOutline,
+                if (currentOutline > 0f) 2f else 0f,
+                if (currentOutline > 0f) 2f else 0f,
+                Color.argb(shadowAlpha, 0, 0, 0)
+            )
+            // Apply live to the actual subtitle on the video behind the dialog!
+            applyThemeAndSubtitleStyle()
+            if (binding.tvDraggableSubtitle.visibility != View.VISIBLE) {
+                binding.tvDraggableSubtitle.visibility = View.VISIBLE
+                binding.tvDraggableSubtitle.text = getString(R.string.style_preview_sample)
+            }
         }
         updateLive()
 
@@ -1085,17 +1126,35 @@ class PlayerActivity : AppCompatActivity() {
             })
         }
 
-        val tvOpacityLabel = TextView(this).apply {
-            text = getString(R.string.style_bg_opacity_label, currentOpacity)
+        val tvBgOpacityLabel = TextView(this).apply {
+            text = getString(R.string.style_bg_opacity_label, currentBgOpacity)
             setPadding(0, 12, 0, 4)
         }
-        val opacitySeek = SeekBar(this).apply {
+        val bgOpacitySeek = SeekBar(this).apply {
             max = 100
-            progress = currentOpacity
+            progress = currentBgOpacity
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                    currentOpacity = p
-                    tvOpacityLabel.text = getString(R.string.style_bg_opacity_label, currentOpacity)
+                    currentBgOpacity = p
+                    tvBgOpacityLabel.text = getString(R.string.style_bg_opacity_label, currentBgOpacity)
+                    updateLive()
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        }
+
+        val tvTextOpacityLabel = TextView(this).apply {
+            text = "شفافية نص الترجمة (Text Opacity): $currentTextOpacity%"
+            setPadding(0, 12, 0, 4)
+        }
+        val textOpacitySeek = SeekBar(this).apply {
+            max = 80
+            progress = (currentTextOpacity - 20).coerceIn(0, 80)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                    currentTextOpacity = 20 + p
+                    tvTextOpacityLabel.text = "شفافية نص الترجمة (Text Opacity): $currentTextOpacity%"
                     updateLive()
                 }
                 override fun onStartTrackingTouch(s: SeekBar?) {}
@@ -1121,39 +1180,55 @@ class PlayerActivity : AppCompatActivity() {
             })
         }
 
+        val tvColorLabel = TextView(this).apply {
+            text = getString(R.string.style_color_label)
+            setPadding(0, 12, 0, 6)
+        }
+
         val colorNames = arrayOf(
             getString(R.string.style_color_white),
             getString(R.string.style_color_yellow),
             getString(R.string.style_color_cyan),
             getString(R.string.style_color_green)
         )
+        val radioGroup = RadioGroup(this).apply {
+            orientation = RadioGroup.VERTICAL
+        }
+        colorNames.forEachIndexed { idx, label ->
+            val rb = RadioButton(this).apply {
+                id = View.generateViewId()
+                text = label
+                isChecked = (idx == selectedColorIdx)
+                setOnClickListener {
+                    selectedColorIdx = idx
+                    updateLive()
+                }
+            }
+            radioGroup.addView(rb)
+        }
 
         container.addView(tvPreview)
         container.addView(tvSizeLabel)
         container.addView(sizeSeek)
-        container.addView(tvOpacityLabel)
-        container.addView(opacitySeek)
+        container.addView(tvBgOpacityLabel)
+        container.addView(bgOpacitySeek)
+        container.addView(tvTextOpacityLabel)
+        container.addView(textOpacitySeek)
         container.addView(tvOutlineLabel)
         container.addView(outlineSeek)
+        container.addView(tvColorLabel)
+        container.addView(radioGroup)
 
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.style_dialog_title))
-            .setView(container)
-            .setSingleChoiceItems(colorNames, selectedColorIdx) { _, which ->
-                selectedColorIdx = which
-                updateLive()
-            }
+            .setView(scroll)
             .setPositiveButton(getString(R.string.save)) { _, _ ->
-                PlaybackStore.setSubSizeSp(this, currentSize)
-                PlaybackStore.setSubBgOpacityPct(this, currentOpacity)
-                PlaybackStore.setSubOutlinePx(this, currentOutline)
-                PlaybackStore.setSubColorIndex(this, selectedColorIdx)
                 applyThemeAndSubtitleStyle()
             }
             .setNeutralButton(getString(R.string.reset)) { _, _ ->
                 resetSubtitlePositionNow()
             }
-            .setNegativeButton(getString(R.string.cancel), null)
+            .setNegativeButton(getString(R.string.close), null)
             .show()
     }
 
@@ -1393,27 +1468,68 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showToastIndicator(text: String) {
+        binding.tvGestureIndicator.animate().cancel()
         binding.tvGestureIndicator.text = text
-        binding.tvGestureIndicator.visibility = View.VISIBLE
+        if (binding.tvGestureIndicator.visibility != View.VISIBLE) {
+            binding.tvGestureIndicator.alpha = 0f
+            binding.tvGestureIndicator.scaleX = 0.88f
+            binding.tvGestureIndicator.scaleY = 0.88f
+            binding.tvGestureIndicator.visibility = View.VISIBLE
+        }
+        binding.tvGestureIndicator.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(140L)
+            .start()
         binding.tvGestureIndicator.removeCallbacks(hideIndicatorRunnable)
         binding.tvDraggableSubtitle.bringToFront()
         binding.tvGestureIndicator.postDelayed(hideIndicatorRunnable, 1100)
     }
 
     private val hideIndicatorRunnable = Runnable {
-        binding.tvGestureIndicator.visibility = View.GONE
+        binding.tvGestureIndicator.animate()
+            .alpha(0f)
+            .scaleX(0.9f)
+            .scaleY(0.9f)
+            .setDuration(160L)
+            .withEndAction {
+                binding.tvGestureIndicator.visibility = View.GONE
+            }
+            .start()
     }
 
     private fun showControls() {
         if (isLocked) return
         isControlsVisible = true
+        binding.controlsContainer.animate().cancel()
+        binding.playerTopBar.animate().cancel()
+        binding.playerBottomBar.animate().cancel()
+
         binding.controlsContainer.visibility = View.VISIBLE
+        binding.controlsContainer.alpha = 0f
+        binding.playerTopBar.translationY = -32f
+        binding.playerBottomBar.translationY = 32f
+
+        binding.controlsContainer.animate().alpha(1f).setDuration(200L).start()
+        binding.playerTopBar.animate().translationY(0f).setDuration(220L).start()
+        binding.playerBottomBar.animate().translationY(0f).setDuration(220L).start()
         scheduleHideControls()
     }
 
     private fun hideControls() {
         isControlsVisible = false
-        binding.controlsContainer.visibility = View.GONE
+        binding.playerTopBar.animate().translationY(-32f).setDuration(180L).start()
+        binding.playerBottomBar.animate().translationY(32f).setDuration(180L).start()
+        binding.controlsContainer.animate()
+            .alpha(0f)
+            .setDuration(180L)
+            .withEndAction {
+                if (!isControlsVisible) {
+                    binding.controlsContainer.visibility = View.GONE
+                }
+            }
+            .start()
     }
 
     private fun scheduleHideControls() {
@@ -1442,6 +1558,31 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    private var viewsAttached = true
+
+    override fun onStart() {
+        super.onStart()
+        if (!viewsAttached) {
+            mediaPlayer.attachViews(binding.vlcVideoLayout, null, true, false)
+            viewsAttached = true
+            mediaPlayer.videoScale = scaleTypes[currentScaleIndex]
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        hideSystemBars()
+        applyThemeAndSubtitleStyle()
+        binding.vlcVideoLayout.post {
+            if (!viewsAttached) {
+                mediaPlayer.attachViews(binding.vlcVideoLayout, null, true, false)
+                viewsAttached = true
+            }
+            mediaPlayer.updateViewpoint(0f, 0f, 0f, 0f, false)
+            mediaPlayer.videoScale = scaleTypes[currentScaleIndex]
+        }
+    }
+
     override fun onPause() {
         super.onPause()
         saveCurrentPositionNow()
@@ -1452,10 +1593,24 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        saveCurrentPositionNow()
+        val inPip = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) isInPictureInPictureMode else false
+        if (!inPip && viewsAttached) {
+            mediaPlayer.detachViews()
+            viewsAttached = false
+        }
+    }
+
     override fun onDestroy() {
         saveCurrentPositionNow()
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
+        if (viewsAttached) {
+            mediaPlayer.detachViews()
+            viewsAttached = false
+        }
         mediaPlayer.release()
         libVLC.release()
         try {

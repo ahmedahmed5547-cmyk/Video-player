@@ -6,6 +6,10 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.ScrollView
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -96,7 +100,18 @@ class MainActivity : AppCompatActivity() {
             val (uri, title, positionMs) = lastVideo
             val timeFormatted = PlaybackStore.formatTime(positionMs)
             binding.fabResumeLast.text = getString(R.string.resume_fab_format, timeFormatted)
-            binding.fabResumeLast.visibility = View.VISIBLE
+            if (binding.fabResumeLast.visibility != View.VISIBLE) {
+                binding.fabResumeLast.scaleX = 0.7f
+                binding.fabResumeLast.scaleY = 0.7f
+                binding.fabResumeLast.alpha = 0f
+                binding.fabResumeLast.visibility = View.VISIBLE
+                binding.fabResumeLast.animate()
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .alpha(1f)
+                    .setDuration(260L)
+                    .start()
+            }
             binding.fabResumeLast.setOnClickListener {
                 launchPlayer(uri, title, startPositionMs = positionMs)
             }
@@ -294,40 +309,56 @@ class MainActivity : AppCompatActivity() {
      * Requirement 5: Subtitle Styling Dialog (Size, Color, Background Opacity, Outline/Shadow, Font) with Live Preview!
      */
     private fun showSubtitleStyleDialog() {
+        val scroll = ScrollView(this)
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(48, 32, 48, 24)
+            setPadding(48, 28, 48, 24)
         }
+        scroll.addView(container)
 
         var currentSize = PlaybackStore.getSubSizeSp(this)
-        var currentOpacity = PlaybackStore.getSubBgOpacityPct(this)
+        var currentBgOpacity = PlaybackStore.getSubBgOpacityPct(this)
+        var currentTextOpacity = PlaybackStore.getSubTextOpacityPct(this)
         var currentOutline = PlaybackStore.getSubOutlinePx(this)
         var selectedColorIdx = PlaybackStore.getSubColorIndex(this)
 
         val tvPreview = TextView(this).apply {
             text = getString(R.string.style_preview_sample)
             gravity = Gravity.CENTER
-            setPadding(24, 16, 24, 16)
+            setPadding(28, 16, 28, 16)
         }
 
         fun updateLivePreview() {
             tvPreview.setTextSize(TypedValue.COMPLEX_UNIT_SP, currentSize)
-            val c = when (selectedColorIdx) {
+            val baseC = when (selectedColorIdx) {
                 1 -> Color.parseColor("#FACC15")
                 2 -> Color.parseColor("#38BDF8")
                 3 -> Color.parseColor("#4ADE80")
                 else -> Color.WHITE
             }
-            tvPreview.setTextColor(c)
-            val alpha = ((currentOpacity / 100.0) * 255).toInt().coerceIn(0, 255)
-            tvPreview.setBackgroundColor(Color.argb(alpha, 0, 0, 0))
-            tvPreview.setShadowLayer(currentOutline.coerceAtLeast(1f), 2f, 2f, Color.BLACK)
+            val textAlpha = ((currentTextOpacity / 100.0) * 255).toInt().coerceIn(50, 255)
+            tvPreview.setTextColor(Color.argb(textAlpha, Color.red(baseC), Color.green(baseC), Color.blue(baseC)))
+
+            val bgAlpha = ((currentBgOpacity / 100.0) * 255).toInt().coerceIn(0, 255)
+            val bgDrawable = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 18f
+                setColor(Color.argb(bgAlpha, 0, 0, 0))
+            }
+            tvPreview.background = bgDrawable
+            val shadowAlpha = if (currentOutline <= 0.5f) 0 else textAlpha
+            tvPreview.setShadowLayer(
+                currentOutline,
+                if (currentOutline > 0f) 2f else 0f,
+                if (currentOutline > 0f) 2f else 0f,
+                Color.argb(shadowAlpha, 0, 0, 0)
+            )
         }
         updateLivePreview()
 
         val tvSizeLabel = TextView(this).apply {
             text = getString(R.string.style_size_label, currentSize.toInt())
-            setPadding(0, 16, 0, 6)
+            setPadding(0, 14, 0, 4)
         }
         val sizeSeek = SeekBar(this).apply {
             max = 32
@@ -343,17 +374,35 @@ class MainActivity : AppCompatActivity() {
             })
         }
 
-        val tvOpacityLabel = TextView(this).apply {
-            text = getString(R.string.style_bg_opacity_label, currentOpacity)
-            setPadding(0, 14, 0, 6)
+        val tvBgOpacityLabel = TextView(this).apply {
+            text = getString(R.string.style_bg_opacity_label, currentBgOpacity)
+            setPadding(0, 14, 0, 4)
         }
-        val opacitySeek = SeekBar(this).apply {
+        val bgOpacitySeek = SeekBar(this).apply {
             max = 100
-            progress = currentOpacity
+            progress = currentBgOpacity
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                    currentOpacity = p
-                    tvOpacityLabel.text = getString(R.string.style_bg_opacity_label, currentOpacity)
+                    currentBgOpacity = p
+                    tvBgOpacityLabel.text = getString(R.string.style_bg_opacity_label, currentBgOpacity)
+                    updateLivePreview()
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        }
+
+        val tvTextOpacityLabel = TextView(this).apply {
+            text = "شفافية نص الترجمة (Text Opacity): $currentTextOpacity%"
+            setPadding(0, 14, 0, 4)
+        }
+        val textOpacitySeek = SeekBar(this).apply {
+            max = 80
+            progress = (currentTextOpacity - 20).coerceIn(0, 80)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                    currentTextOpacity = 20 + p
+                    tvTextOpacityLabel.text = "شفافية نص الترجمة (Text Opacity): $currentTextOpacity%"
                     updateLivePreview()
                 }
                 override fun onStartTrackingTouch(s: SeekBar?) {}
@@ -363,7 +412,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvOutlineLabel = TextView(this).apply {
             text = getString(R.string.style_outline_label, currentOutline.toInt())
-            setPadding(0, 14, 0, 6)
+            setPadding(0, 14, 0, 4)
         }
         val outlineSeek = SeekBar(this).apply {
             max = 12
@@ -381,7 +430,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvColorLabel = TextView(this).apply {
             text = getString(R.string.style_color_label)
-            setPadding(0, 16, 0, 8)
+            setPadding(0, 14, 0, 6)
         }
 
         val colorNames = arrayOf(
@@ -390,26 +439,41 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.style_color_cyan),
             getString(R.string.style_color_green)
         )
+        val radioGroup = RadioGroup(this).apply {
+            orientation = RadioGroup.VERTICAL
+        }
+        colorNames.forEachIndexed { idx, label ->
+            val rb = RadioButton(this).apply {
+                id = View.generateViewId()
+                text = label
+                isChecked = (idx == selectedColorIdx)
+                setOnClickListener {
+                    selectedColorIdx = idx
+                    updateLivePreview()
+                }
+            }
+            radioGroup.addView(rb)
+        }
 
         container.addView(tvPreview)
         container.addView(tvSizeLabel)
         container.addView(sizeSeek)
-        container.addView(tvOpacityLabel)
-        container.addView(opacitySeek)
+        container.addView(tvBgOpacityLabel)
+        container.addView(bgOpacitySeek)
+        container.addView(tvTextOpacityLabel)
+        container.addView(textOpacitySeek)
         container.addView(tvOutlineLabel)
         container.addView(outlineSeek)
         container.addView(tvColorLabel)
+        container.addView(radioGroup)
 
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.style_dialog_title))
-            .setView(container)
-            .setSingleChoiceItems(colorNames, selectedColorIdx) { _, which ->
-                selectedColorIdx = which
-                updateLivePreview()
-            }
+            .setView(scroll)
             .setPositiveButton(getString(R.string.save)) { _, _ ->
                 PlaybackStore.setSubSizeSp(this, currentSize)
-                PlaybackStore.setSubBgOpacityPct(this, currentOpacity)
+                PlaybackStore.setSubBgOpacityPct(this, currentBgOpacity)
+                PlaybackStore.setSubTextOpacityPct(this, currentTextOpacity)
                 PlaybackStore.setSubOutlinePx(this, currentOutline)
                 PlaybackStore.setSubColorIndex(this, selectedColorIdx)
             }
@@ -558,5 +622,7 @@ class MainActivity : AppCompatActivity() {
             putExtra("START_POSITION_MS", startPositionMs)
         }
         startActivity(intent)
+        @Suppress("DEPRECATION")
+        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
 }
