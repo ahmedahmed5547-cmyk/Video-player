@@ -130,4 +130,23 @@
     <string name="toast_locked">🔒 الشاشة مقفلة</string>
     <string name="toast_unlocked">🔓 تم فتح القفل</string>
     <string name="toast_no_extra_audio">لا توجد مسارات صوتية إضافية</string>
+
+    <!-- Search & Long-Press Video Menu -->
+    <string name="search_videos_hint">🔍 ابحث باسم الفيديو...</string>
+    <string name="search_button_desc">بحث عن فيديو</string>
+    <string name="video_menu_play">▶️ تشغيل الفيديو</string>
+    <string name="video_menu_details">ℹ️ تفاصيل الفيديو (الدقة، المساحة، المسار)</string>
+    <string name="video_menu_delete">🗑️ مسح الفيديو من الجهاز</string>
+    <string name="video_details_title">📋 تفاصيل ومعلومات الفيديو</string>
+    <string name="video_detail_name">📄 الاسم: %1$s</string>
+    <string name="video_detail_resolution">🎞️ الدقة والأبعاد: %1$s</string>
+    <string name="video_detail_size">💾 المساحة (الحجم): %1$s</string>
+    <string name="video_detail_duration">⏱️ المدة: %1$s</string>
+    <string name="video_detail_folder">📁 المجلد: %1$s</string>
+    <string name="video_detail_path">📍 مسار الملف: %1$s</string>
+    <string name="delete_confirm_title">🗑️ مسح الفيديو نهائياً؟</string>
+    <string name="delete_confirm_message">هل أنت متأكد من مسح الفيديو «%1$s» نهائياً من ذاكرة هاتفك؟</string>
+    <string name="delete_action">مسح الفيديو</string>
+    <string name="video_deleted_toast">✅ تم مسح الفيديو بنجاح</string>
+    <string name="video_delete_failed_toast">⚠️ تعذر مسح الفيديو</string>
 </resources>

@@ -130,4 +130,23 @@
     <string name="toast_locked">🔒 Screen Locked</string>
     <string name="toast_unlocked">🔓 Screen Unlocked</string>
     <string name="toast_no_extra_audio">No additional audio tracks found</string>
+
+    <!-- Search & Long-Press Video Menu -->
+    <string name="search_videos_hint">🔍 Search videos by name...</string>
+    <string name="search_button_desc">Search Videos</string>
+    <string name="video_menu_play">▶️ Play Video</string>
+    <string name="video_menu_details">ℹ️ Video Details (Resolution, Size &amp; Path)</string>
+    <string name="video_menu_delete">🗑️ Delete Video from Device</string>
+    <string name="video_details_title">📋 Video Information</string>
+    <string name="video_detail_name">📄 Name: %1$s</string>
+    <string name="video_detail_resolution">🎞️ Resolution: %1$s</string>
+    <string name="video_detail_size">💾 File Size: %1$s</string>
+    <string name="video_detail_duration">⏱️ Duration: %1$s</string>
+    <string name="video_detail_folder">📁 Folder: %1$s</string>
+    <string name="video_detail_path">📍 Path: %1$s</string>
+    <string name="delete_confirm_title">🗑️ Delete Video?</string>
+    <string name="delete_confirm_message">Are you sure you want to permanently delete "%1$s" from your device?</string>
+    <string name="delete_action">Delete Permanently</string>
+    <string name="video_deleted_toast">✅ Video deleted successfully</string>
+    <string name="video_delete_failed_toast">⚠️ Could not delete video</string>
 </resources>

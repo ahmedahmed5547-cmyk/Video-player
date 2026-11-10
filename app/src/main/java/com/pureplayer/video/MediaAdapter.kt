@@ -117,7 +117,8 @@ object VideoThumbnailLoader {
 
 class MediaAdapter(
     private val onFolderClick: (VideoFolder) -> Unit,
-    private val onVideoClick: (VideoItem) -> Unit
+    private val onVideoClick: (VideoItem) -> Unit,
+    private val onVideoLongClick: (VideoItem) -> Unit = {}
 ) : RecyclerView.Adapter<MediaAdapter.MediaViewHolder>() {
 
     private val items = mutableListOf<Any>()
@@ -215,16 +216,21 @@ class MediaAdapter(
                     binding.tvDurationBadge.visibility = View.VISIBLE
 
                     val sizeMb = String.format(Locale.US, "%.1f MB", item.size / (1024.0 * 1024.0))
+                    val resShort = if (item.width > 0 && item.height > 0) "  •  ${item.getResolutionLabel().substringBefore(" ")}" else ""
                     val savedPos = PlaybackStore.getSavedPosition(ctx, item.uri)
                     val resumeBadge = if (savedPos > 3_000L) {
                         "  •  ⏸ " + ctx.getString(R.string.stopped_at_format, PlaybackStore.formatTime(savedPos))
                     } else {
                         ""
                     }
-                    binding.tvSubtitle.text = "$sizeMb$resumeBadge"
+                    binding.tvSubtitle.text = "$sizeMb$resShort$resumeBadge"
 
                     thumbJob = VideoThumbnailLoader.loadVideoThumbnail(ctx, item, binding.ivIcon, accentColor)
                     binding.root.setOnClickListener { onVideoClick(item) }
+                    binding.root.setOnLongClickListener {
+                        onVideoLongClick(item)
+                        true
+                    }
                 }
             }
 

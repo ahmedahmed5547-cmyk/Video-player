@@ -1,27 +1,35 @@
 package com.pureplayer.video
 
 import android.Manifest
+import android.app.Activity
+import android.app.RecoverableSecurityException
 import android.content.ContentUris
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
-import android.widget.RadioButton
-import android.widget.RadioGroup
-import android.widget.ScrollView
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.text.Editable
+import android.text.TextWatcher
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -29,14 +37,18 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.pureplayer.video.databinding.ActivityMainBinding
 import java.io.File
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: MediaAdapter
+    private var allVideosFlat = listOf<VideoItem>()
     private var videoFoldersOnly = listOf<VideoFolder>()
     private var isShowingFolderVideos = false
     private var currentOpenedFolder: VideoFolder? = null
+    private var isSearchActive = false
+    private var pendingDeleteVideo: VideoItem? = null
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -59,6 +71,19 @@ class MainActivity : AppCompatActivity() {
                 )
             } catch (_: Exception) {}
             handleVideoSelection(it, it.lastPathSegment ?: getString(R.string.open_external_file))
+        }
+    }
+
+    // Launcher for Android 10 / 11+ system file deletion confirmation dialog
+    private val deleteRequestLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            Toast.makeText(this, getString(R.string.video_deleted_toast), Toast.LENGTH_SHORT).show()
+            pendingDeleteVideo = null
+            loadVideoFoldersOnly()
+        } else {
+            pendingDeleteVideo = null
         }
     }
 
@@ -87,10 +112,20 @@ class MainActivity : AppCompatActivity() {
 
         binding.mainRoot.setBackgroundColor(bg)
         binding.topBar.setBackgroundColor(surface)
+        binding.searchBarContainer.setBackgroundColor(surface)
         window.statusBarColor = surface
         window.navigationBarColor = bg
         binding.btnSettings.imageTintList = ColorStateList.valueOf(accent)
+        binding.btnToggleSearch.imageTintList = ColorStateList.valueOf(accent)
         binding.fabResumeLast.backgroundTintList = ColorStateList.valueOf(accent)
+
+        val searchBoxBg = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 24f
+            setColor(bg)
+            setStroke(2, accent)
+        }
+        binding.etSearchVideos.background = searchBoxBg
         adapter.notifyDataSetChanged()
     }
 
@@ -131,10 +166,130 @@ class MainActivity : AppCompatActivity() {
             },
             onVideoClick = { video ->
                 handleVideoSelection(video.uri, video.title)
+            },
+            onVideoLongClick = { video ->
+                showVideoLongPressMenu(video)
             }
         )
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
         binding.recyclerView.adapter = adapter
+    }
+
+    /**
+     * Long-Press Menu on any Video Item:
+     * 1. Play Video
+     * 2. Video Details (Name, Resolution, File Size, Duration, Folder, Full Path)
+     * 3. Delete Video from Device
+     */
+    private fun showVideoLongPressMenu(video: VideoItem) {
+        val options = arrayOf(
+            getString(R.string.video_menu_play),
+            getString(R.string.video_menu_details),
+            getString(R.string.video_menu_delete)
+        )
+        AlertDialog.Builder(this)
+            .setTitle(video.title)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> handleVideoSelection(video.uri, video.title)
+                    1 -> showVideoDetailsDialog(video)
+                    2 -> confirmAndDeleteVideo(video)
+                }
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    private fun showVideoDetailsDialog(video: VideoItem) {
+        var w = video.width
+        var h = video.height
+        // If MediaStore didn't index width/height for this file, extract it on the fly
+        if (w <= 0 || h <= 0) {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(this, video.uri)
+                w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+                h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            } catch (_: Exception) {
+            } finally {
+                try { retriever.release() } catch (_: Exception) {}
+            }
+        }
+
+        val enrichedVideo = video.copy(width = w, height = h)
+        val sizeFormatted = if (video.size >= 1024L * 1024L * 1024L) {
+            String.format(Locale.US, "%.2f GB (%d MB)", video.size / (1024.0 * 1024.0 * 1024.0), video.size / (1024L * 1024L))
+        } else {
+            String.format(Locale.US, "%.2f MB", video.size / (1024.0 * 1024.0))
+        }
+        val durationFormatted = PlaybackStore.formatTime(video.duration)
+        val displayPath = video.path.ifEmpty { video.uri.toString() }
+
+        val detailsMessage = listOf(
+            getString(R.string.video_detail_name, video.title),
+            getString(R.string.video_detail_resolution, enrichedVideo.getResolutionLabel()),
+            getString(R.string.video_detail_size, sizeFormatted),
+            getString(R.string.video_detail_duration, durationFormatted),
+            getString(R.string.video_detail_folder, video.folderName),
+            getString(R.string.video_detail_path, displayPath)
+        ).joinToString("\n\n")
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.video_details_title))
+            .setMessage(detailsMessage)
+            .setPositiveButton(getString(R.string.video_menu_play)) { _, _ ->
+                handleVideoSelection(video.uri, video.title)
+            }
+            .setNeutralButton(getString(R.string.video_menu_delete)) { _, _ ->
+                confirmAndDeleteVideo(video)
+            }
+            .setNegativeButton(getString(R.string.close), null)
+            .show()
+    }
+
+    private fun confirmAndDeleteVideo(video: VideoItem) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Android 11+ (API 30+): Official system delete confirmation sheet via MediaStore.createDeleteRequest
+            try {
+                pendingDeleteVideo = video
+                val pendingIntent = MediaStore.createDeleteRequest(contentResolver, listOf(video.uri))
+                val request = IntentSenderRequest.Builder(pendingIntent.intentSender).build()
+                deleteRequestLauncher.launch(request)
+                return
+            } catch (_: Exception) {}
+        }
+
+        // Android 10 and below: Show confirmation dialog and delete via ContentResolver
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.delete_confirm_title))
+            .setMessage(getString(R.string.delete_confirm_message, video.title))
+            .setPositiveButton(getString(R.string.delete_action)) { _, _ ->
+                performDirectDelete(video)
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    private fun performDirectDelete(video: VideoItem) {
+        try {
+            val rows = contentResolver.delete(video.uri, null, null)
+            if (rows > 0 || (video.path.isNotEmpty() && File(video.path).delete())) {
+                Toast.makeText(this, getString(R.string.video_deleted_toast), Toast.LENGTH_SHORT).show()
+                loadVideoFoldersOnly()
+            } else {
+                Toast.makeText(this, getString(R.string.video_delete_failed_toast), Toast.LENGTH_SHORT).show()
+            }
+        } catch (secEx: SecurityException) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && secEx is RecoverableSecurityException) {
+                pendingDeleteVideo = video
+                val request = IntentSenderRequest.Builder(secEx.userAction.actionIntent.intentSender).build()
+                deleteRequestLauncher.launch(request)
+            } else {
+                Toast.makeText(this, getString(R.string.video_delete_failed_toast), Toast.LENGTH_SHORT).show()
+            }
+        } catch (_: Exception) {
+            Toast.makeText(this, getString(R.string.video_delete_failed_toast), Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun handleVideoSelection(uri: Uri, title: String) {
@@ -159,8 +314,36 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupListeners() {
         binding.btnBackFolder.setOnClickListener {
-            showFoldersList()
+            if (isSearchActive) {
+                closeSearchBar()
+            } else {
+                showFoldersList()
+            }
         }
+
+        binding.btnToggleSearch.setOnClickListener {
+            if (isSearchActive) {
+                closeSearchBar()
+            } else {
+                openSearchBar()
+            }
+        }
+
+        binding.btnClearSearch.setOnClickListener {
+            if (binding.etSearchVideos.text.isNotEmpty()) {
+                binding.etSearchVideos.setText("")
+            } else {
+                closeSearchBar()
+            }
+        }
+
+        binding.etSearchVideos.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                filterVideosByQuery(s?.toString() ?: "")
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
 
         binding.btnOpenFile.setOnClickListener {
             openDocumentLauncher.launch(arrayOf("video/*", "application/x-matroska"))
@@ -180,14 +363,67 @@ class MainActivity : AppCompatActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (isShowingFolderVideos) {
-                    showFoldersList()
-                } else {
-                    isEnabled = false
-                    onBackPressedDispatcher.onBackPressed()
+                when {
+                    isSearchActive -> closeSearchBar()
+                    isShowingFolderVideos -> showFoldersList()
+                    else -> {
+                        isEnabled = false
+                        onBackPressedDispatcher.onBackPressed()
+                    }
                 }
             }
         })
+    }
+
+    private fun openSearchBar() {
+        isSearchActive = true
+        binding.searchBarContainer.alpha = 0f
+        binding.searchBarContainer.visibility = View.VISIBLE
+        binding.searchBarContainer.animate().alpha(1f).setDuration(180L).start()
+        binding.etSearchVideos.requestFocus()
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.showSoftInput(binding.etSearchVideos, InputMethodManager.SHOW_IMPLICIT)
+        filterVideosByQuery(binding.etSearchVideos.text.toString())
+    }
+
+    private fun closeSearchBar() {
+        isSearchActive = false
+        binding.etSearchVideos.setText("")
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.hideSoftInputFromWindow(binding.etSearchVideos.windowToken, 0)
+        binding.searchBarContainer.visibility = View.GONE
+        if (isShowingFolderVideos && currentOpenedFolder != null) {
+            binding.tvToolbarTitle.text = "${currentOpenedFolder!!.name} (${currentOpenedFolder!!.videos.size})"
+            binding.btnBackFolder.visibility = View.VISIBLE
+            adapter.submitVideos(currentOpenedFolder!!.videos)
+        } else {
+            showFoldersList()
+        }
+    }
+
+    private fun filterVideosByQuery(rawQuery: String) {
+        val query = rawQuery.trim()
+        if (!isSearchActive) return
+
+        val sourcePool = if (isShowingFolderVideos && currentOpenedFolder != null) {
+            currentOpenedFolder!!.videos
+        } else {
+            allVideosFlat
+        }
+
+        if (query.isEmpty()) {
+            if (isShowingFolderVideos && currentOpenedFolder != null) {
+                adapter.submitVideos(currentOpenedFolder!!.videos)
+            } else {
+                adapter.submitVideos(allVideosFlat)
+            }
+            return
+        }
+
+        val filtered = sourcePool.filter {
+            it.title.contains(query, ignoreCase = true) || it.folderName.contains(query, ignoreCase = true)
+        }
+        adapter.submitVideos(filtered)
     }
 
     private fun showProSettingsDialog() {
@@ -218,10 +454,6 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    /**
-     * Requirement 4: App Language Switcher (Arabic / English / System Default)
-     * Uses AndroidX AppCompatDelegate.setApplicationLocales() to switch UI & RTL/LTR direction immediately without app restart.
-     */
     private fun showAppLanguageDialog() {
         val labels = arrayOf(
             getString(R.string.lang_system_default),
@@ -243,9 +475,6 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    /**
-     * Requirement 3: Subtitle Language Picker with multiple preferred languages in priority order.
-     */
     private fun showSubtitleLanguagePriorityDialog() {
         val langCodes = arrayOf("ar", "en", "fr", "es", "tr", "hi", "ur")
         val langLabels = arrayOf(
@@ -305,9 +534,6 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    /**
-     * Requirement 5: Subtitle Styling Dialog (Size, Color, Background Opacity, Outline/Shadow, Font) with Live Preview!
-     */
     private fun showSubtitleStyleDialog() {
         val scroll = ScrollView(this)
         val container = LinearLayout(this).apply {
@@ -539,7 +765,9 @@ class MainActivity : AppCompatActivity() {
             MediaStore.Video.Media.DURATION,
             MediaStore.Video.Media.SIZE,
             MediaStore.Video.Media.DATA,
-            MediaStore.Video.Media.BUCKET_DISPLAY_NAME
+            MediaStore.Video.Media.BUCKET_DISPLAY_NAME,
+            MediaStore.Video.Media.WIDTH,
+            MediaStore.Video.Media.HEIGHT
         )
         val selection = "${MediaStore.Video.Media.SIZE} > 0"
         val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} DESC"
@@ -557,6 +785,8 @@ class MainActivity : AppCompatActivity() {
             val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
             val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
             val bucketCol = cursor.getColumnIndex(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)
+            val widthCol = cursor.getColumnIndex(MediaStore.Video.Media.WIDTH)
+            val heightCol = cursor.getColumnIndex(MediaStore.Video.Media.HEIGHT)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
@@ -564,6 +794,8 @@ class MainActivity : AppCompatActivity() {
                 val duration = cursor.getLong(durCol)
                 val size = cursor.getLong(sizeCol)
                 val path = cursor.getString(dataCol) ?: ""
+                val width = if (widthCol != -1) cursor.getInt(widthCol) else 0
+                val height = if (heightCol != -1) cursor.getInt(heightCol) else 0
 
                 if (path.isNotEmpty() && !File(path).exists()) continue
 
@@ -578,11 +810,24 @@ class MainActivity : AppCompatActivity() {
                     MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
                     id
                 )
-                videoList.add(VideoItem(id, title, contentUri, duration, size, folderName))
+                videoList.add(
+                    VideoItem(
+                        id = id,
+                        title = title,
+                        uri = contentUri,
+                        duration = duration,
+                        size = size,
+                        folderName = folderName,
+                        width = width,
+                        height = height,
+                        path = path
+                    )
+                )
             }
         }
 
         binding.swipeRefresh.isRefreshing = false
+        allVideosFlat = videoList
 
         videoFoldersOnly = videoList
             .groupBy { it.folderName }
@@ -595,9 +840,13 @@ class MainActivity : AppCompatActivity() {
         } else {
             binding.emptyLayout.visibility = View.GONE
             binding.recyclerView.visibility = View.VISIBLE
-            if (isShowingFolderVideos && currentOpenedFolder != null) {
+            if (isSearchActive) {
+                filterVideosByQuery(binding.etSearchVideos.text.toString())
+            } else if (isShowingFolderVideos && currentOpenedFolder != null) {
                 val updated = videoFoldersOnly.find { it.name == currentOpenedFolder?.name }
                 if (updated != null) {
+                    currentOpenedFolder = updated
+                    binding.tvToolbarTitle.text = "${updated.name} (${updated.videos.size})"
                     adapter.submitVideos(updated.videos)
                 } else {
                     showFoldersList()
