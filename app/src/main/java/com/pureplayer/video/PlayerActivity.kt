@@ -7,6 +7,8 @@ import android.content.pm.ActivityInfo
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioManager
 import android.net.Uri
@@ -18,12 +20,16 @@ import android.os.ParcelFileDescriptor
 import android.text.BidiFormatter
 import android.util.Rational
 import android.util.TypedValue
+import android.widget.FrameLayout
 import android.view.GestureDetector
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.animation.OvershootInterpolator
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.RadioButton
@@ -86,6 +92,7 @@ class PlayerActivity : AppCompatActivity() {
     private var dragStartTransY = 0f
 
     private var gestureVolumeAccumulator = 0f
+    private val springOvershoot = OvershootInterpolator(1.6f)
 
     private val orientationModes = intArrayOf(
         ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR,
@@ -102,6 +109,14 @@ class PlayerActivity : AppCompatActivity() {
         MediaPlayer.ScaleType.SURFACE_4_3
     )
     private var currentScaleIndex = 0
+
+    private fun dp(value: Int): Int {
+        return TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            value.toFloat(),
+            resources.displayMetrics
+        ).toInt()
+    }
 
     private val subtitlePickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -139,6 +154,18 @@ class PlayerActivity : AppCompatActivity() {
 
     private val hideControlsRunnable = Runnable {
         hideControls()
+    }
+
+    private val hideVerticalSliderRunnable = Runnable {
+        binding.verticalSliderCard.animate()
+            .alpha(0f)
+            .scaleX(0.92f)
+            .scaleY(0.92f)
+            .setDuration(180L)
+            .withEndAction {
+                binding.verticalSliderCard.visibility = View.GONE
+            }
+            .start()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -236,6 +263,343 @@ class PlayerActivity : AppCompatActivity() {
 
         setupControls()
         setupTouchGestures()
+    }
+
+    /**
+     * Premium Cinema Popup Menu Engine for PlayerActivity
+     */
+    private fun showPlayerPremiumMenu(
+        headerIcon: String,
+        title: String,
+        subtitle: String?,
+        items: List<PremiumMenuItem>
+    ) {
+        val accent = PlaybackStore.getAccentColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+
+        val outerScroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+        }
+
+        val cardContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(16), dp(20), dp(18))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(28).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(105, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+        outerScroll.addView(cardContainer)
+
+        val topPill = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(44), dp(4)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(12)
+            }
+            background = GradientDrawable().apply {
+                cornerRadius = dp(4).toFloat()
+                setColor(accent)
+            }
+        }
+        cardContainer.addView(topPill)
+
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), 0, dp(4), dp(12))
+        }
+
+        val tvHeaderIcon = TextView(this).apply {
+            text = headerIcon
+            textSize = 21f
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(dp(46), dp(46)).apply {
+                marginEnd = dp(12)
+            }
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(15).toFloat()
+                setColor(Color.argb(38, Color.red(accent), Color.green(accent), Color.blue(accent)))
+                setStroke(dp(1), Color.argb(85, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+
+        val headerTextCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+
+        val tvTitle = TextView(this).apply {
+            text = title
+            setTextColor(Color.WHITE)
+            textSize = 17f
+            setTypeface(typeface, Typeface.BOLD)
+            maxLines = 1
+        }
+        headerTextCol.addView(tvTitle)
+
+        if (!subtitle.isNullOrBlank()) {
+            val tvSubtitle = TextView(this).apply {
+                text = subtitle
+                setTextColor(accent)
+                textSize = 12f
+                setPadding(0, dp(2), 0, 0)
+            }
+            headerTextCol.addView(tvSubtitle)
+        }
+
+        headerRow.addView(tvHeaderIcon)
+        headerRow.addView(headerTextCol)
+        cardContainer.addView(headerRow)
+
+        val divider = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                bottomMargin = dp(10)
+            }
+            setBackgroundColor(Color.parseColor("#22FFFFFF"))
+        }
+        cardContainer.addView(divider)
+
+        val dialog = AlertDialog.Builder(this).setView(outerScroll).create()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        for (item in items) {
+            if (!item.sectionHeader.isNullOrBlank()) {
+                val tvSec = TextView(this).apply {
+                    text = item.sectionHeader
+                    setTextColor(accent)
+                    textSize = 12f
+                    setTypeface(typeface, Typeface.BOLD)
+                    setPadding(dp(6), dp(8), dp(6), dp(4))
+                }
+                cardContainer.addView(tvSec)
+            }
+
+            val rowCard = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), dp(11), dp(12), dp(11))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dp(8)
+                }
+                val strokeC = when {
+                    item.isDanger -> Color.parseColor("#55F43F5E")
+                    item.isAccentHighlighted -> Color.argb(130, Color.red(accent), Color.green(accent), Color.blue(accent))
+                    else -> Color.parseColor("#1FFFFFFF")
+                }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dp(15).toFloat()
+                    setColor(bg)
+                    setStroke(dp(1), strokeC)
+                }
+            }
+
+            val iconBadge = TextView(this).apply {
+                text = item.iconEmoji
+                textSize = 17f
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply {
+                    marginEnd = dp(12)
+                }
+                val badgeBg = if (item.isDanger) {
+                    Color.parseColor("#28F43F5E")
+                } else {
+                    Color.argb(32, Color.red(accent), Color.green(accent), Color.blue(accent))
+                }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dp(11).toFloat()
+                    setColor(badgeBg)
+                }
+            }
+
+            val textCol = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+
+            val tvItemTitle = TextView(this).apply {
+                text = item.title
+                setTextColor(if (item.isDanger) Color.parseColor("#FDA4AF") else Color.WHITE)
+                textSize = 14.5f
+                setTypeface(typeface, Typeface.BOLD)
+            }
+            textCol.addView(tvItemTitle)
+
+            if (!item.subtitle.isNullOrBlank()) {
+                val tvItemSub = TextView(this).apply {
+                    text = item.subtitle
+                    setTextColor(if (item.isAccentHighlighted) accent else Color.parseColor("#94A3B8"))
+                    textSize = 11.5f
+                    setPadding(0, dp(2), 0, 0)
+                }
+                textCol.addView(tvItemSub)
+            }
+
+            val tvArrow = TextView(this).apply {
+                text = "›"
+                setTextColor(if (item.isDanger) Color.parseColor("#F43F5E") else accent)
+                textSize = 20f
+                setTypeface(typeface, Typeface.BOLD)
+                setPadding(dp(8), 0, dp(2), 0)
+            }
+
+            rowCard.addView(iconBadge)
+            rowCard.addView(textCol)
+            rowCard.addView(tvArrow)
+
+            rowCard.setOnTouchListener { v, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> v.animate().scaleX(0.97f).scaleY(0.97f).setDuration(85L).start()
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> v.animate().scaleX(1f).scaleY(1f).setDuration(130L).start()
+                }
+                false
+            }
+
+            rowCard.setOnClickListener {
+                dialog.dismiss()
+                item.onClick()
+            }
+
+            cardContainer.addView(rowCard)
+        }
+
+        val btnClose = TextView(this).apply {
+            text = getString(R.string.close)
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#CBD5E1"))
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, dp(10), 0, dp(10))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(4)
+            }
+            background = GradientDrawable().apply {
+                cornerRadius = dp(13).toFloat()
+                setColor(Color.parseColor("#18FFFFFF"))
+            }
+            setOnClickListener { dialog.dismiss() }
+        }
+        cardContainer.addView(btnClose)
+
+        dialog.show()
+    }
+
+    /**
+     * Tall Vertical Pill Slider for Volume & Brightness (Flagship Cinema Style)
+     */
+    private fun showVerticalSliderIndicator(isVolume: Boolean, percent: Int) {
+        val clamped = percent.coerceIn(0, 100)
+        val accent = PlaybackStore.getAccentColor(this)
+
+        // Place Volume slider on the Start side and Brightness slider on the End side so finger never blocks it
+        val lp = binding.verticalSliderCard.layoutParams as FrameLayout.LayoutParams
+        lp.gravity = if (isVolume) {
+            Gravity.CENTER_VERTICAL or Gravity.START
+        } else {
+            Gravity.CENTER_VERTICAL or Gravity.END
+        }
+        binding.verticalSliderCard.layoutParams = lp
+
+        binding.verticalSliderCard.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(31).toFloat()
+            setColor(Color.parseColor("#EB090D16"))
+            setStroke(dp(1), Color.argb(125, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+
+        binding.verticalBarTrack.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(8).toFloat()
+            setColor(Color.parseColor("#2EFFFFFF"))
+        }
+
+        val fillColor = if (isVolume) accent else Color.parseColor("#FACC15")
+        binding.verticalBarFill.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(8).toFloat()
+            setColor(fillColor)
+        }
+
+        val icon = if (isVolume) {
+            when {
+                clamped == 0 -> "🔇"
+                clamped < 35 -> "🔈"
+                clamped < 70 -> "🔉"
+                else -> "🔊"
+            }
+        } else {
+            when {
+                clamped < 30 -> "🌙"
+                clamped < 70 -> "🌤️"
+                else -> "☀️"
+            }
+        }
+
+        binding.tvVerticalSliderIcon.text = icon
+        binding.tvVerticalSliderPercent.text = "$clamped%"
+        binding.tvVerticalSliderPercent.setTextColor(if (isVolume) accent else Color.parseColor("#FACC15"))
+
+        binding.verticalBarTrack.post {
+            val trackH = binding.verticalBarTrack.height.takeIf { it > 0 } ?: dp(116)
+            val targetFillH = ((clamped / 100f) * trackH).toInt().coerceAtLeast(if (clamped > 0) dp(4) else 0)
+            val fillLp = binding.verticalBarFill.layoutParams
+            fillLp.height = targetFillH
+            binding.verticalBarFill.layoutParams = fillLp
+        }
+
+        if (binding.verticalSliderCard.visibility != View.VISIBLE) {
+            binding.verticalSliderCard.alpha = 0f
+            binding.verticalSliderCard.scaleX = 0.9f
+            binding.verticalSliderCard.scaleY = 0.9f
+            binding.verticalSliderCard.visibility = View.VISIBLE
+        }
+
+        binding.verticalSliderCard.animate().cancel()
+        binding.verticalSliderCard.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(120L)
+            .start()
+
+        binding.tvDraggableSubtitle.bringToFront()
+        handler.removeCallbacks(hideVerticalSliderRunnable)
+        handler.postDelayed(hideVerticalSliderRunnable, 1200L)
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_VOLUME_UP -> {
+                    val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                    val nextVol = (audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) + 1).coerceAtMost(maxVol)
+                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, nextVol, 0)
+                    val pct = ((nextVol.toFloat() / maxVol.toFloat()) * 100).toInt()
+                    showVerticalSliderIndicator(isVolume = true, percent = pct)
+                    return true
+                }
+                KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                    val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                    val nextVol = (audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) - 1).coerceAtLeast(0)
+                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, nextVol, 0)
+                    val pct = ((nextVol.toFloat() / maxVol.toFloat()) * 100).toInt()
+                    showVerticalSliderIndicator(isVolume = true, percent = pct)
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     private fun extractIntentData(incomingIntent: Intent?) {
@@ -572,6 +936,23 @@ class PlayerActivity : AppCompatActivity() {
         showToastIndicator(getString(R.string.sub_position_reset_toast))
     }
 
+    private fun attachSpringPressAnimation(vararg views: View) {
+        for (v in views) {
+            v.setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        view.animate().scaleX(0.88f).scaleY(0.88f).setDuration(90L).start()
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        view.animate().scaleX(1f).scaleY(1f).setDuration(180L)
+                            .setInterpolator(springOvershoot).start()
+                    }
+                }
+                false
+            }
+        }
+    }
+
     private fun applyThemeAndSubtitleStyle() {
         val accent = PlaybackStore.getAccentColor(this)
         binding.btnPlayPause.imageTintList = ColorStateList.valueOf(accent)
@@ -580,6 +961,50 @@ class PlayerActivity : AppCompatActivity() {
         binding.btnSpeed.setTextColor(accent)
         binding.btnSubFontUp.setTextColor(accent)
         binding.btnResetSubPos.setTextColor(accent)
+
+        binding.seekBar.progressTintList = ColorStateList.valueOf(accent)
+        binding.seekBar.thumbTintList = ColorStateList.valueOf(accent)
+
+        // Style Top & Bottom Quick Pills as sleek glass capsules
+        val pillViews = listOf(
+            binding.btnSubSyncMinus,
+            binding.btnSubSyncPlus,
+            binding.btnSubFontDown,
+            binding.btnSubFontUp,
+            binding.btnResetSubPos,
+            binding.btnOrientation,
+            binding.btnSpeed
+        )
+        for (pill in pillViews) {
+            pill.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(14).toFloat()
+                setColor(Color.parseColor("#24FFFFFF"))
+                setStroke(dp(1), Color.argb(90, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+
+        // Style Play/Pause as a glowing circular flagship button
+        binding.btnPlayPause.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(Color.argb(42, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            setStroke(dp(2), Color.argb(145, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+
+        // Style Unlock button and Center Gesture Indicator as rounded glass pills
+        binding.btnUnlock.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(Color.parseColor("#D9090D16"))
+            setStroke(dp(1), accent)
+        }
+
+        binding.tvGestureIndicator.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(22).toFloat()
+            setColor(Color.parseColor("#E6090D16"))
+            setStroke(dp(1), Color.argb(120, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+        binding.tvGestureIndicator.setTextColor(accent)
 
         val subSizeSp = PlaybackStore.getSubSizeSp(this)
         val subColor = PlaybackStore.getSubColorValue(this)
@@ -629,6 +1054,27 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun setupControls() {
+        attachSpringPressAnimation(
+            binding.btnClosePlayer,
+            binding.btnSubSyncMinus,
+            binding.btnSubSyncPlus,
+            binding.btnSubFontDown,
+            binding.btnSubFontUp,
+            binding.btnResetSubPos,
+            binding.btnOrientation,
+            binding.btnPip,
+            binding.btnMorePro,
+            binding.btnLock,
+            binding.btnUnlock,
+            binding.btnSubtitles,
+            binding.btnAudioTrack,
+            binding.btnRewind,
+            binding.btnPlayPause,
+            binding.btnForward,
+            binding.btnSpeed,
+            binding.btnAspectRatio
+        )
+
         binding.btnClosePlayer.setOnClickListener {
             saveCurrentPositionNow()
             finish()
@@ -887,7 +1333,7 @@ class PlayerActivity : AppCompatActivity() {
         val targetVol = (gestureVolumeAccumulator * maxVol).toInt().coerceIn(0, maxVol)
         audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
         val percent = (gestureVolumeAccumulator * 100).toInt()
-        showToastIndicator(getString(R.string.toast_volume_format, percent))
+        showVerticalSliderIndicator(isVolume = true, percent = percent)
     }
 
     private fun adjustBrightnessSmooth(delta: Float) {
@@ -898,71 +1344,101 @@ class PlayerActivity : AppCompatActivity() {
         layoutParams.screenBrightness = brightness
         window.attributes = layoutParams
         val percent = (brightness * 100).toInt()
-        showToastIndicator(getString(R.string.toast_brightness_format, percent))
+        showVerticalSliderIndicator(isVolume = false, percent = percent)
     }
 
     private fun showSubtitlesDialog() {
         val spuTracks = mediaPlayer.spuTracks ?: emptyArray()
-        val items = mutableListOf<String>()
-        val trackIds = mutableListOf<Int>()
+        val preferredLangsStr = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(" → ") { it.uppercase() }
+        val subSize = PlaybackStore.getSubSizeSp(this).toInt()
+        val subBgOpacity = PlaybackStore.getSubBgOpacityPct(this)
 
-        val preferredLangsStr = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(",") { it.uppercase() }
-
-        items.add(getString(R.string.sub_menu_auto_search))
-        trackIds.add(-998)
-
-        items.add(getString(R.string.sub_menu_web_search))
-        trackIds.add(-994)
-
-        items.add(getString(R.string.sub_menu_load_local))
-        trackIds.add(-999)
-
-        items.add(getString(R.string.sub_menu_languages, preferredLangsStr))
-        trackIds.add(-993)
-
-        items.add(getString(R.string.sub_menu_style))
-        trackIds.add(-996)
-
-        items.add(getString(R.string.sub_menu_reset_pos))
-        trackIds.add(-992)
+        val items = mutableListOf(
+            PremiumMenuItem(
+                iconEmoji = "⚡",
+                title = getString(R.string.sub_menu_auto_search),
+                subtitle = currentVideoTitle,
+                isAccentHighlighted = true,
+                onClick = { runAutomaticMultiSourceSubtitleSearch(customQuery = null) }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🔍",
+                title = getString(R.string.sub_menu_web_search),
+                subtitle = preferredLangsStr,
+                onClick = { showCustomTitleAutoSearchDialog() }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "📂",
+                title = getString(R.string.sub_menu_load_local),
+                subtitle = ".SRT • .ASS • .VTT",
+                onClick = { subtitlePickerLauncher.launch(arrayOf("*/*")) }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🎨",
+                title = getString(R.string.sub_menu_style),
+                subtitle = "${subSize}sp • ${getString(R.string.style_bg_opacity_label, subBgOpacity)}",
+                onClick = { showSubtitleLiveStyleDialog() }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🌐",
+                title = getString(R.string.sub_menu_languages, preferredLangsStr),
+                subtitle = getString(R.string.sub_lang_dialog_title),
+                onClick = { showPlayerSubtitleLanguagePicker() }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🎯",
+                title = getString(R.string.sub_menu_reset_pos),
+                subtitle = getString(R.string.sub_position_reset_toast),
+                onClick = { resetSubtitlePositionNow() }
+            )
+        )
 
         if (externalSubtitleCues.isNotEmpty() || mediaPlayer.spuTrack != -1) {
-            items.add(getString(R.string.sub_menu_disable))
-            trackIds.add(-995)
-        }
-
-        for (track in spuTracks) {
-            val tName = track.name ?: "Track ${track.id}"
-            items.add(getString(R.string.sub_embedded_prefix, tName))
-            trackIds.add(track.id)
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.subtitles))
-            .setItems(items.toTypedArray()) { _, which ->
-                when (val selectedId = trackIds[which]) {
-                    -998 -> runAutomaticMultiSourceSubtitleSearch(customQuery = null)
-                    -994 -> showCustomTitleAutoSearchDialog()
-                    -999 -> subtitlePickerLauncher.launch(arrayOf("*/*"))
-                    -993 -> showPlayerSubtitleLanguagePicker()
-                    -996 -> showSubtitleLiveStyleDialog()
-                    -992 -> resetSubtitlePositionNow()
-                    -995 -> {
+            items.add(
+                PremiumMenuItem(
+                    iconEmoji = "🚫",
+                    title = getString(R.string.sub_menu_disable),
+                    subtitle = null,
+                    isDanger = true,
+                    onClick = {
                         externalSubtitleCues = emptyList()
                         binding.tvDraggableSubtitle.visibility = View.GONE
                         mediaPlayer.spuTrack = -1
                     }
-                    else -> {
+                )
+            )
+        }
+
+        for (track in spuTracks) {
+            val tName = track.name ?: "Track ${track.id}"
+            items.add(
+                PremiumMenuItem(
+                    iconEmoji = "🎬",
+                    title = getString(R.string.sub_embedded_prefix, tName),
+                    subtitle = "Embedded Track #${track.id}",
+                    isAccentHighlighted = (mediaPlayer.spuTrack == track.id),
+                    onClick = {
                         externalSubtitleCues = emptyList()
                         binding.tvDraggableSubtitle.visibility = View.GONE
-                        mediaPlayer.spuTrack = selectedId
+                        mediaPlayer.spuTrack = track.id
                     }
-                }
-            }
-            .show()
+                )
+            )
+        }
+
+        showPlayerPremiumMenu(
+            headerIcon = "💬",
+            title = getString(R.string.subtitles),
+            subtitle = preferredLangsStr,
+            items = items
+        )
     }
 
     private fun showCustomTitleAutoSearchDialog() {
+        val accent = PlaybackStore.getAccentColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+
         val defaultClean = currentVideoTitle
             .substringBeforeLast(".")
             .replace('.', ' ')
@@ -971,23 +1447,82 @@ class PlayerActivity : AppCompatActivity() {
             .replace(Regex("(2160p|1080p|720p|480p|4K|BluRay|WEBRip|WEB-DL|x264|x265|HEVC|10bit)", RegexOption.IGNORE_CASE), "")
             .trim()
 
-        val input = EditText(this).apply {
-            setText(defaultClean)
-            setPadding(48, 32, 48, 32)
-            setSingleLine(true)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(20), dp(22), dp(20))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(26).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(105, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
         }
 
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.sub_menu_auto_search))
-            .setView(input)
-            .setPositiveButton(getString(R.string.subtitles)) { _, _ ->
+        val tvTitle = TextView(this).apply {
+            text = "🔍  ${getString(R.string.sub_menu_web_search)}"
+            setTextColor(Color.WHITE)
+            textSize = 17f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, 0, 0, dp(12))
+        }
+
+        val input = EditText(this).apply {
+            setText(defaultClean)
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#64748B"))
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            setSingleLine(true)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(14).toFloat()
+                setColor(bg)
+                setStroke(dp(1), Color.argb(120, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+
+        container.addView(tvTitle)
+        container.addView(input)
+
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, dp(16), 0, 0)
+        }
+
+        val dialog = AlertDialog.Builder(this).setView(container).create()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        val btnCancel = TextView(this).apply {
+            text = getString(R.string.cancel)
+            setTextColor(Color.parseColor("#94A3B8"))
+            textSize = 14f
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+            setOnClickListener { dialog.dismiss() }
+        }
+
+        val btnSearch = TextView(this).apply {
+            text = getString(R.string.subtitles)
+            setTextColor(Color.parseColor("#090D16"))
+            textSize = 14.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(22), dp(10), dp(22), dp(10))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(accent)
+            }
+            setOnClickListener {
                 val q = input.text.toString().trim()
+                dialog.dismiss()
                 if (q.isNotEmpty()) {
                     runAutomaticMultiSourceSubtitleSearch(customQuery = q)
                 }
             }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
+        }
+
+        btnRow.addView(btnCancel)
+        btnRow.addView(btnSearch)
+        container.addView(btnRow)
+        dialog.show()
     }
 
     private fun runAutomaticMultiSourceSubtitleSearch(customQuery: String? = null) {
@@ -1025,17 +1560,19 @@ class PlayerActivity : AppCompatActivity() {
                         SubtitleSearchOutcome.ErrorType.NOT_FOUND -> R.string.sub_err_not_found
                     }
                     showToastIndicator(getString(msgRes))
-                    AlertDialog.Builder(this@PlayerActivity)
-                        .setTitle(getString(R.string.subtitles))
-                        .setMessage(getString(msgRes))
-                        .setPositiveButton(getString(R.string.sub_menu_web_search)) { _, _ ->
-                            showCustomTitleAutoSearchDialog()
-                        }
-                        .setNeutralButton(getString(R.string.sub_menu_load_local)) { _, _ ->
-                            subtitlePickerLauncher.launch(arrayOf("*/*"))
-                        }
-                        .setNegativeButton(getString(R.string.close), null)
-                        .show()
+                    showPlayerPremiumMenu(
+                        headerIcon = "⚠️",
+                        title = getString(R.string.subtitles),
+                        subtitle = getString(msgRes),
+                        items = listOf(
+                            PremiumMenuItem("🔍", getString(R.string.sub_menu_web_search), currentVideoTitle, true) {
+                                showCustomTitleAutoSearchDialog()
+                            },
+                            PremiumMenuItem("📂", getString(R.string.sub_menu_load_local), ".SRT • .ASS • .VTT") {
+                                subtitlePickerLauncher.launch(arrayOf("*/*"))
+                            }
+                        )
+                    )
                 }
             }
         }
@@ -1043,36 +1580,42 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun showManualSubtitleResultsDialog(results: List<SubtitleResultItem>) {
         if (results.size <= 1) return
-        val displayItems = results.take(12).mapIndexed { idx, item ->
+        val items = results.take(12).mapIndexed { idx, item ->
             val badge = when (item.matchQuality) {
                 MatchQuality.HASH_MATCH -> "★ HASH"
                 MatchQuality.EXACT_TITLE -> "✓ EXACT"
                 MatchQuality.FUZZY_TITLE -> "~ MATCH"
             }
-            "${idx + 1}. [${item.languageCode.uppercase()} • ${item.providerName} • $badge] ${item.title}"
-        }.toTypedArray()
-
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.sub_results_dialog_title))
-            .setItems(displayItems) { _, which ->
-                val chosen = results[which]
-                binding.playerLoadingBar.visibility = View.VISIBLE
-                lifecycleScope.launch {
-                    val pair = SubtitleSearchEngine.downloadAndCacheSubtitle(this@PlayerActivity, chosen)
-                    binding.playerLoadingBar.visibility = View.GONE
-                    if (pair != null && pair.second.isNotEmpty()) {
-                        currentVideoUri?.let { vUri ->
-                            PlaybackStore.saveVideoSubtitleCachePath(this@PlayerActivity, vUri, pair.first.absolutePath)
+            PremiumMenuItem(
+                iconEmoji = "💬",
+                title = "${idx + 1}. ${item.title}",
+                subtitle = "${item.languageCode.uppercase()} • ${item.providerName} • $badge",
+                isAccentHighlighted = (idx == 0),
+                onClick = {
+                    binding.playerLoadingBar.visibility = View.VISIBLE
+                    lifecycleScope.launch {
+                        val pair = SubtitleSearchEngine.downloadAndCacheSubtitle(this@PlayerActivity, item)
+                        binding.playerLoadingBar.visibility = View.GONE
+                        if (pair != null && pair.second.isNotEmpty()) {
+                            currentVideoUri?.let { vUri ->
+                                PlaybackStore.saveVideoSubtitleCachePath(this@PlayerActivity, vUri, pair.first.absolutePath)
+                            }
+                            applyLoadedSubtitleCues(pair.second)
+                            showToastIndicator(getString(R.string.sub_loaded_count_format, pair.second.size))
+                        } else {
+                            showToastIndicator(getString(R.string.sub_err_corrupted))
                         }
-                        applyLoadedSubtitleCues(pair.second)
-                        showToastIndicator(getString(R.string.sub_loaded_count_format, pair.second.size))
-                    } else {
-                        showToastIndicator(getString(R.string.sub_err_corrupted))
                     }
                 }
-            }
-            .setNegativeButton(getString(R.string.close), null)
-            .show()
+            )
+        }
+
+        showPlayerPremiumMenu(
+            headerIcon = "✅",
+            title = getString(R.string.sub_results_dialog_title),
+            subtitle = "${results.size} Subtitles Found",
+            items = items
+        )
     }
 
     private fun showPlayerSubtitleLanguagePicker() {
@@ -1284,60 +1827,67 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showMoreProOptionsDialog() {
-        val proOptions = arrayOf(
-            getString(R.string.pro_sync_earlier),
-            getString(R.string.pro_sync_later),
-            getString(R.string.pro_sync_reset),
-            getString(R.string.pro_reset_sub_pos),
-            getString(R.string.pro_hdr_mode),
-            getString(R.string.pro_sleep_30),
-            getString(R.string.pro_sleep_60),
-            getString(R.string.pro_pip)
-        )
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.pro_tools_title))
-            .setItems(proOptions) { _, which ->
-                when (which) {
-                    0 -> adjustSubtitleSyncBy(-100L)
-                    1 -> adjustSubtitleSyncBy(100L)
-                    2 -> {
-                        subtitleSyncOffsetMs = 0L
-                        currentVideoUri?.let { PlaybackStore.saveVideoSubtitleSyncMs(this, it, 0L) }
-                        showToastIndicator(getString(R.string.sub_sync_offset_format, 0L))
-                    }
-                    3 -> resetSubtitlePositionNow()
-                    4 -> showHdrModeSelectorDialog()
-                    5 -> {
-                        handler.removeCallbacks(sleepTimerRunnable)
-                        handler.postDelayed(sleepTimerRunnable, 30 * 60 * 1000L)
-                        showToastIndicator(getString(R.string.pro_sleep_30))
-                    }
-                    6 -> {
-                        handler.removeCallbacks(sleepTimerRunnable)
-                        handler.postDelayed(sleepTimerRunnable, 60 * 60 * 1000L)
-                        showToastIndicator(getString(R.string.pro_sleep_60))
-                    }
-                    7 -> enterPipModeNow()
-                }
+        val items = listOf(
+            PremiumMenuItem("⏪", getString(R.string.pro_sync_earlier), "${subtitleSyncOffsetMs}ms", true) {
+                adjustSubtitleSyncBy(-100L)
+            },
+            PremiumMenuItem("⏩", getString(R.string.pro_sync_later), "${subtitleSyncOffsetMs}ms", true) {
+                adjustSubtitleSyncBy(100L)
+            },
+            PremiumMenuItem("🔄", getString(R.string.pro_sync_reset), "0ms") {
+                subtitleSyncOffsetMs = 0L
+                currentVideoUri?.let { PlaybackStore.saveVideoSubtitleSyncMs(this, it, 0L) }
+                showToastIndicator(getString(R.string.sub_sync_offset_format, 0L))
+            },
+            PremiumMenuItem("🎯", getString(R.string.pro_reset_sub_pos), getString(R.string.sub_position_reset_toast)) {
+                resetSubtitlePositionNow()
+            },
+            PremiumMenuItem("🌈", getString(R.string.pro_hdr_mode), "HDR10 / HLG Tonemapping") {
+                showHdrModeSelectorDialog()
+            },
+            PremiumMenuItem("🌙", getString(R.string.pro_sleep_30), "30 Minutes") {
+                handler.removeCallbacks(sleepTimerRunnable)
+                handler.postDelayed(sleepTimerRunnable, 30 * 60 * 1000L)
+                showToastIndicator(getString(R.string.pro_sleep_30))
+            },
+            PremiumMenuItem("🌙", getString(R.string.pro_sleep_60), "60 Minutes") {
+                handler.removeCallbacks(sleepTimerRunnable)
+                handler.postDelayed(sleepTimerRunnable, 60 * 60 * 1000L)
+                showToastIndicator(getString(R.string.pro_sleep_60))
+            },
+            PremiumMenuItem("🖼️", getString(R.string.pro_pip), "Floating Window") {
+                enterPipModeNow()
             }
-            .show()
+        )
+
+        showPlayerPremiumMenu(
+            headerIcon = "⚙️",
+            title = getString(R.string.pro_tools_title),
+            subtitle = currentVideoTitle,
+            items = items
+        )
     }
 
     private fun showHdrModeSelectorDialog() {
-        val hdrModes = arrayOf(
-            "🌟 HDR10 / HLG Cinema Natural (Hable)",
-            "🔥 HDR Vivid Boost (Reinhard)",
-            "⚖️ HDR-to-SDR Balanced Tonemapping (Mobius)"
-        )
         val current = PlaybackStore.getHdrModeIndex(this)
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.pro_hdr_mode))
-            .setSingleChoiceItems(hdrModes, current) { dialog, which ->
-                PlaybackStore.setHdrModeIndex(this, which)
-                showToastIndicator(hdrModes[which])
-                dialog.dismiss()
-            }
-            .show()
+        val hdrModes = listOf(
+            Triple("🌟", "HDR10 / HLG Cinema Natural", "Hable Tonemapping"),
+            Triple("🔥", "HDR Vivid Boost", "Reinhard Tonemapping"),
+            Triple("⚖️", "HDR-to-SDR Balanced", "Mobius Tonemapping")
+        )
+        val items = hdrModes.mapIndexed { idx, (emoji, title, sub) ->
+            PremiumMenuItem(
+                iconEmoji = emoji,
+                title = title,
+                subtitle = sub,
+                isAccentHighlighted = (idx == current),
+                onClick = {
+                    PlaybackStore.setHdrModeIndex(this, idx)
+                    showToastIndicator("$emoji $title")
+                }
+            )
+        }
+        showPlayerPremiumMenu("🌈", getString(R.string.pro_hdr_mode), null, items)
     }
 
     private fun enterPipModeNow() {
@@ -1366,26 +1916,40 @@ class PlayerActivity : AppCompatActivity() {
             showToastIndicator(getString(R.string.toast_no_extra_audio))
             return
         }
-        val names = audioTracks.map { it.name ?: "Track ${it.id}" }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.audio_tracks))
-            .setItems(names) { _, which ->
-                mediaPlayer.audioTrack = audioTracks[which].id
-            }
-            .show()
+        val activeTrack = mediaPlayer.audioTrack
+        val items = audioTracks.map { track ->
+            val tName = track.name ?: "Track ${track.id}"
+            PremiumMenuItem(
+                iconEmoji = "🔊",
+                title = tName,
+                subtitle = if (track.id == activeTrack) "✅ Active Audio Track" else "Audio Track #${track.id}",
+                isAccentHighlighted = (track.id == activeTrack),
+                onClick = {
+                    mediaPlayer.audioTrack = track.id
+                    showToastIndicator("🔊 $tName")
+                }
+            )
+        }
+        showPlayerPremiumMenu("🔊", getString(R.string.audio_tracks), null, items)
     }
 
     private fun showSpeedDialog() {
         val speeds = floatArrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
-        val labels = speeds.map { "${it}x" }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.playback_speed))
-            .setItems(labels) { _, which ->
-                currentSpeed = speeds[which]
-                mediaPlayer.rate = currentSpeed
-                binding.btnSpeed.text = "${currentSpeed}x"
-            }
-            .show()
+        val items = speeds.map { spd ->
+            PremiumMenuItem(
+                iconEmoji = "⚡",
+                title = "${spd}x",
+                subtitle = if (spd == 1.0f) "Normal Speed" else "Playback Rate ${spd}x",
+                isAccentHighlighted = (spd == currentSpeed),
+                onClick = {
+                    currentSpeed = spd
+                    mediaPlayer.rate = currentSpeed
+                    binding.btnSpeed.text = "${currentSpeed}x"
+                    showToastIndicator("⚡ ${currentSpeed}x")
+                }
+            )
+        }
+        showPlayerPremiumMenu("⚡", getString(R.string.playback_speed), "${currentSpeed}x", items)
     }
 
     private fun showToastIndicator(text: String) {

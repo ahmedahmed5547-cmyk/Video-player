@@ -183,4 +183,19 @@
     <string name="settings_cat_privacy_folders">🛡️ PRIVACY &amp; FOLDERS</string>
     <string name="settings_cat_appearance_display">🎨 APPEARANCE &amp; DISPLAY</string>
     <string name="settings_cat_subtitles">💬 SUBTITLES &amp; STYLING</string>
+    <string name="settings_cat_updates">🚀 UPDATES &amp; GITHUB AUTO-INSTALL</string>
+    <string name="update_check_option_title">🔄 Check for Update (GitHub Direct Download)</string>
+    <string name="update_check_option_sub">Current Version: v%1$d.0 • Tap to check &amp; install latest update</string>
+    <string name="update_repo_setup_title">🚀 Connect Your GitHub Repository</string>
+    <string name="update_repo_setup_desc">Enter your GitHub username/repo (e.g. username/Video-player) or paste your GitHub repository link:</string>
+    <string name="update_repo_invalid_toast">⚠️ Please enter a valid GitHub username/repository</string>
+    <string name="update_checking_toast">🔍 Checking GitHub (%1$s) for updates...</string>
+    <string name="update_status_new_available">🎉 New Update Available: v%1$d.0 (Installed: v%2$d.0)</string>
+    <string name="update_status_up_to_date">✅ You have the latest version installed (v%1$d.0)</string>
+    <string name="update_download_direct_btn">⬇️ Download &amp; Install Latest APK Directly</string>
+    <string name="update_open_actions_btn">🌐 Open Latest Build on GitHub Actions</string>
+    <string name="update_change_repo_btn">⚙️ Change GitHub Repo (%1$s)</string>
+    <string name="update_downloading_title">⬇️ Downloading Latest Update from GitHub...</string>
+    <string name="update_fallback_actions_toast">🌐 Opening latest GitHub Actions build page to download APK...</string>
+    <string name="update_install_error_toast">⚠️ Please allow Install Unknown Apps permission to install the update.</string>
 </resources>

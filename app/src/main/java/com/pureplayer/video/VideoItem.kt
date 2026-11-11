@@ -113,6 +113,7 @@ object PlaybackStore {
     private const val KEY_LOCKED_FOLDERS = "privacy_locked_folders_set"
     private const val KEY_FOLDER_FILTER_MODE = "folder_filter_mode"
     private const val KEY_ALLOWED_FOLDERS = "allowed_visible_folders_set"
+    private const val KEY_GITHUB_REPO = "github_repo_slug"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -349,6 +350,13 @@ object PlaybackStore {
 
     fun setAllowedFolders(context: Context, folders: Set<String>) {
         prefs(context).edit().putStringSet(KEY_ALLOWED_FOLDERS, folders.toSet()).apply()
+    }
+
+    fun getGitHubRepo(context: Context): String =
+        prefs(context).getString(KEY_GITHUB_REPO, "") ?: ""
+
+    fun setGitHubRepo(context: Context, repoSlug: String) {
+        prefs(context).edit().putString(KEY_GITHUB_REPO, repoSlug.trim()).apply()
     }
 
     fun getHdrModeIndex(context: Context): Int =
