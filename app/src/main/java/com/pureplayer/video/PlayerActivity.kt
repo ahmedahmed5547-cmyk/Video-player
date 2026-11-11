@@ -136,12 +136,12 @@ class PlayerActivity : AppCompatActivity() {
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                 try {
-                    mediaPlayer.setVolume(30)
+                    // Duck handled by system
                 } catch (_: Exception) {}
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
                 try {
-                    mediaPlayer.setVolume(100)
+                    // Restore handled by system
                     if (wasPlayingBeforeFocusLoss && !mediaPlayer.isPlaying) {
                         wasPlayingBeforeFocusLoss = false
                         mediaPlayer.play()
