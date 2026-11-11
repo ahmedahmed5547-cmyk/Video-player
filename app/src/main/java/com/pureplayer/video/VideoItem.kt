@@ -338,21 +338,15 @@ object SubtitleParser {
     }
 
     fun parseSubtitleText(rawText: String): List<SubtitleCue> {
-        val normalized = rawText.replace("
-", "
-").replace("
-", "
-")
+        val normalized = rawText.replace("\r\n", "\n").replace("\r", "\n")
         if (normalized.contains("[Events]") && normalized.contains("Dialogue:")) {
             val assCues = parseAssSubtitles(normalized)
             if (assCues.isNotEmpty()) return assCues
         }
 
         val cues = mutableListOf<SubtitleCue>()
-        val blocks = normalized.split(Regex("
-
-+"))
-        val timeRegex = Regex("(\d{1,2}:)?\d{2}:\d{2}[,.]\d{2,3}\s*-->\s*(\d{1,2}:)?\d{2}:\d{2}[,.]\d{2,3}")
+        val blocks = normalized.split(Regex("\\n\\n+"))
+        val timeRegex = Regex("(\\\\d{1,2}:)?\\\\d{2}:\\\\d{2}[,.]\\\\d{2,3}\\\\s*-->\\\\s*(\\\\d{1,2}:)?\\\\d{2}:\\\\d{2}[,.]\\\\d{2,3}")
 
         for (block in blocks) {
             val lines = block.lines().map { it.trim() }.filter { it.isNotEmpty() }
@@ -371,14 +365,13 @@ object SubtitleParser {
             val textLines = lines.subList(timeIdx + 1, lines.size)
                 .map {
                     it.replace(Regex("<[^>]*>"), "")
-                        .replace(Regex("\{[^}]*\}"), "")
+                        .replace(Regex("\\\\{[^}]*\\\\}"), "")
                         .trim()
                 }
                 .filter { it.isNotEmpty() }
 
             if (textLines.isNotEmpty()) {
-                cues.add(SubtitleCue(startMs, endMs, textLines.joinToString("
-")))
+                cues.add(SubtitleCue(startMs, endMs, textLines.joinToString("\n")))
             }
         }
         return cues.sortedBy { it.startMs }
@@ -395,11 +388,9 @@ object SubtitleParser {
                     val startMs = parseTimeCode(cols[1].trim())
                     val endMs = parseTimeCode(cols[2].trim())
                     val cleanText = cols[9]
-                        .replace(Regex("\{[^}]*\}"), "")
-                        .replace("\N", "
-")
-                        .replace("\n", "
-")
+                        .replace(Regex("\\\\{[^}]*\\\\}"), "")
+                        .replace("\\\\N", "\n")
+                        .replace("\\\\n", "\n")
                         .trim()
                     if (endMs > startMs && cleanText.isNotEmpty()) {
                         cues.add(SubtitleCue(startMs, endMs, cleanText))
@@ -791,16 +782,16 @@ object SubtitleSearchEngine {
             .replace('_', ' ')
             .replace('-', ' ')
 
-        val seMatch = Regex("[Ss](\d{1,2})[Ee](\d{1,2})").find(baseName)
+        val seMatch = Regex("[Ss](\\\\d{1,2})[Ee](\\\\d{1,2})").find(baseName)
         val season = seMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
         val episode = seMatch?.groupValues?.getOrNull(2)?.toIntOrNull()
 
-        val yearMatch = Regex("\b(19\d{2}|20\d{2})\b").find(baseName)
+        val yearMatch = Regex("\\\\b(19\\\\d{2}|20\\\\d{2})\\\\b").find(baseName)
         val year = yearMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
 
         val cleanQuery = baseName
-            .replace(Regex("[Ss]\d{1,2}[Ee]\d{1,2}.*"), "")
-            .replace(Regex("\b(19\d{2}|20\d{2})\b.*"), "")
+            .replace(Regex("[Ss]\\\\d{1,2}[Ee]\\\\d{1,2}.*"), "")
+            .replace(Regex("\\\\b(19\\\\d{2}|20\\\\d{2})\\\\b.*"), "")
             .replace(Regex("(2160p|1080p|720p|480p|4K|BluRay|WEBRip|WEB-DL|HDRip|x264|x265|HEVC|AAC|10bit).*", RegexOption.IGNORE_CASE), "")
             .trim()
             .ifEmpty { baseName.trim().ifEmpty { "Movie" } }

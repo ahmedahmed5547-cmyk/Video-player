@@ -37,20 +37,6 @@ object VideoThumbnailLoader {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    fun trimMemory(level: Int) {
-        try {
-            when {
-                level >= ComponentCallbacks2.TRIM_MEMORY_MODERATE -> memoryCache.evictAll()
-                level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> memoryCache.trimToSize(memoryCache.maxSize() / 2)
-            }
-        } catch (_: Exception) {}
-    }
-
-    fun clearAll() {
-        try {
-            memoryCache.evictAll()
-        } catch (_: Exception) {}
-    }
 
     fun loadVideoThumbnail(context: Context, video: VideoItem, imageView: ImageView, accentColor: Int): Job {
         val key = video.uri.toString()

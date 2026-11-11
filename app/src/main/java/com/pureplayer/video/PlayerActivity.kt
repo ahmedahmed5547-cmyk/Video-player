@@ -265,10 +265,8 @@ class PlayerActivity : AppCompatActivity() {
             incomingIntent.getLongExtra("START_POSITION_MS", 0L)
         }
 
-        externalUserAgent = incomingIntent.getStringExtra("user-agent")?.replace("", "")?.replace("
-", "")?.trim()
-        externalHttpReferer = incomingIntent.getStringExtra("referer")?.replace("", "")?.replace("
-", "")?.trim()
+        externalUserAgent = incomingIntent.getStringExtra("user-agent")?.replace("\r", "")?.replace("\n", "")?.trim()
+        externalHttpReferer = incomingIntent.getStringExtra("referer")?.replace("\r", "")?.replace("\n", "")?.trim()
     }
 
     private fun isSafeExternalOrMediaUri(uri: Uri): Boolean {
