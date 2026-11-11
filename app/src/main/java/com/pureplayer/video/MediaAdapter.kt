@@ -1,6 +1,5 @@
 package com.pureplayer.video
 
-import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Bitmap

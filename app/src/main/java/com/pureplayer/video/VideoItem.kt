@@ -44,15 +44,7 @@ class PureVideoApp : Application() {
         }
     }
 
-    override fun onTrimMemory(level: Int) {
-        super.onTrimMemory(level)
-        VideoThumbnailLoader.trimMemory(level)
-    }
 
-    override fun onLowMemory() {
-        super.onLowMemory()
-        VideoThumbnailLoader.clearAll()
-    }
 }
 
 data class VideoItem(
@@ -348,7 +340,8 @@ object SubtitleParser {
     fun parseSubtitleText(rawText: String): List<SubtitleCue> {
         val normalized = rawText.replace("
 ", "
-").replace("", "
+").replace("
+", "
 ")
         if (normalized.contains("[Events]") && normalized.contains("Dialogue:")) {
             val assCues = parseAssSubtitles(normalized)
