@@ -142,6 +142,18 @@ object BiometricHardwareGuard {
             CipherResult.Unavailable
         }
     }
+
+    fun clearBiometricKey(context: Context) {
+        PlaybackStore.setBiometricPasswordVerified(context, false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                val ks = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
+                if (ks.containsAlias(KEY_ALIAS)) {
+                    ks.deleteEntry(KEY_ALIAS)
+                }
+            } catch (_: Exception) {}
+        }
+    }
 }
 
 data class PremiumMenuItem(
@@ -150,6 +162,7 @@ data class PremiumMenuItem(
     val subtitle: String? = null,
     val isAccentHighlighted: Boolean = false,
     val isDanger: Boolean = false,
+    val sectionHeader: String? = null,
     val onClick: () -> Unit
 )
 
@@ -369,8 +382,18 @@ class MainActivity : AppCompatActivity() {
 
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
 
-        // Add each option as a sleek interactive mini-card
+        // Add each option as a sleek interactive mini-card (with optional organized category header)
         for (item in items) {
+            if (!item.sectionHeader.isNullOrBlank()) {
+                val tvSec = TextView(this).apply {
+                    text = item.sectionHeader
+                    setTextColor(accent)
+                    textSize = 12.5f
+                    setTypeface(typeface, Typeface.BOLD)
+                    setPadding(dp(6), dp(10), dp(6), dp(6))
+                }
+                cardContainer.addView(tvSec)
+            }
             val rowCard = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -590,7 +613,7 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.videos_count_format, folder.videos.size)
         }
 
-        val items = listOf(
+        val items = mutableListOf(
             PremiumMenuItem(
                 iconEmoji = if (isLocked) "🔓" else "🔒",
                 title = if (isLocked) getString(R.string.folder_menu_unlock) else getString(R.string.folder_menu_lock),
@@ -609,6 +632,14 @@ class MainActivity : AppCompatActivity() {
                 }
             ),
             PremiumMenuItem(
+                iconEmoji = "🛡️",
+                title = getString(R.string.privacy_select_locked_folders, PlaybackStore.getLockedFolders(this).size),
+                subtitle = getString(R.string.privacy_manage_all_sub),
+                onClick = {
+                    openPrivacyControlSection()
+                }
+            ),
+            PremiumMenuItem(
                 iconEmoji = "🔑",
                 title = getString(R.string.privacy_change_pin_option),
                 subtitle = getString(R.string.privacy_change_pin_sub),
@@ -619,16 +650,22 @@ class MainActivity : AppCompatActivity() {
                         showChangePasswordWithCurrentVerifyDialog()
                     }
                 }
-            ),
-            PremiumMenuItem(
-                iconEmoji = "🛡️",
-                title = getString(R.string.privacy_select_locked_folders, PlaybackStore.getLockedFolders(this).size),
-                subtitle = getString(R.string.privacy_manage_all_sub),
-                onClick = {
-                    openPrivacyControlSection()
-                }
             )
         )
+
+        if (PlaybackStore.hasPrivacyPin(this)) {
+            items.add(
+                PremiumMenuItem(
+                    iconEmoji = "🗑️",
+                    title = getString(R.string.privacy_remove_pin_option),
+                    subtitle = getString(R.string.privacy_remove_pin_sub),
+                    isDanger = true,
+                    onClick = {
+                        showRemovePasswordVerifyDialog()
+                    }
+                )
+            )
+        }
 
         showPremiumMenuDialog(
             headerIcon = if (isLocked) "🔒" else "📁",
@@ -1047,6 +1084,96 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showRemovePasswordVerifyDialog() {
+        val accent = PlaybackStore.getAccentColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(20), dp(22), dp(20))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(26).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.parseColor("#88F43F5E"))
+            }
+        }
+
+        val tvTitle = TextView(this).apply {
+            text = getString(R.string.privacy_remove_pin_title)
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            setTypeface(typeface, Typeface.BOLD)
+        }
+
+        val tvDesc = TextView(this).apply {
+            text = getString(R.string.privacy_remove_pin_confirm_desc)
+            setTextColor(Color.parseColor("#FDA4AF"))
+            textSize = 13.5f
+            setPadding(0, dp(6), 0, dp(16))
+        }
+
+        val etCurrentPin = EditText(this).apply {
+            hint = getString(R.string.privacy_current_pin_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+        }
+        stylePremiumInputBox(etCurrentPin, bg, accent)
+
+        container.addView(tvTitle)
+        container.addView(tvDesc)
+        container.addView(etCurrentPin)
+
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, dp(18), 0, 0)
+        }
+
+        val dialog = AlertDialog.Builder(this).setView(container).create()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        val btnCancel = TextView(this).apply {
+            text = getString(R.string.cancel)
+            setTextColor(Color.parseColor("#94A3B8"))
+            textSize = 14f
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+            setOnClickListener { dialog.dismiss() }
+        }
+
+        val btnDelete = TextView(this).apply {
+            text = getString(R.string.privacy_remove_pin_action)
+            setTextColor(Color.WHITE)
+            textSize = 14.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(20), dp(10), dp(20), dp(10))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(Color.parseColor("#E11D48"))
+            }
+            setOnClickListener {
+                val entered = etCurrentPin.text.toString()
+                if (!PlaybackStore.verifyPrivacyPin(this@MainActivity, entered)) {
+                    Toast.makeText(this@MainActivity, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
+                } else {
+                    dialog.dismiss()
+                    PlaybackStore.clearPrivacyPinAndLocks(this@MainActivity)
+                    BiometricHardwareGuard.clearBiometricKey(this@MainActivity)
+                    applyFolderVisibilityAndRefreshUI()
+                    updateResumeLastFab()
+                    Toast.makeText(this@MainActivity, getString(R.string.privacy_pin_removed_toast), Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+
+        btnRow.addView(btnCancel)
+        btnRow.addView(btnDelete)
+        container.addView(btnRow)
+        dialog.show()
+    }
+
     private fun showPrivacyDashboardDialog() {
         val bioEnabled = PlaybackStore.isBiometricEnabled(this)
         val lockedCount = PlaybackStore.getLockedFolders(this).size
@@ -1061,12 +1188,6 @@ class MainActivity : AppCompatActivity() {
                 onClick = { showLockedFoldersMultiPickerDialog() }
             ),
             PremiumMenuItem(
-                iconEmoji = "🔑",
-                title = getString(R.string.privacy_change_pin_option),
-                subtitle = getString(R.string.privacy_change_pin_sub),
-                onClick = { showChangePasswordWithCurrentVerifyDialog() }
-            ),
-            PremiumMenuItem(
                 iconEmoji = "👆",
                 title = getString(R.string.privacy_toggle_biometric_option, bioStatus),
                 subtitle = getString(R.string.privacy_biometric_desc),
@@ -1076,6 +1197,19 @@ class MainActivity : AppCompatActivity() {
                     val stateStr = if (nextState) getString(R.string.privacy_bio_on) else getString(R.string.privacy_bio_off)
                     Toast.makeText(this, stateStr, Toast.LENGTH_SHORT).show()
                 }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🔑",
+                title = getString(R.string.privacy_change_pin_option),
+                subtitle = getString(R.string.privacy_change_pin_sub),
+                onClick = { showChangePasswordWithCurrentVerifyDialog() }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🗑️",
+                title = getString(R.string.privacy_remove_pin_option),
+                subtitle = getString(R.string.privacy_remove_pin_sub),
+                isDanger = true,
+                onClick = { showRemovePasswordVerifyDialog() }
             )
         )
 
@@ -1684,7 +1818,14 @@ class MainActivity : AppCompatActivity() {
      * Premium Settings Menu: Styled with sleek cards, emoji badges, and live status subtitles!
      */
     private fun showProSettingsDialog() {
+        val hasPin = PlaybackStore.hasPrivacyPin(this)
         val lockedCount = PlaybackStore.getLockedFolders(this).size
+        val privacySub = if (hasPin) {
+            getString(R.string.privacy_settings_status_active, lockedCount)
+        } else {
+            getString(R.string.privacy_settings_status_unset)
+        }
+
         val filterMode = PlaybackStore.getFolderFilterMode(this)
         val filterSub = when (filterMode) {
             1 -> getString(R.string.folder_picker_saved_toast, PlaybackStore.getAllowedFolders(this).size)
@@ -1708,26 +1849,22 @@ class MainActivity : AppCompatActivity() {
         val currentThemeName = themeNames[PlaybackStore.getThemeIndex(this).coerceIn(0, themeNames.size - 1)]
         val subSize = PlaybackStore.getSubSizeSp(this).toInt()
         val subBgOpacity = PlaybackStore.getSubBgOpacityPct(this)
+        val orientIdx = PlaybackStore.getDefaultOrientationIndex(this)
+        val orientSub = when (orientIdx) {
+            0 -> getString(R.string.orientation_auto)
+            2 -> getString(R.string.orientation_portrait)
+            else -> getString(R.string.orientation_landscape)
+        }
 
         val items = mutableListOf(
+            // Category 1: Privacy & Folders
             PremiumMenuItem(
                 iconEmoji = "🔒",
                 title = getString(R.string.setting_privacy_section),
-                subtitle = getString(R.string.privacy_locked_saved_toast, lockedCount),
+                subtitle = privacySub,
                 isAccentHighlighted = true,
+                sectionHeader = getString(R.string.settings_cat_privacy_folders),
                 onClick = { openPrivacyControlSection() }
-            ),
-            PremiumMenuItem(
-                iconEmoji = "🔑",
-                title = getString(R.string.privacy_change_pin_option),
-                subtitle = getString(R.string.privacy_change_pin_sub),
-                onClick = {
-                    if (!PlaybackStore.hasPrivacyPin(this)) {
-                        showFirstTimeSetupPinDialog()
-                    } else {
-                        showChangePasswordWithCurrentVerifyDialog()
-                    }
-                }
             ),
             PremiumMenuItem(
                 iconEmoji = "📂",
@@ -1737,20 +1874,28 @@ class MainActivity : AppCompatActivity() {
             )
         )
 
-        if (Build.VERSION.SDK_INT >= 34) {
+        if (Build.VERSION.SDK_INT >= 34 && isUsingLimitedAccessMode()) {
             items.add(
                 PremiumMenuItem(
                     iconEmoji = "➕",
                     title = getString(R.string.limited_access_manage_title),
-                    subtitle = if (isUsingLimitedAccessMode()) getString(R.string.limited_access_active_sub) else getString(R.string.limited_access_manage_sub),
-                    isAccentHighlighted = isUsingLimitedAccessMode(),
+                    subtitle = getString(R.string.limited_access_active_sub),
+                    isAccentHighlighted = true,
                     onClick = { requestStoragePermission() }
                 )
             )
         }
 
+        // Category 2: Appearance, Language & Display
         items.addAll(
             listOf(
+                PremiumMenuItem(
+                    iconEmoji = "🎨",
+                    title = getString(R.string.setting_app_theme),
+                    subtitle = currentThemeName,
+                    sectionHeader = getString(R.string.settings_cat_appearance_display),
+                    onClick = { showThemeSelectorDialog() }
+                ),
                 PremiumMenuItem(
                     iconEmoji = "🌐",
                     title = getString(R.string.setting_app_language),
@@ -1758,28 +1903,29 @@ class MainActivity : AppCompatActivity() {
                     onClick = { showAppLanguageDialog() }
                 ),
                 PremiumMenuItem(
-                    iconEmoji = "💬",
-                    title = getString(R.string.setting_subtitle_languages),
-                    subtitle = subLangs,
-                    onClick = { showSubtitleLanguagePriorityDialog() }
-                ),
-                PremiumMenuItem(
-                    iconEmoji = "🎨",
-                    title = getString(R.string.setting_app_theme),
-                    subtitle = currentThemeName,
-                    onClick = { showThemeSelectorDialog() }
-                ),
+                    iconEmoji = "🔄",
+                    title = getString(R.string.setting_default_orientation),
+                    subtitle = orientSub,
+                    onClick = { showDefaultOrientationDialog() }
+                )
+            )
+        )
+
+        // Category 3: Subtitles & Sync
+        items.addAll(
+            listOf(
                 PremiumMenuItem(
                     iconEmoji = "🔤",
                     title = getString(R.string.setting_subtitle_style),
                     subtitle = "${subSize}sp • ${getString(R.string.style_bg_opacity_label, subBgOpacity)}",
+                    sectionHeader = getString(R.string.settings_cat_subtitles),
                     onClick = { showSubtitleStyleDialog() }
                 ),
                 PremiumMenuItem(
-                    iconEmoji = "🔄",
-                    title = getString(R.string.setting_default_orientation),
-                    subtitle = getString(R.string.orientation_landscape),
-                    onClick = { showDefaultOrientationDialog() }
+                    iconEmoji = "💬",
+                    title = getString(R.string.setting_subtitle_languages),
+                    subtitle = subLangs,
+                    onClick = { showSubtitleLanguagePriorityDialog() }
                 ),
                 PremiumMenuItem(
                     iconEmoji = "🎯",

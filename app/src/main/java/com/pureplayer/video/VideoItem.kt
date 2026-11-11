@@ -305,6 +305,14 @@ object PlaybackStore {
         prefs(context).edit().putString(KEY_PRIVACY_PIN, newPin.trim()).apply()
     }
 
+    fun clearPrivacyPinAndLocks(context: Context) {
+        prefs(context).edit()
+            .remove(KEY_PRIVACY_PIN)
+            .remove(KEY_LOCKED_FOLDERS)
+            .putBoolean(KEY_BIOMETRIC_PWD_VERIFIED, false)
+            .apply()
+    }
+
     fun isBiometricPasswordVerified(context: Context): Boolean =
         prefs(context).getBoolean(KEY_BIOMETRIC_PWD_VERIFIED, false)
 

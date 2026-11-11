@@ -172,4 +172,15 @@
     <string name="limited_access_manage_sub">اختيار أو إضافة فيديوهات جديدة من نافذة النظام</string>
     <string name="limited_access_add_more_btn">➕ إضافة فيديوهات من النظام</string>
     <string name="limited_access_empty_msg">لم يتم اختيار فيديوهات في وضع الوصول المحدود؛ اضغط أدناه لاختيار الفيديوهات.</string>
+    <string name="privacy_remove_pin_option">🗑️ مسح الباسورد وإلغاء قفل جميع المجلدات</string>
+    <string name="privacy_remove_pin_sub">حذف كلمة المرور نهائياً وفتح كافة المجلدات المقفلة</string>
+    <string name="privacy_remove_pin_title">🗑️ مسح باسورد الخصوصية نهائياً</string>
+    <string name="privacy_remove_pin_confirm_desc">أدخل الباسورد الحالي لتأكيد مسح كلمة المرور نهائياً وإلغاء قفل جميع المجلدات:</string>
+    <string name="privacy_remove_pin_action">مسح الباسورد</string>
+    <string name="privacy_pin_removed_toast">✅ تم مسح الباسورد وإلغاء قفل جميع المجلدات بنجاح!</string>
+    <string name="privacy_settings_status_active">🔒 محمي (%1$d مجلد مقفل) • قفل، تغيير أو مسح الباسورد</string>
+    <string name="privacy_settings_status_unset">تعيين باسورد وبصمة لقفل المجلدات الخاصة</string>
+    <string name="settings_cat_privacy_folders">🛡️ الخصوصية وإدارة المجلدات</string>
+    <string name="settings_cat_appearance_display">🎨 المظهر واللغة والشاشة</string>
+    <string name="settings_cat_subtitles">💬 الترجمة والتنسيق</string>
 </resources>

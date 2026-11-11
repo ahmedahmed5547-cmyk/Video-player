@@ -172,4 +172,15 @@
     <string name="limited_access_manage_sub">Select or modify videos shared with Pure Video Player</string>
     <string name="limited_access_add_more_btn">➕ Add System Videos</string>
     <string name="limited_access_empty_msg">No videos selected in Limited Access mode. Tap below to select videos.</string>
+    <string name="privacy_remove_pin_option">🗑️ Delete Password &amp; Unlock All Folders</string>
+    <string name="privacy_remove_pin_sub">Permanently remove password protection from all folders</string>
+    <string name="privacy_remove_pin_title">🗑️ Delete Privacy Password</string>
+    <string name="privacy_remove_pin_confirm_desc">Enter your current password to permanently delete the password and unlock all protected folders:</string>
+    <string name="privacy_remove_pin_action">Delete Password</string>
+    <string name="privacy_pin_removed_toast">✅ Password deleted and all folders unlocked!</string>
+    <string name="privacy_settings_status_active">🔒 Protected (%1$d folders locked) • Change or Delete Password</string>
+    <string name="privacy_settings_status_unset">Set Password &amp; Fingerprint to lock private folders</string>
+    <string name="settings_cat_privacy_folders">🛡️ PRIVACY &amp; FOLDERS</string>
+    <string name="settings_cat_appearance_display">🎨 APPEARANCE &amp; DISPLAY</string>
+    <string name="settings_cat_subtitles">💬 SUBTITLES &amp; STYLING</string>
 </resources>
