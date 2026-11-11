@@ -86,7 +86,6 @@ object VideoThumbnailLoader {
                         imageView.scaleType = ImageView.ScaleType.CENTER_CROP
                         imageView.setPadding(0, 0, 0, 0)
                         imageView.setImageBitmap(bmp)
-                        // Smooth Crossfade-In Animation for loaded video thumbnail
                         imageView.animate()
                             .alpha(1f)
                             .setDuration(220L)
@@ -183,7 +182,6 @@ class MediaAdapter(
         private var thumbJob: Job? = null
 
         init {
-            // Tactile Press-Scale Animation on cards when touched
             binding.root.setOnTouchListener { v, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
@@ -224,6 +222,7 @@ class MediaAdapter(
                     binding.tvTitle.text = item.name
                     binding.tvSubtitle.text = ctx.getString(R.string.videos_count_format, item.videos.size)
                     binding.root.setOnClickListener { onFolderClick(item) }
+                    binding.root.setOnLongClickListener(null)
                 }
                 is VideoItem -> {
                     binding.tvTitle.text = item.title
@@ -250,7 +249,6 @@ class MediaAdapter(
                 }
             }
 
-            // Smooth Staggered Slide-Up & Fade-In Entrance Animation
             if (position > lastAnimatedPosition) {
                 lastAnimatedPosition = position
                 binding.root.alpha = 0f

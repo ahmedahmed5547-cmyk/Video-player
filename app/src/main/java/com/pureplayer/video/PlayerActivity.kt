@@ -62,9 +62,10 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var subtitleScaleDetector: ScaleGestureDetector
 
     private var activePfd: ParcelFileDescriptor? = null
-    private var audioFocusRequest: AudioFocusRequest? = null
+    private var audioFocusRequestObj: Any? = null
     private var wasPlayingBeforeFocusLoss = false
     private var viewsAttached = true
+    private var isPlayerDestroyed = false
 
     private val handler = Handler(Looper.getMainLooper())
     private var isLocked = false
@@ -110,7 +111,7 @@ class PlayerActivity : AppCompatActivity() {
     private var currentScaleIndex = 0
 
     private fun isPlayerReady(): Boolean {
-        return ::libVLC.isInitialized && ::mediaPlayer.isInitialized && !mediaPlayer.isReleased
+        return !isPlayerDestroyed && ::libVLC.isInitialized && ::mediaPlayer.isInitialized
     }
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
@@ -135,12 +136,12 @@ class PlayerActivity : AppCompatActivity() {
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                 try {
-                    mediaPlayer.volume = 30
+                    mediaPlayer.setVolume(30)
                 } catch (_: Exception) {}
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
                 try {
-                    mediaPlayer.volume = 100
+                    mediaPlayer.setVolume(100)
                     if (wasPlayingBeforeFocusLoss && !mediaPlayer.isPlaying) {
                         wasPlayingBeforeFocusLoss = false
                         mediaPlayer.play()
@@ -164,7 +165,7 @@ class PlayerActivity : AppCompatActivity() {
                     .setAcceptsDelayedFocusGain(true)
                     .setOnAudioFocusChangeListener(audioFocusChangeListener, handler)
                     .build()
-                audioFocusRequest = req
+                audioFocusRequestObj = req
                 audioManager.requestAudioFocus(req)
             } else {
                 @Suppress("DEPRECATION")
@@ -180,7 +181,10 @@ class PlayerActivity : AppCompatActivity() {
     private fun abandonAudioFocusSafely() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+                val req = audioFocusRequestObj as? AudioFocusRequest
+                if (req != null) {
+                    audioManager.abandonAudioFocusRequest(req)
+                }
             } else {
                 @Suppress("DEPRECATION")
                 audioManager.abandonAudioFocus(audioFocusChangeListener)
@@ -535,7 +539,6 @@ class PlayerActivity : AppCompatActivity() {
                     SubtitleParser.parseFromBytes(bytes)
                 }
                 if (cues.isNotEmpty()) {
-                    // Cache loaded subtitle file per-video in internal storage
                     currentVideoUri?.let { vUri ->
                         withContext(Dispatchers.IO) {
                             val cacheDir = File(filesDir, "subtitles_cache").apply { mkdirs() }
@@ -567,9 +570,6 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Proper RTL rendering for Arabic subtitles & LTR for English subtitles.
-     */
     private fun updateDraggableSubtitleText(currentTimeMs: Long) {
         if (externalSubtitleCues.isEmpty()) return
         if (isDraggingSubtitle || isPinchingSubtitle) return
@@ -648,7 +648,6 @@ class PlayerActivity : AppCompatActivity() {
                         val deltaX = event.rawX - dragStartRawX
                         val deltaY = event.rawY - dragStartRawY
 
-                        // Compute safe clamping bounds so the subtitle never goes off-screen
                         val halfRemainingW = ((parentW - view.width) / 2f).coerceAtLeast(0f)
                         val minTransX = -halfRemainingW + 8f
                         val maxTransX = halfRemainingW - 8f
@@ -856,7 +855,6 @@ class PlayerActivity : AppCompatActivity() {
             scheduleHideControls()
         }
 
-        // On-Screen 100ms Subtitle Sync Buttons (-100ms / +100ms)
         binding.btnSubSyncMinus.setOnClickListener {
             adjustSubtitleSyncBy(-100L)
             scheduleHideControls()
@@ -867,7 +865,6 @@ class PlayerActivity : AppCompatActivity() {
             scheduleHideControls()
         }
 
-        // On-Screen Reset Subtitle Position Button
         binding.btnResetSubPos.setOnClickListener {
             resetSubtitlePositionNow()
             scheduleHideControls()
@@ -1098,27 +1095,21 @@ class PlayerActivity : AppCompatActivity() {
 
         val preferredLangsStr = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(",") { it.uppercase() }
 
-        // 1. Instant 1-Click Automatic Search & Auto-Download (MX Player Style — No browser!)
         items.add(getString(R.string.sub_menu_auto_search))
         trackIds.add(-998)
 
-        // 2. Search by typing custom movie/series name (if video file is named e.g. VID_1234.mp4)
         items.add(getString(R.string.sub_menu_web_search))
         trackIds.add(-994)
 
-        // 3. Load local file from device
         items.add(getString(R.string.sub_menu_load_local))
         trackIds.add(-999)
 
-        // 4. Preferred Subtitle Languages
         items.add(getString(R.string.sub_menu_languages, preferredLangsStr))
         trackIds.add(-993)
 
-        // 5. Subtitle Styling (Font, Size, Color, Opacity, Outline)
         items.add(getString(R.string.sub_menu_style))
         trackIds.add(-996)
 
-        // 6. Reset Subtitle Position
         items.add(getString(R.string.sub_menu_reset_pos))
         trackIds.add(-992)
 
@@ -1127,7 +1118,6 @@ class PlayerActivity : AppCompatActivity() {
             trackIds.add(-995)
         }
 
-        // Detect and list embedded subtitle tracks in the video
         for (track in spuTracks) {
             val tName = track.name ?: "Track ${track.id}"
             items.add(getString(R.string.sub_embedded_prefix, tName))
@@ -1732,10 +1722,11 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         saveCurrentPositionNow()
+        isPlayerDestroyed = true
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
         abandonAudioFocusSafely()
-        if (isPlayerReady()) {
+        if (::mediaPlayer.isInitialized && ::libVLC.isInitialized) {
             try {
                 if (viewsAttached) {
                     mediaPlayer.detachViews()

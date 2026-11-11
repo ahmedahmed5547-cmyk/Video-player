@@ -13,14 +13,13 @@ import com.google.android.material.color.DynamicColors
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileInputStream
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.Charset
-import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
@@ -39,7 +38,6 @@ class PureVideoApp : Application() {
     override fun onCreate() {
         super.onCreate()
         DynamicColors.applyToActivitiesIfAvailable(this)
-        // Restore persisted app language on startup
         val savedLang = PlaybackStore.getAppLanguageTag(this)
         if (savedLang.isNotEmpty()) {
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(savedLang))
@@ -104,167 +102,131 @@ object PlaybackStore {
     private const val PREFIX_SUB_PATH = "sub_cache_"
     private const val PREFIX_SUB_SYNC = "sub_sync_"
 
-    // Global & Styling Keys
-    private const val KEY_APP_LANG_TAG = "app_language_tag" // "" = system, "ar" = Arabic, "en" = English
-    private const val KEY_SUB_LANGS_CSV = "preferred_sub_langs_csv" // e.g. "ar,en"
+    private const val KEY_APP_LANG_TAG = "app_language_tag"
+    private const val KEY_SUB_LANGS_CSV = "preferred_sub_langs_csv"
     private const val KEY_THEME_INDEX = "app_theme_index"
-    private const val KEY_SUB_SIZE_SP = "sub_font_size_sp"
-    private const val KEY_SUB_COLOR_INDEX = "sub_color_index"
+    private const val KEY_SUB_SIZE_SP = "sub_size_sp"
+    private const val KEY_SUB_COLOR_IDX = "sub_color_index"
     private const val KEY_SUB_BG_OPACITY = "sub_bg_opacity_pct"
-    private const val KEY_SUB_TEXT_OPACITY = "sub_text_opacity_pct" // 0..100
-    private const val KEY_SUB_OUTLINE_PX = "sub_outline_px" // 0..10
-    private const val KEY_SUB_X_PCT = "sub_x_percent" // -0.45f .. +0.45f (0f = centered horizontally)
-    private const val KEY_SUB_Y_PCT = "sub_y_percent" // -0.82f .. +0.08f (0f = default bottom margin)
+    private const val KEY_SUB_TEXT_OPACITY = "sub_text_opacity_pct"
+    private const val KEY_SUB_OUTLINE_PX = "sub_outline_px"
+    private const val KEY_SUB_FONT_IDX = "sub_font_index"
+    private const val KEY_SUB_POS_PCT_X = "sub_pos_pct_x"
+    private const val KEY_SUB_POS_PCT_Y = "sub_pos_pct_y"
     private const val KEY_DEFAULT_ORIENTATION = "default_orientation_idx"
-    private const val KEY_HDR_MODE = "hdr_color_mode_idx"
+    private const val KEY_HDR_MODE_IDX = "hdr_mode_idx"
+
+    private fun prefs(context: Context) =
+        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
 
     fun saveProgress(context: Context, uri: Uri, title: String, positionMs: Long, durationMs: Long) {
-        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        val uriStr = uri.toString()
-        val editor = prefs.edit()
-
-        if (durationMs > 10_000L && positionMs >= durationMs - 5_000L) {
-            editor.remove(PREFIX_POS + uriStr)
-        } else if (positionMs > 3_000L) {
-            editor.putLong(PREFIX_POS + uriStr, positionMs)
-            editor.putString(KEY_LAST_URI, uriStr)
-            editor.putString(KEY_LAST_TITLE, title)
-            editor.putLong(KEY_LAST_POSITION, positionMs)
-        }
-        editor.apply()
+        val safePos = if (durationMs > 0 && positionMs >= durationMs - 4000L) 0L else positionMs
+        prefs(context).edit()
+            .putLong(PREFIX_POS + uri.toString(), safePos)
+            .putString(KEY_LAST_URI, uri.toString())
+            .putString(KEY_LAST_TITLE, title)
+            .putLong(KEY_LAST_POSITION, safePos)
+            .apply()
     }
 
     fun getSavedPosition(context: Context, uri: Uri): Long {
-        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        return prefs.getLong(PREFIX_POS + uri.toString(), 0L)
+        return prefs(context).getLong(PREFIX_POS + uri.toString(), 0L)
     }
 
     fun getLastPlayedVideo(context: Context): Triple<Uri, String, Long>? {
-        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        val uriStr = prefs.getString(KEY_LAST_URI, null) ?: return null
-        val title = prefs.getString(KEY_LAST_TITLE, "Video") ?: "Video"
-        val pos = prefs.getLong(PREFIX_POS + uriStr, prefs.getLong(KEY_LAST_POSITION, 0L))
+        val p = prefs(context)
+        val uriStr = p.getString(KEY_LAST_URI, null) ?: return null
+        val title = p.getString(KEY_LAST_TITLE, "Video") ?: "Video"
+        val pos = p.getLong(KEY_LAST_POSITION, 0L)
+        if (pos <= 2000L) return null
         return Triple(Uri.parse(uriStr), title, pos)
     }
 
-    // Per-Video Subtitle Cache & Sync Offset Persistence
-    fun saveVideoSubtitleCachePath(context: Context, videoUri: Uri, cacheFilePath: String) {
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-            .edit().putString(PREFIX_SUB_PATH + videoUri.toString(), cacheFilePath).apply()
+    fun saveVideoSubtitleCachePath(context: Context, videoUri: Uri, path: String) {
+        prefs(context).edit().putString(PREFIX_SUB_PATH + videoUri.toString(), path).apply()
     }
 
-    fun getVideoSubtitleCachePath(context: Context, videoUri: Uri): String? =
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-            .getString(PREFIX_SUB_PATH + videoUri.toString(), null)
-
-    fun saveVideoSubtitleSyncMs(context: Context, videoUri: Uri, syncOffsetMs: Long) {
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-            .edit().putLong(PREFIX_SUB_SYNC + videoUri.toString(), syncOffsetMs).apply()
+    fun getVideoSubtitleCachePath(context: Context, videoUri: Uri): String? {
+        return prefs(context).getString(PREFIX_SUB_PATH + videoUri.toString(), null)
     }
 
-    fun getVideoSubtitleSyncMs(context: Context, videoUri: Uri): Long =
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-            .getLong(PREFIX_SUB_SYNC + videoUri.toString(), 0L)
+    fun saveVideoSubtitleSyncMs(context: Context, videoUri: Uri, offsetMs: Long) {
+        prefs(context).edit().putLong(PREFIX_SUB_SYNC + videoUri.toString(), offsetMs).apply()
+    }
 
-    // App Language (Arabic / English / System Default)
+    fun getVideoSubtitleSyncMs(context: Context, videoUri: Uri): Long {
+        return prefs(context).getLong(PREFIX_SUB_SYNC + videoUri.toString(), 0L)
+    }
+
     fun getAppLanguageTag(context: Context): String =
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).getString(KEY_APP_LANG_TAG, "") ?: ""
+        prefs(context).getString(KEY_APP_LANG_TAG, "") ?: ""
 
     fun setAppLanguageTag(context: Context, tag: String) {
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-            .edit().putString(KEY_APP_LANG_TAG, tag).apply()
-        val locales = if (tag.isEmpty()) {
+        prefs(context).edit().putString(KEY_APP_LANG_TAG, tag).apply()
+        val localeList = if (tag.isEmpty()) {
             LocaleListCompat.getEmptyLocaleList()
         } else {
             LocaleListCompat.forLanguageTags(tag)
         }
-        AppCompatDelegate.setApplicationLocales(locales)
+        AppCompatDelegate.setApplicationLocales(localeList)
     }
 
-    // Preferred Subtitle Languages (in Priority Order, e.g. ["ar", "en"])
     fun getPreferredSubtitleLanguages(context: Context): List<String> {
-        val raw = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-            .getString(KEY_SUB_LANGS_CSV, "ar,en") ?: "ar,en"
-        return raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf("ar", "en") }
+        val csv = prefs(context).getString(KEY_SUB_LANGS_CSV, "ar,en") ?: "ar,en"
+        return csv.split(",").map { it.trim().lowercase(Locale.ROOT) }.filter { it.isNotEmpty() }.ifEmpty { listOf("ar", "en") }
     }
 
-    fun setPreferredSubtitleLanguages(context: Context, codes: List<String>) {
-        val csv = codes.ifEmpty { listOf("ar", "en") }.joinToString(",")
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-            .edit().putString(KEY_SUB_LANGS_CSV, csv).apply()
+    fun setPreferredSubtitleLanguages(context: Context, langs: List<String>) {
+        val clean = langs.map { it.trim().lowercase(Locale.ROOT) }.filter { it.isNotEmpty() }.ifEmpty { listOf("ar", "en") }
+        prefs(context).edit().putString(KEY_SUB_LANGS_CSV, clean.joinToString(",")).apply()
     }
 
-    // Percentage-based Draggable Subtitle Coordinates (works across Portrait, Landscape & Fullscreen)
-    fun getSubPositionPercentX(context: Context): Float =
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).getFloat(KEY_SUB_X_PCT, 0f)
-
-    fun getSubPositionPercentY(context: Context): Float =
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).getFloat(KEY_SUB_Y_PCT, 0f)
-
-    fun saveSubPositionPercent(context: Context, pctX: Float, pctY: Float) {
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit()
-            .putFloat(KEY_SUB_X_PCT, pctX.coerceIn(-0.48f, 0.48f))
-            .putFloat(KEY_SUB_Y_PCT, pctY.coerceIn(-0.85f, 0.08f))
-            .apply()
-    }
-
-    fun resetSubPosition(context: Context) {
-        saveSubPositionPercent(context, 0f, 0f)
-    }
-
-    // Theme & Subtitle Styling
-    fun getThemeIndex(context: Context): Int =
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).getInt(KEY_THEME_INDEX, 0)
-
+    fun getThemeIndex(context: Context): Int = prefs(context).getInt(KEY_THEME_INDEX, 0)
     fun setThemeIndex(context: Context, index: Int) {
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit().putInt(KEY_THEME_INDEX, index).apply()
+        prefs(context).edit().putInt(KEY_THEME_INDEX, index).apply()
     }
 
     fun getAccentColor(context: Context): Int {
         return when (getThemeIndex(context)) {
-            0 -> Color.parseColor("#38BDF8")
-            1 -> Color.parseColor("#FACC15")
-            2 -> Color.parseColor("#34D399")
-            3 -> Color.parseColor("#FB7185")
-            else -> Color.parseColor("#A78BFA")
+            1 -> Color.parseColor("#F59E0B")
+            2 -> Color.parseColor("#10B981")
+            3 -> Color.parseColor("#F43F5E")
+            4 -> Color.parseColor("#A855F7")
+            else -> Color.parseColor("#38BDF8")
         }
     }
 
     fun getBackgroundColor(context: Context): Int {
         return when (getThemeIndex(context)) {
             1 -> Color.parseColor("#000000")
-            else -> Color.parseColor("#0F172A")
+            else -> Color.parseColor("#090D16")
         }
     }
 
     fun getSurfaceColor(context: Context): Int {
         return when (getThemeIndex(context)) {
-            1 -> Color.parseColor("#121212")
-            else -> Color.parseColor("#1E293B")
+            1 -> Color.parseColor("#111111")
+            else -> Color.parseColor("#131C2E")
         }
     }
 
     fun getSubSizeSp(context: Context): Float =
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).getFloat(KEY_SUB_SIZE_SP, 22f)
+        prefs(context).getFloat(KEY_SUB_SIZE_SP, 22f).coerceIn(12f, 46f)
 
     fun setSubSizeSp(context: Context, sizeSp: Float) {
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit()
-            .putFloat(KEY_SUB_SIZE_SP, sizeSp.coerceIn(12f, 46f)).apply()
+        prefs(context).edit().putFloat(KEY_SUB_SIZE_SP, sizeSp.coerceIn(12f, 46f)).apply()
     }
 
-    fun getSubColorIndex(context: Context): Int =
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).getInt(KEY_SUB_COLOR_INDEX, 0)
-
+    fun getSubColorIndex(context: Context): Int = prefs(context).getInt(KEY_SUB_COLOR_IDX, 0)
     fun setSubColorIndex(context: Context, idx: Int) {
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit().putInt(KEY_SUB_COLOR_INDEX, idx).apply()
+        prefs(context).edit().putInt(KEY_SUB_COLOR_IDX, idx).apply()
     }
 
     fun getSubTextOpacityPct(context: Context): Int =
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).getInt(KEY_SUB_TEXT_OPACITY, 100)
+        prefs(context).getInt(KEY_SUB_TEXT_OPACITY, 100).coerceIn(20, 100)
 
     fun setSubTextOpacityPct(context: Context, pct: Int) {
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit()
-            .putInt(KEY_SUB_TEXT_OPACITY, pct.coerceIn(20, 100)).apply()
+        prefs(context).edit().putInt(KEY_SUB_TEXT_OPACITY, pct.coerceIn(20, 100)).apply()
     }
 
     fun getSubColorValue(context: Context): Int {
@@ -278,48 +240,66 @@ object PlaybackStore {
         return Color.argb(alpha, Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor))
     }
 
-    fun getSubTypeface(context: Context): Typeface {
-        return when (getSubColorIndex(context)) {
-            1 -> Typeface.DEFAULT_BOLD
-            2 -> Typeface.SERIF
-            3 -> Typeface.MONOSPACE
-            else -> Typeface.SANS_SERIF
-        }
-    }
-
     fun getSubBgOpacityPct(context: Context): Int =
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).getInt(KEY_SUB_BG_OPACITY, 65)
+        prefs(context).getInt(KEY_SUB_BG_OPACITY, 55).coerceIn(0, 100)
 
     fun setSubBgOpacityPct(context: Context, pct: Int) {
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit()
-            .putInt(KEY_SUB_BG_OPACITY, pct.coerceIn(0, 100)).apply()
+        prefs(context).edit().putInt(KEY_SUB_BG_OPACITY, pct.coerceIn(0, 100)).apply()
     }
 
     fun getSubBackgroundColor(context: Context): Int {
-        val alpha = ((getSubBgOpacityPct(context) / 100.0) * 255).toInt().coerceIn(0, 255)
+        val pct = getSubBgOpacityPct(context)
+        val alpha = ((pct / 100.0) * 255).toInt().coerceIn(0, 255)
         return Color.argb(alpha, 0, 0, 0)
     }
 
     fun getSubOutlinePx(context: Context): Float =
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).getFloat(KEY_SUB_OUTLINE_PX, 4f)
+        prefs(context).getFloat(KEY_SUB_OUTLINE_PX, 4f).coerceIn(0f, 12f)
 
     fun setSubOutlinePx(context: Context, px: Float) {
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit()
-            .putFloat(KEY_SUB_OUTLINE_PX, px.coerceIn(0f, 12f)).apply()
+        prefs(context).edit().putFloat(KEY_SUB_OUTLINE_PX, px.coerceIn(0f, 12f)).apply()
+    }
+
+    fun getSubTypeface(context: Context): Typeface {
+        return when (prefs(context).getInt(KEY_SUB_FONT_IDX, 0)) {
+            1 -> Typeface.SERIF
+            2 -> Typeface.MONOSPACE
+            else -> Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }
+    }
+
+    fun saveSubPositionPercent(context: Context, pctX: Float, pctY: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_SUB_POS_PCT_X, pctX)
+            .putFloat(KEY_SUB_POS_PCT_Y, pctY)
+            .apply()
+    }
+
+    fun getSubPositionPercentX(context: Context): Float =
+        prefs(context).getFloat(KEY_SUB_POS_PCT_X, 0f)
+
+    fun getSubPositionPercentY(context: Context): Float =
+        prefs(context).getFloat(KEY_SUB_POS_PCT_Y, 0f)
+
+    fun resetSubPosition(context: Context) {
+        prefs(context).edit()
+            .putFloat(KEY_SUB_POS_PCT_X, 0f)
+            .putFloat(KEY_SUB_POS_PCT_Y, 0f)
+            .apply()
     }
 
     fun getDefaultOrientationIndex(context: Context): Int =
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).getInt(KEY_DEFAULT_ORIENTATION, 1)
+        prefs(context).getInt(KEY_DEFAULT_ORIENTATION, 1).coerceIn(0, 2)
 
-    fun setDefaultOrientationIndex(context: Context, index: Int) {
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit().putInt(KEY_DEFAULT_ORIENTATION, index).apply()
+    fun setDefaultOrientationIndex(context: Context, idx: Int) {
+        prefs(context).edit().putInt(KEY_DEFAULT_ORIENTATION, idx.coerceIn(0, 2)).apply()
     }
 
     fun getHdrModeIndex(context: Context): Int =
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).getInt(KEY_HDR_MODE, 0)
+        prefs(context).getInt(KEY_HDR_MODE_IDX, 0).coerceIn(0, 2)
 
-    fun setHdrModeIndex(context: Context, index: Int) {
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit().putInt(KEY_HDR_MODE, index).apply()
+    fun setHdrModeIndex(context: Context, idx: Int) {
+        prefs(context).edit().putInt(KEY_HDR_MODE_IDX, idx.coerceIn(0, 2)).apply()
     }
 
     fun formatTime(timeMs: Long): String {
@@ -335,144 +315,143 @@ object PlaybackStore {
     }
 }
 
-/**
- * Universal Subtitle Parser supporting .srt, .vtt (WebVTT), and .ass / .ssa
- * with intelligent Arabic charset detection (UTF-8, UTF-16LE/BE, Windows-1256, ISO-8859-6).
- */
 object SubtitleParser {
-
-    fun parseFromUri(context: Context, uri: Uri): List<SubtitleCue> {
-        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return emptyList()
-        return parseFromBytes(bytes)
-    }
-
     fun parseFromFile(file: File): List<SubtitleCue> {
-        if (!file.exists()) return emptyList()
-        return parseFromBytes(file.readBytes())
-    }
-
-    fun decodeSubtitleBytes(bytes: ByteArray): String {
-        if (bytes.isEmpty()) return ""
-        // Check BOM for UTF-16
-        if (bytes.size >= 2) {
-            if (bytes[0] == 0xFF.toByte() && bytes[1] == 0xFE.toByte()) {
-                return String(bytes, Charsets.UTF_16LE)
-            }
-            if (bytes[0] == 0xFE.toByte() && bytes[1] == 0xFF.toByte()) {
-                return String(bytes, Charsets.UTF_16BE)
-            }
+        return try {
+            parseFromBytes(file.readBytes())
+        } catch (_: Exception) {
+            emptyList()
         }
-
-        // Try UTF-8 first
-        val utf8Text = String(bytes, Charsets.UTF_8)
-        if (!utf8Text.contains("\uFFFD")) {
-            return utf8Text.removePrefix("\uFEFF")
-        }
-
-        // Fallback for legacy Arabic 8-bit encodings: Windows-1256 vs ISO-8859-6
-        val win1256 = try { String(bytes, Charset.forName("windows-1256")) } catch (_: Exception) { utf8Text }
-        val iso88596 = try { String(bytes, Charset.forName("ISO-8859-6")) } catch (_: Exception) { win1256 }
-
-        val winArabicCount = win1256.count { it in '\u0600'..'\u06FF' }
-        val isoArabicCount = iso88596.count { it in '\u0600'..'\u06FF' }
-
-        return if (isoArabicCount > winArabicCount) iso88596 else win1256
     }
 
     fun parseFromBytes(bytes: ByteArray): List<SubtitleCue> {
-        val content = decodeSubtitleBytes(bytes)
-        if (content.isBlank()) return emptyList()
+        if (bytes.isEmpty()) return emptyList()
+        val text = decodeBestCharset(bytes)
+        return parseSubtitleText(text)
+    }
+
+    private fun decodeBestCharset(bytes: ByteArray): String {
+        if (bytes.size >= 3 && bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()) {
+            return String(bytes, 3, bytes.size - 3, Charsets.UTF_8)
+        }
+        val utf8 = String(bytes, Charsets.UTF_8)
+        if (!utf8.contains('�')) {
+            return utf8
+        }
+        return try {
+            String(bytes, Charset.forName("windows-1256"))
+        } catch (_: Exception) {
+            utf8
+        }
+    }
+
+    fun parseSubtitleText(rawText: String): List<SubtitleCue> {
+        val normalized = rawText.replace("
+", "
+").replace("", "
+")
+        if (normalized.contains("[Events]") && normalized.contains("Dialogue:")) {
+            val assCues = parseAssSubtitles(normalized)
+            if (assCues.isNotEmpty()) return assCues
+        }
 
         val cues = mutableListOf<SubtitleCue>()
-        val lines = content.lines()
-        var i = 0
-        // Matches both SRT (00:01:20,000 --> 00:01:23,500) and WebVTT (00:01:20.000 --> 00:01:23.500 or 01:20.000 --> 01:23.500)
-        val srtVttRegex = Regex("^(?:(\\d{1,2}):)?(\\d{2}):(\\d{2})[,.](\\d{2,3})\\s*-->\\s*(?:(\\d{1,2}):)?(\\d{2}):(\\d{2})[,.](\\d{2,3})")
+        val blocks = normalized.split(Regex("
 
-        while (i < lines.size) {
-            val line = lines[i].trim()
-            if (line.equals("WEBVTT", ignoreCase = true) || line.startsWith("NOTE ")) {
-                i++
-                continue
-            }
++"))
+        val timeRegex = Regex("(\d{1,2}:)?\d{2}:\d{2}[,.]\d{2,3}\s*-->\s*(\d{1,2}:)?\d{2}:\d{2}[,.]\d{2,3}")
 
-            val timeMatch = srtVttRegex.find(line)
-            if (timeMatch != null) {
-                val startH = timeMatch.groupValues[1].ifEmpty { "0" }
-                val startMs = toMs(startH, timeMatch.groupValues[2], timeMatch.groupValues[3], timeMatch.groupValues[4])
-                val endH = timeMatch.groupValues[5].ifEmpty { "0" }
-                val endMs = toMs(endH, timeMatch.groupValues[6], timeMatch.groupValues[7], timeMatch.groupValues[8])
-                i++
-                val textLines = mutableListOf<String>()
-                while (i < lines.size && lines[i].trim().isNotEmpty()) {
-                    val cleaned = lines[i].trim()
-                        .replace(Regex("<[^>]*>"), "")
-                        .replace(Regex("\\{[^}]*\\}"), "")
-                    if (cleaned.isNotEmpty()) textLines.add(cleaned)
-                    i++
-                }
-                if (textLines.isNotEmpty() && endMs > startMs) {
-                    cues.add(SubtitleCue(startMs, endMs, textLines.joinToString("\n")))
-                }
-            } else if (line.startsWith("Dialogue:", ignoreCase = true)) {
-                val parts = line.substringAfter(":").split(",", limit = 10)
-                if (parts.size >= 10) {
-                    val startMs = parseAssTime(parts[1].trim())
-                    val endMs = parseAssTime(parts[2].trim())
-                    val rawText = parts[9]
-                        .replace("\\N", "\n")
-                        .replace("\\n", "\n")
-                        .replace(Regex("\\{[^}]*\\}"), "")
+        for (block in blocks) {
+            val lines = block.lines().map { it.trim() }.filter { it.isNotEmpty() }
+            if (lines.isEmpty()) continue
+            val timeIdx = lines.indexOfFirst { timeRegex.containsMatchIn(it) }
+            if (timeIdx == -1) continue
+
+            val timeLine = lines[timeIdx]
+            val parts = timeLine.split("-->")
+            if (parts.size < 2) continue
+
+            val startMs = parseTimeCode(parts[0].trim())
+            val endMs = parseTimeCode(parts[1].trim().substringBefore(" "))
+            if (endMs <= startMs) continue
+
+            val textLines = lines.subList(timeIdx + 1, lines.size)
+                .map {
+                    it.replace(Regex("<[^>]*>"), "")
+                        .replace(Regex("\{[^}]*\}"), "")
                         .trim()
-                    if (rawText.isNotEmpty() && endMs > startMs) {
-                        cues.add(SubtitleCue(startMs, endMs, rawText))
-                    }
                 }
-                i++
-            } else {
-                i++
+                .filter { it.isNotEmpty() }
+
+            if (textLines.isNotEmpty()) {
+                cues.add(SubtitleCue(startMs, endMs, textLines.joinToString("
+")))
             }
         }
         return cues.sortedBy { it.startMs }
     }
 
-    private fun parseAssTime(t: String): Long {
-        val mainParts = t.split(":")
-        if (mainParts.size != 3) return 0L
-        val h = mainParts[0].toLongOrNull() ?: 0L
-        val m = mainParts[1].toLongOrNull() ?: 0L
-        val secParts = mainParts[2].split(".")
-        val s = secParts[0].toLongOrNull() ?: 0L
-        val cs = if (secParts.size > 1) (secParts[1].padEnd(3, '0').take(3).toLongOrNull() ?: 0L) else 0L
-        return ((h * 3600 + m * 60 + s) * 1000L) + cs
+    private fun parseAssSubtitles(text: String): List<SubtitleCue> {
+        val cues = mutableListOf<SubtitleCue>()
+        for (line in text.lines()) {
+            val trimmed = line.trim()
+            if (trimmed.startsWith("Dialogue:", ignoreCase = true)) {
+                val payload = trimmed.substringAfter(":")
+                val cols = payload.split(",", limit = 10)
+                if (cols.size >= 10) {
+                    val startMs = parseTimeCode(cols[1].trim())
+                    val endMs = parseTimeCode(cols[2].trim())
+                    val cleanText = cols[9]
+                        .replace(Regex("\{[^}]*\}"), "")
+                        .replace("\N", "
+")
+                        .replace("\n", "
+")
+                        .trim()
+                    if (endMs > startMs && cleanText.isNotEmpty()) {
+                        cues.add(SubtitleCue(startMs, endMs, cleanText))
+                    }
+                }
+            }
+        }
+        return cues.sortedBy { it.startMs }
     }
 
-    private fun toMs(h: String, m: String, s: String, msStr: String): Long {
-        val hours = h.toLongOrNull() ?: 0L
-        val minutes = m.toLongOrNull() ?: 0L
-        val seconds = s.toLongOrNull() ?: 0L
-        val millis = msStr.padEnd(3, '0').take(3).toLongOrNull() ?: 0L
-        return ((hours * 3600 + minutes * 60 + seconds) * 1000L) + millis
+    private fun parseTimeCode(raw: String): Long {
+        val clean = raw.replace(',', '.').trim()
+        val segments = clean.split(":")
+        return try {
+            when (segments.size) {
+                3 -> {
+                    val h = segments[0].toLong()
+                    val m = segments[1].toLong()
+                    val secParts = segments[2].split(".")
+                    val s = secParts[0].toLong()
+                    val msStr = (secParts.getOrNull(1) ?: "0").padEnd(3, '0').take(3)
+                    val ms = msStr.toLong()
+                    (h * 3600 + m * 60 + s) * 1000L + ms
+                }
+                2 -> {
+                    val m = segments[0].toLong()
+                    val secParts = segments[1].split(".")
+                    val s = secParts[0].toLong()
+                    val msStr = (secParts.getOrNull(1) ?: "0").padEnd(3, '0').take(3)
+                    val ms = msStr.toLong()
+                    (m * 60 + s) * 1000L + ms
+                }
+                else -> 0L
+            }
+        } catch (_: Exception) {
+            0L
+        }
     }
 }
 
-enum class MatchQuality(val score: Int) {
-    HASH_MATCH(100),
-    EXACT_TITLE(80),
-    FUZZY_TITLE(50)
+enum class MatchQuality(val scoreBoost: Int) {
+    HASH_MATCH(300),
+    EXACT_TITLE(200),
+    FUZZY_TITLE(100)
 }
-
-data class SubtitleSearchRequest(
-    val rawTitle: String,
-    val cleanQuery: String,
-    val year: Int?,
-    val season: Int?,
-    val episode: Int?,
-    val movieHash: String?,
-    val fileByteSize: Long,
-    val imdbId: String?,
-    val preferredLanguages: List<String>
-)
 
 data class SubtitleResultItem(
     val id: String,
@@ -480,18 +459,29 @@ data class SubtitleResultItem(
     val providerName: String,
     val languageCode: String,
     val downloadUrl: String,
-    val formatExt: String,
-    val matchQuality: MatchQuality,
-    val rating: Double,
-    val downloadCount: Int
+    val formatExt: String = "srt",
+    val matchQuality: MatchQuality = MatchQuality.EXACT_TITLE,
+    val rating: Double = 0.0,
+    val downloadCount: Int = 0
+)
+
+data class SubtitleSearchRequest(
+    val videoUri: Uri,
+    val rawTitle: String,
+    val cleanQuery: String,
+    val year: Int?,
+    val season: Int?,
+    val episode: Int?,
+    val movieHash: String?,
+    val fileByteSize: Long,
+    val preferredLanguages: List<String>
 )
 
 sealed class SubtitleSearchOutcome {
     data class Success(
-        val results: List<SubtitleResultItem>,
-        val autoAppliedFile: File?,
+        val bestItem: SubtitleResultItem,
         val autoAppliedCues: List<SubtitleCue>,
-        val bestItem: SubtitleResultItem
+        val results: List<SubtitleResultItem>
     ) : SubtitleSearchOutcome()
 
     data class Error(val errorType: ErrorType) : SubtitleSearchOutcome()
@@ -510,547 +500,335 @@ interface SubtitleProvider {
     suspend fun search(request: SubtitleSearchRequest): List<SubtitleResultItem>
 }
 
-/**
- * Provider 1: Stremio OpenSubtitles v3 Native JSON Provider (100% Free, Zero API Key Required!)
- * Uses resolved IMDb ID + Video Hash to fetch direct .srt download links in Arabic, English, etc.
- */
-class StremioOpenSubtitlesV3Provider : SubtitleProvider {
+object OpenSubtitlesHashCalculator {
+    private const val CHUNK_SIZE = 65536
+
+    fun computeHashAndSize(context: Context, uri: Uri): Pair<String, Long>? {
+        return try {
+            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                val size = pfd.statSize
+                if (size < CHUNK_SIZE * 2) return null
+                val channel = java.io.FileInputStream(pfd.fileDescriptor).channel
+                val headBuf = ByteBuffer.allocate(CHUNK_SIZE).order(ByteOrder.LITTLE_ENDIAN)
+                val tailBuf = ByteBuffer.allocate(CHUNK_SIZE).order(ByteOrder.LITTLE_ENDIAN)
+                channel.read(headBuf, 0L)
+                channel.read(tailBuf, size - CHUNK_SIZE)
+                headBuf.flip()
+                tailBuf.flip()
+                var hash = size
+                while (headBuf.remaining() >= 8) {
+                    hash += headBuf.long
+                }
+                while (tailBuf.remaining() >= 8) {
+                    hash += tailBuf.long
+                }
+                Pair(String.format(Locale.US, "%016x", hash), size)
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+}
+
+object StremioOpenSubtitlesV3Provider : SubtitleProvider {
     override val name: String = "OpenSubtitles-v3"
 
-    override suspend fun search(request: SubtitleSearchRequest): List<SubtitleResultItem> = withContext(Dispatchers.IO) {
-        val results = mutableListOf<SubtitleResultItem>()
-        val imdb = request.imdbId ?: return@withContext emptyList()
+    override suspend fun search(request: SubtitleSearchRequest): List<SubtitleResultItem> {
+        val out = mutableListOf<SubtitleResultItem>()
+        try {
+            val imdbId = resolveImdbIdFromCinemeta(request.cleanQuery, request.season != null) ?: return emptyList()
+            val urlStr = if (request.season != null && request.episode != null) {
+                "https://opensubtitles-v3.strem.io/subtitles/series/$imdbId:${request.season}:${request.episode}.json"
+            } else {
+                val hashParam = if (!request.movieHash.isNullOrEmpty() && request.fileByteSize > 0) {
+                    "/videoHash=${request.movieHash}&videoSize=${request.fileByteSize}"
+                } else ""
+                "https://opensubtitles-v3.strem.io/subtitles/movie/$imdbId$hashParam.json"
+            }
 
-        val iso3ToIso2 = mapOf(
-            "ara" to "ar", "ar" to "ar",
-            "eng" to "en", "en" to "en",
-            "fre" to "fr", "fra" to "fr", "fr" to "fr",
-            "spa" to "es", "es" to "es",
-            "tur" to "tr", "tr" to "tr",
-            "hin" to "hi", "hi" to "hi",
-            "urd" to "ur", "ur" to "ur"
-        )
+            val jsonStr = httpGetString(urlStr) ?: return emptyList()
+            val root = JSONObject(jsonStr)
+            val subs = root.optJSONArray("subtitles") ?: return emptyList()
 
-        val isSeries = request.season != null && request.episode != null
-        val typeSegment = if (isSeries) "series" else "movie"
-        val idSegment = if (isSeries) "${imdb}:${request.season}:${request.episode}" else imdb
+            for (i in 0 until subs.length()) {
+                val obj = subs.optJSONObject(i) ?: continue
+                val dlUrl = obj.optString("url")
+                if (dlUrl.isBlank()) continue
+                val rawLang = obj.optString("lang").lowercase(Locale.ROOT)
+                val lang2 = normalizeLangCode(rawLang)
+                if (lang2 !in request.preferredLanguages) continue
 
-        val queryParams = buildList {
-            if (!request.movieHash.isNullOrEmpty()) add("videoHash=${request.movieHash}")
-            if (request.fileByteSize > 0) add("videoSize=${request.fileByteSize}")
-            add("filename=${URLEncoder.encode(request.rawTitle, "UTF-8")}")
-        }.joinToString("&")
-
-        val endpoints = listOf(
-            "https://opensubtitles-v3.strem.io/subtitles/$typeSegment/$idSegment/$queryParams.json",
-            "https://opensubtitles-v3.strem.io/subtitles/$typeSegment/$idSegment.json"
-        )
-
-        for (urlStr in endpoints) {
-            try {
-                val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    setRequestProperty("User-Agent", "Mozilla/5.0")
-                    connectTimeout = 6500
-                    readTimeout = 6500
-                }
-                if (conn.responseCode in 200..299) {
-                    val body = conn.inputStream.bufferedReader().use { it.readText() }
-                    if (body.trim().startsWith("{")) {
-                        val json = JSONObject(body)
-                        val subs = json.optJSONArray("subtitles") ?: JSONArray()
-                        for (i in 0 until subs.length()) {
-                            val obj = subs.getJSONObject(i)
-                            val rawLang = obj.optString("lang", "").lowercase(Locale.ROOT)
-                            val iso2 = iso3ToIso2[rawLang] ?: rawLang.take(2)
-                            if (!request.preferredLanguages.any { it.equals(iso2, ignoreCase = true) }) continue
-
-                            val dlUrl = obj.optString("url")
-                            val subId = obj.optString("id", "stremio_$i")
-                            val isHashMatch = obj.optString("m") == "h"
-                            if (dlUrl.isNotEmpty()) {
-                                val epTag = if (isSeries) " S%02dE%02d".format(Locale.US, request.season, request.episode) else ""
-                                results.add(
-                                    SubtitleResultItem(
-                                        id = "stv3_$subId",
-                                        title = "${request.cleanQuery}$epTag (${iso2.uppercase()} #$i)",
-                                        providerName = name,
-                                        languageCode = iso2,
-                                        downloadUrl = dlUrl,
-                                        formatExt = "srt",
-                                        matchQuality = if (isHashMatch) MatchQuality.HASH_MATCH else MatchQuality.EXACT_TITLE,
-                                        rating = if (isHashMatch) 10.0 else 9.5,
-                                        downloadCount = 2000 - (i * 10)
-                                    )
-                                )
-                            }
-                        }
-                        if (results.isNotEmpty()) break
-                    }
-                }
-            } catch (_: Exception) {}
-        }
-        results
-    }
-}
-
-/**
- * Provider 2: OpenSubtitles REST API (Uses official X-User-Agent header + 64-bit File Hash + IMDb ID + Query)
- */
-class OpenSubtitlesProvider : SubtitleProvider {
-    override val name: String = "OpenSubtitles-REST"
-
-    override suspend fun search(request: SubtitleSearchRequest): List<SubtitleResultItem> = withContext(Dispatchers.IO) {
-        val results = mutableListOf<SubtitleResultItem>()
-        val iso3Map = mapOf(
-            "ar" to "ara", "en" to "eng", "fr" to "fre",
-            "es" to "spa", "tr" to "tur", "hi" to "hin", "ur" to "urd"
-        )
-
-        for (lang in request.preferredLanguages) {
-            val subLangId = iso3Map[lang] ?: "eng"
-            val encodedQuery = URLEncoder.encode(request.cleanQuery, "UTF-8")
-            val endpoints = mutableListOf<Pair<String, MatchQuality>>()
-
-            if (!request.movieHash.isNullOrEmpty() && request.fileByteSize > 0) {
-                endpoints.add(
-                    "https://rest.opensubtitles.org/search/moviebytesize-${request.fileByteSize}/moviehash-${request.movieHash}/sublanguageid-$subLangId" to MatchQuality.HASH_MATCH
+                out.add(
+                    SubtitleResultItem(
+                        id = obj.optString("id", "stremio_$i"),
+                        title = "${request.cleanQuery} (${lang2.uppercase()})",
+                        providerName = name,
+                        languageCode = lang2,
+                        downloadUrl = dlUrl,
+                        formatExt = "srt",
+                        matchQuality = if (!request.movieHash.isNullOrEmpty()) MatchQuality.HASH_MATCH else MatchQuality.EXACT_TITLE,
+                        rating = 9.5,
+                        downloadCount = 500 - i
+                    )
                 )
             }
-            if (!request.imdbId.isNullOrEmpty()) {
-                val numericImdb = request.imdbId.removePrefix("tt")
-                if (request.season != null && request.episode != null) {
-                    endpoints.add(
-                        "https://rest.opensubtitles.org/search/episode-${request.episode}/imdbid-$numericImdb/season-${request.season}/sublanguageid-$subLangId" to MatchQuality.EXACT_TITLE
-                    )
-                } else {
-                    endpoints.add(
-                        "https://rest.opensubtitles.org/search/imdbid-$numericImdb/sublanguageid-$subLangId" to MatchQuality.EXACT_TITLE
-                    )
-                }
-            }
-            endpoints.add(
-                "https://rest.opensubtitles.org/search/query-$encodedQuery/sublanguageid-$subLangId" to MatchQuality.EXACT_TITLE
-            )
+        } catch (_: Exception) {}
+        return out
+    }
 
-            for ((urlStr, quality) in endpoints) {
-                try {
-                    val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-                        requestMethod = "GET"
-                        // Official X-User-Agent required by rest.opensubtitles.org
-                        setRequestProperty("X-User-Agent", "TemporaryUserAgent")
-                        setRequestProperty("User-Agent", "TemporaryUserAgent")
-                        if (BuildConfig.OPENSUBTITLES_API_KEY.isNotEmpty()) {
-                            setRequestProperty("Api-Key", BuildConfig.OPENSUBTITLES_API_KEY)
-                        }
-                        connectTimeout = 6000
-                        readTimeout = 6000
-                    }
-                    val code = conn.responseCode
-                    if (code == 429) throw IllegalStateException("RATE_LIMIT")
-                    if (code in 200..299) {
-                        val body = conn.inputStream.bufferedReader().use { it.readText() }
-                        if (body.trim().startsWith("[")) {
-                            val arr = JSONArray(body)
-                            for (i in 0 until minOf(arr.length(), 10)) {
-                                val obj = arr.getJSONObject(i)
-                                val dlUrl = obj.optString("SubDownloadLink").ifEmpty { obj.optString("ZipDownloadLink") }
-                                val fileName = obj.optString("SubFileName", "${request.cleanQuery}.srt")
-                                val fmt = obj.optString("SubFormat", "srt")
-                                val downloads = obj.optString("SubDownloadsCnt", "0").toIntOrNull() ?: 0
-                                val score = obj.optString("SubRating", "0.0").toDoubleOrNull() ?: 0.0
-                                if (dlUrl.isNotEmpty()) {
-                                    results.add(
-                                        SubtitleResultItem(
-                                            id = "os_${obj.optString("IDSubtitleFile", i.toString())}",
-                                            title = fileName,
-                                            providerName = name,
-                                            languageCode = lang,
-                                            downloadUrl = dlUrl,
-                                            formatExt = fmt,
-                                            matchQuality = quality,
-                                            rating = score,
-                                            downloadCount = downloads
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                    }
-                } catch (_: Exception) {}
-            }
+    private fun resolveImdbIdFromCinemeta(query: String, isSeries: Boolean): String? {
+        val type = if (isSeries) "series" else "movie"
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        val url = "https://v3-cinemeta.strem.io/catalog/$type/top/search=$encoded.json"
+        val json = httpGetString(url) ?: return null
+        val metas = JSONObject(json).optJSONArray("metas") ?: return null
+        if (metas.length() > 0) {
+            return metas.optJSONObject(0)?.optString("id")?.takeIf { it.startsWith("tt") }
         }
-        results
+        return null
     }
 }
 
-/**
- * Provider 3: Podnapisi Public XML/ZIP Subtitle Provider (No API Key Required)
- */
-class PodnapisiProvider : SubtitleProvider {
+object OpenSubtitlesRestProvider : SubtitleProvider {
+    override val name: String = "OpenSubtitles"
+
+    override suspend fun search(request: SubtitleSearchRequest): List<SubtitleResultItem> {
+        val out = mutableListOf<SubtitleResultItem>()
+        for (lang2 in request.preferredLanguages) {
+            val iso3 = toIso639_2(lang2)
+            try {
+                if (!request.movieHash.isNullOrEmpty() && request.fileByteSize > 0) {
+                    val hashUrl = "https://rest.opensubtitles.org/search/moviebytesize-${request.fileByteSize}/moviehash-${request.movieHash}/sublanguageid-$iso3"
+                    parseOpenSubRestArray(httpGetString(hashUrl, mapOf("X-User-Agent" to "TemporaryUserAgent")), lang2, MatchQuality.HASH_MATCH, out)
+                }
+                val qEnc = URLEncoder.encode(request.cleanQuery, "UTF-8")
+                val queryUrl = "https://rest.opensubtitles.org/search/query-$qEnc/sublanguageid-$iso3"
+                parseOpenSubRestArray(httpGetString(queryUrl, mapOf("X-User-Agent" to "TemporaryUserAgent")), lang2, MatchQuality.EXACT_TITLE, out)
+            } catch (_: Exception) {}
+        }
+        return out
+    }
+
+    private fun parseOpenSubRestArray(jsonStr: String?, lang2: String, quality: MatchQuality, out: MutableList<SubtitleResultItem>) {
+        if (jsonStr.isNullOrBlank() || !jsonStr.trim().startsWith("[")) return
+        val arr = JSONArray(jsonStr)
+        for (i in 0 until minOf(arr.length(), 15)) {
+            val obj = arr.optJSONObject(i) ?: continue
+            val dl = obj.optString("SubDownloadLink").ifBlank { obj.optString("ZipDownloadLink") }
+            if (dl.isBlank()) continue
+            val fileName = obj.optString("SubFileName", "Subtitle")
+            val downloads = obj.optString("SubDownloadsCnt", "0").toIntOrNull() ?: 0
+            val rating = obj.optString("SubRating", "0.0").toDoubleOrNull() ?: 0.0
+            out.add(
+                SubtitleResultItem(
+                    id = obj.optString("IDSubtitleFile", "os_$i"),
+                    title = fileName,
+                    providerName = name,
+                    languageCode = lang2,
+                    downloadUrl = dl,
+                    formatExt = obj.optString("SubFormat", "srt"),
+                    matchQuality = quality,
+                    rating = rating,
+                    downloadCount = downloads
+                )
+            )
+        }
+    }
+}
+
+object PodnapisiProvider : SubtitleProvider {
     override val name: String = "Podnapisi"
 
-    override suspend fun search(request: SubtitleSearchRequest): List<SubtitleResultItem> = withContext(Dispatchers.IO) {
-        val results = mutableListOf<SubtitleResultItem>()
-        val encodedQuery = URLEncoder.encode(request.cleanQuery, "UTF-8")
-        val sParam = if (request.season != null) "&sTS=${request.season}" else ""
-        val eParam = if (request.episode != null) "&sTE=${request.episode}" else ""
-
-        for (lang in request.preferredLanguages) {
+    override suspend fun search(request: SubtitleSearchRequest): List<SubtitleResultItem> {
+        val out = mutableListOf<SubtitleResultItem>()
+        for (lang2 in request.preferredLanguages) {
             try {
-                val urlStr = "https://www.podnapisi.net/subtitles/search/old?sXML=1&sL=$lang&sK=$encodedQuery$sParam$eParam"
-                val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    setRequestProperty("User-Agent", "Mozilla/5.0")
-                    setRequestProperty("Accept", "application/xml, text/xml")
-                    connectTimeout = 6000
-                    readTimeout = 6000
+                val qEnc = URLEncoder.encode(request.cleanQuery, "UTF-8")
+                var url = "https://www.podnapisi.net/subtitles/search/advanced?keywords=$qEnc&language=$lang2"
+                if (request.season != null && request.episode != null) {
+                    url += "&seasons=${request.season}&episodes=${request.episode}"
                 }
-                if (conn.responseCode == 429) throw IllegalStateException("RATE_LIMIT")
-                if (conn.responseCode in 200..299) {
-                    val xml = conn.inputStream.bufferedReader().use { it.readText() }
-                    val pidRegex = Regex("<pid>([^<]+)</pid>")
-                    val titleRegex = Regex("<title>([^<]+)</title>")
-                    val releaseRegex = Regex("<release>([^<]*)</release>")
-                    val downloadsRegex = Regex("<downloads>(\\d+)</downloads>")
-
-                    val pids = pidRegex.findAll(xml).map { it.groupValues[1] }.toList()
-                    val titles = titleRegex.findAll(xml).map { it.groupValues[1] }.toList()
-                    val releases = releaseRegex.findAll(xml).map { it.groupValues[1] }.toList()
-                    val downloads = downloadsRegex.findAll(xml).map { it.groupValues[1].toIntOrNull() ?: 0 }.toList()
-
-                    for (i in 0 until minOf(pids.size, 8)) {
-                        val pid = pids[i]
-                        val t = releases.getOrNull(i)?.ifBlank { titles.getOrNull(i) } ?: request.cleanQuery
-                        val dlCount = downloads.getOrNull(i) ?: 50
-                        results.add(
-                            SubtitleResultItem(
-                                id = "pod_$pid",
-                                title = t,
-                                providerName = name,
-                                languageCode = lang,
-                                downloadUrl = "https://www.podnapisi.net/subtitles/$pid/download",
-                                formatExt = "zip",
-                                matchQuality = MatchQuality.EXACT_TITLE,
-                                rating = 8.8,
-                                downloadCount = dlCount
-                            )
-                        )
+                val jsonStr = httpGetString(url, mapOf("Accept" to "application/json")) ?: continue
+                if (!jsonStr.trim().startsWith("{")) continue
+                val root = JSONObject(jsonStr)
+                val data = root.optJSONArray("data") ?: continue
+                for (i in 0 until minOf(data.length(), 12)) {
+                    val item = data.optJSONObject(i) ?: continue
+                    val dlPath = item.optString("download")
+                    if (dlPath.isBlank()) continue
+                    val fullDl = if (dlPath.startsWith("http")) dlPath else "https://www.podnapisi.net$dlPath"
+                    val releases = item.optJSONArray("custom_releases")
+                    val releaseTitle = if (releases != null && releases.length() > 0) {
+                        releases.optString(0)
+                    } else {
+                        item.optJSONObject("movie")?.optString("title") ?: request.cleanQuery
                     }
+                    out.add(
+                        SubtitleResultItem(
+                            id = "pod_${lang2}_$i",
+                            title = releaseTitle,
+                            providerName = name,
+                            languageCode = lang2,
+                            downloadUrl = fullDl,
+                            formatExt = "zip",
+                            matchQuality = MatchQuality.EXACT_TITLE,
+                            rating = 8.5,
+                            downloadCount = 200 - i
+                        )
+                    )
                 }
             } catch (_: Exception) {}
         }
-        results
+        return out
     }
 }
 
-/**
- * Provider 4: YIFY Subtitles Direct Movie Provider (Uses IMDb ID to fetch direct .zip/.srt links, zero API key!)
- */
-class YifySubtitlesProvider : SubtitleProvider {
-    override val name: String = "YIFY-Subtitles"
-
-    override suspend fun search(request: SubtitleSearchRequest): List<SubtitleResultItem> = withContext(Dispatchers.IO) {
-        val results = mutableListOf<SubtitleResultItem>()
-        val imdb = request.imdbId ?: return@withContext emptyList()
-
-        val langNameMap = mapOf(
-            "ar" to "arabic", "en" to "english", "fr" to "french",
-            "es" to "spanish", "tr" to "turkish", "hi" to "hindi", "ur" to "urdu"
-        )
-
-        val domains = listOf("https://yts-subs.com", "https://yifysubtitles.ch")
-        for (domain in domains) {
-            try {
-                val conn = (URL("$domain/movie-imdb/$imdb").openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    setRequestProperty("User-Agent", "Mozilla/5.0")
-                    connectTimeout = 6000
-                    readTimeout = 6000
-                }
-                if (conn.responseCode in 200..299) {
-                    val html = conn.inputStream.bufferedReader().use { it.readText() }
-                    val rowRegex = Regex("<tr[^>]*>.*?sub-lang\">([^<]+)</span>.*?href=\"(/subtitles/[^\"]+)\".*?</tr>", RegexOption.DOT_MATCHES_ALL)
-                    for (match in rowRegex.findAll(html)) {
-                        val langLabel = match.groupValues[1].trim().lowercase(Locale.ROOT)
-                        val subPagePath = match.groupValues[2].trim()
-                        val matchedCode = langNameMap.entries.firstOrNull { it.value.equals(langLabel, ignoreCase = true) }?.key ?: continue
-                        if (!request.preferredLanguages.contains(matchedCode)) continue
-
-                        val zipSlug = subPagePath.removePrefix("/subtitles/")
-                        val directZipUrl = "$domain/subtitle/$zipSlug.zip"
-                        val readableTitle = zipSlug.replace("-", " ")
-                        results.add(
-                            SubtitleResultItem(
-                                id = "yify_$zipSlug",
-                                title = readableTitle,
-                                providerName = name,
-                                languageCode = matchedCode,
-                                downloadUrl = directZipUrl,
-                                formatExt = "zip",
-                                matchQuality = MatchQuality.EXACT_TITLE,
-                                rating = 9.0,
-                                downloadCount = 400
-                            )
-                        )
-                        if (results.size >= 8) break
-                    }
-                    if (results.isNotEmpty()) break
-                }
-            } catch (_: Exception) {}
-        }
-        results
-    }
-}
-
-/**
- * Provider 5: SubDL API & Public NextJS Data Provider
- */
-class SubdlProvider : SubtitleProvider {
+object SubdlProvider : SubtitleProvider {
     override val name: String = "SubDL"
 
-    override suspend fun search(request: SubtitleSearchRequest): List<SubtitleResultItem> = withContext(Dispatchers.IO) {
-        val results = mutableListOf<SubtitleResultItem>()
-        val encodedQuery = URLEncoder.encode(request.cleanQuery, "UTF-8")
-        val langCsv = request.preferredLanguages.joinToString(",") { it.uppercase(Locale.ROOT) }
+    override suspend fun search(request: SubtitleSearchRequest): List<SubtitleResultItem> {
+        val out = mutableListOf<SubtitleResultItem>()
         val apiKey = BuildConfig.SUBDL_API_KEY
-
-        val apiUrl = if (apiKey.isNotEmpty()) {
-            "https://api.subdl.com/api/v1/subtitles?api_key=$apiKey&film_name=$encodedQuery&languages=$langCsv&subs_per_page=10"
-        } else if (!request.imdbId.isNullOrEmpty()) {
-            "https://api.subdl.com/api/v1/subtitles?imdb_id=${request.imdbId}&languages=$langCsv"
-        } else {
-            "https://api.subdl.com/api/v1/subtitles?film_name=$encodedQuery&languages=$langCsv"
-        }
-
-        val conn = (URL(apiUrl).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            setRequestProperty("User-Agent", "Mozilla/5.0")
-            connectTimeout = 6000
-            readTimeout = 6000
-        }
-
-        if (conn.responseCode == 429) throw IllegalStateException("RATE_LIMIT")
-        if (conn.responseCode in 200..299) {
-            val body = conn.inputStream.bufferedReader().use { it.readText() }
-            if (body.trim().startsWith("{")) {
-                val root = JSONObject(body)
-                val subs = root.optJSONArray("subtitles") ?: JSONArray()
-                for (i in 0 until minOf(subs.length(), 10)) {
-                    val sub = subs.getJSONObject(i)
-                    val rawUrl = sub.optString("url")
-                    val fullUrl = if (rawUrl.startsWith("http")) rawUrl else "https://dl.subdl.com$rawUrl"
-                    val lang = sub.optString("language", request.preferredLanguages.firstOrNull() ?: "ar").lowercase(Locale.ROOT).take(2)
-                    val releaseName = sub.optString("release_name", request.cleanQuery)
-                    if (rawUrl.isNotEmpty()) {
-                        results.add(
-                            SubtitleResultItem(
-                                id = "subdl_$i",
-                                title = releaseName,
-                                providerName = name,
-                                languageCode = lang,
-                                downloadUrl = fullUrl,
-                                formatExt = "zip",
-                                matchQuality = MatchQuality.EXACT_TITLE,
-                                rating = 9.2,
-                                downloadCount = 500 - (i * 20)
+        if (apiKey.isNotBlank()) {
+            try {
+                val qEnc = URLEncoder.encode(request.cleanQuery, "UTF-8")
+                val langs = request.preferredLanguages.joinToString(",") { it.uppercase(Locale.ROOT) }
+                val apiUrl = "https://api.subdl.com/api/v1/subtitles?api_key=$apiKey&film_name=$qEnc&languages=$langs&subs_per_page=15"
+                val jsonStr = httpGetString(apiUrl)
+                if (!jsonStr.isNullOrBlank() && jsonStr.trim().startsWith("{")) {
+                    val root = JSONObject(jsonStr)
+                    val subs = root.optJSONArray("subtitles")
+                    if (subs != null) {
+                        for (i in 0 until subs.length()) {
+                            val s = subs.optJSONObject(i) ?: continue
+                            val link = s.optString("url")
+                            if (link.isBlank()) continue
+                            val fullDl = if (link.startsWith("http")) link else "https://dl.subdl.com$link"
+                            val lCode = normalizeLangCode(s.optString("language", "ar"))
+                            out.add(
+                                SubtitleResultItem(
+                                    id = "subdl_$i",
+                                    title = s.optString("release_name", request.cleanQuery),
+                                    providerName = name,
+                                    languageCode = lCode,
+                                    downloadUrl = fullDl,
+                                    formatExt = "zip",
+                                    matchQuality = MatchQuality.EXACT_TITLE,
+                                    rating = 9.0,
+                                    downloadCount = 300 - i
+                                )
                             )
-                        )
+                        }
                     }
                 }
-            }
+            } catch (_: Exception) {}
         }
-        results
+        return out
     }
 }
 
-/**
- * Provider 6: Addic7ed / Gestdown Community TV Series Provider
- */
-class Addic7edCommunityProvider : SubtitleProvider {
-    override val name: String = "Addic7ed-TV"
-
-    override suspend fun search(request: SubtitleSearchRequest): List<SubtitleResultItem> = withContext(Dispatchers.IO) {
-        val results = mutableListOf<SubtitleResultItem>()
-        val encodedQuery = URLEncoder.encode(request.cleanQuery, "UTF-8")
-        val urlStr = "https://api.gestdown.info/shows/search/$encodedQuery"
-
+private fun httpGetString(urlStr: String, headers: Map<String, String> = emptyMap()): String? {
+    return try {
         val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
-            setRequestProperty("User-Agent", "PureVideoPlayer/7.0")
-            connectTimeout = 5000
-            readTimeout = 5000
-        }
-        if (conn.responseCode == 200) {
-            val body = conn.inputStream.bufferedReader().use { it.readText() }
-            if (body.trim().startsWith("{")) {
-                val json = JSONObject(body)
-                val shows = json.optJSONArray("shows")
-                if (shows != null && shows.length() > 0) {
-                    val show = shows.getJSONObject(0)
-                    val showId = show.optString("id")
-                    val showName = show.optString("name", request.cleanQuery)
-                    val season = request.season ?: 1
-                    val ep = request.episode ?: 1
-                    for (lang in request.preferredLanguages) {
-                        results.add(
-                            SubtitleResultItem(
-                                id = "addic_${showId}_${season}_${ep}_$lang",
-                                title = "$showName S${season}E${ep}",
-                                providerName = name,
-                                languageCode = lang,
-                                downloadUrl = "https://api.gestdown.info/subtitles/get/$showId/$season/$ep/$lang",
-                                formatExt = "srt",
-                                matchQuality = MatchQuality.FUZZY_TITLE,
-                                rating = 8.0,
-                                downloadCount = 100
-                            )
-                        )
-                    }
-                }
+            connectTimeout = 8000
+            readTimeout = 8000
+            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 15)")
+            for ((k, v) in headers) {
+                setRequestProperty(k, v)
             }
         }
-        results
+        if (conn.responseCode in 200..299) {
+            val bytes = conn.inputStream.use { SubtitleSearchEngine.readBytesBounded(it, 4 * 1024 * 1024) }
+            String(bytes, Charsets.UTF_8)
+        } else {
+            null
+        }
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun normalizeLangCode(raw: String): String {
+    val clean = raw.trim().lowercase(Locale.ROOT)
+    return when {
+        clean.startsWith("ara") || clean == "ar" || clean.contains("arabic") -> "ar"
+        clean.startsWith("eng") || clean == "en" || clean.contains("english") -> "en"
+        clean.startsWith("fre") || clean.startsWith("fra") || clean == "fr" -> "fr"
+        clean.startsWith("spa") || clean == "es" -> "es"
+        clean.startsWith("tur") || clean == "tr" -> "tr"
+        clean.startsWith("hin") || clean == "hi" -> "hi"
+        clean.startsWith("urd") || clean == "ur" -> "ur"
+        else -> clean.take(2)
+    }
+}
+
+private fun toIso639_2(lang2: String): String {
+    return when (lang2.lowercase(Locale.ROOT)) {
+        "ar" -> "ara"
+        "en" -> "eng"
+        "fr" -> "fre"
+        "es" -> "spa"
+        "tr" -> "tur"
+        "hi" -> "hin"
+        "ur" -> "urd"
+        else -> "eng"
     }
 }
 
 object SubtitleSearchEngine {
 
     private val providers: List<SubtitleProvider> = listOf(
-        StremioOpenSubtitlesV3Provider(),
-        OpenSubtitlesProvider(),
-        PodnapisiProvider(),
-        YifySubtitlesProvider(),
-        SubdlProvider(),
-        Addic7edCommunityProvider()
+        StremioOpenSubtitlesV3Provider,
+        OpenSubtitlesRestProvider,
+        PodnapisiProvider,
+        SubdlProvider
     )
-
-    /**
-     * Resolves IMDb ID automatically without any API key using Cinemeta Public Catalog API.
-     */
-    private fun resolveImdbIdKeyless(cleanQuery: String, isSeries: Boolean, year: Int?): String? {
-        val catalogTypes = if (isSeries) listOf("series", "movie") else listOf("movie", "series")
-        val encoded = URLEncoder.encode(cleanQuery, "UTF-8")
-        for (catType in catalogTypes) {
-            try {
-                val url = "https://v3-cinemeta.strem.io/catalog/$catType/top/search=$encoded.json"
-                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    setRequestProperty("User-Agent", "Mozilla/5.0")
-                    connectTimeout = 4500
-                    readTimeout = 4500
-                }
-                if (conn.responseCode in 200..299) {
-                    val body = conn.inputStream.bufferedReader().use { it.readText() }
-                    val json = JSONObject(body)
-                    val metas = json.optJSONArray("metas") ?: continue
-                    if (metas.length() > 0) {
-                        if (year != null) {
-                            for (i in 0 until metas.length()) {
-                                val m = metas.getJSONObject(i)
-                                val releaseInfo = m.optString("releaseInfo", "")
-                                if (releaseInfo.contains(year.toString())) {
-                                    val id = m.optString("id")
-                                    if (id.startsWith("tt")) return id
-                                }
-                            }
-                        }
-                        val firstId = metas.getJSONObject(0).optString("id")
-                        if (firstId.startsWith("tt")) return firstId
-                    }
-                }
-            } catch (_: Exception) {}
-        }
-        return null
-    }
 
     fun buildSearchRequest(
         context: Context,
         videoUri: Uri,
         rawTitle: String,
         preferredLanguages: List<String>,
-        customSearchQuery: String? = null
+        customQuery: String? = null
     ): SubtitleSearchRequest {
-        val withoutExt = rawTitle.substringBeforeLast(".")
-        val sxeMatch = Regex("[Ss](\\d{1,2})[._\\-\\s]*[Ee](\\d{1,2})").find(withoutExt)
-            ?: Regex("(\\d{1,2})x(\\d{1,2})").find(withoutExt)
-        val season = sxeMatch?.groupValues?.get(1)?.toIntOrNull()
-        val episode = sxeMatch?.groupValues?.get(2)?.toIntOrNull()
+        val baseName = (customQuery?.takeIf { it.isNotBlank() } ?: rawTitle)
+            .substringBeforeLast(".")
+            .replace('.', ' ')
+            .replace('_', ' ')
+            .replace('-', ' ')
 
-        val yearMatch = Regex("\\b(19\\d{2}|20\\d{2})\\b").find(withoutExt)
-        val year = yearMatch?.groupValues?.get(1)?.toIntOrNull()
+        val seMatch = Regex("[Ss](\d{1,2})[Ee](\d{1,2})").find(baseName)
+        val season = seMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
+        val episode = seMatch?.groupValues?.getOrNull(2)?.toIntOrNull()
 
-        val baseBeforeEpisode = if (sxeMatch != null) {
-            withoutExt.substring(0, sxeMatch.range.first)
-        } else if (yearMatch != null) {
-            withoutExt.substring(0, yearMatch.range.first)
-        } else {
-            withoutExt
-        }
+        val yearMatch = Regex("\b(19\d{2}|20\d{2})\b").find(baseName)
+        val year = yearMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
 
-        val cleaned = (customSearchQuery?.takeIf { it.isNotBlank() } ?: baseBeforeEpisode)
-            .replace(Regex("[._\\-\\[\\]()]"), " ")
-            .replace(
-                Regex(
-                    "\\b(2160p|1080p|720p|480p|4K|8K|UHD|HDR|HDR10|DV|Dolby|BluRay|BRRip|BDRip|WEB|WEBDL|WEBRip|HDTV|x264|x265|H264|H265|HEVC|AV1|10bit|AAC|AC3|EAC3|DTS|Atmos|5\\.1|7\\.1|YTS|YIFY|RARBG|PSA|GalaxyRG|AMZN|NF)\\b",
-                    RegexOption.IGNORE_CASE
-                ),
-                ""
-            )
-            .replace(Regex("\\s+"), " ")
+        val cleanQuery = baseName
+            .replace(Regex("[Ss]\d{1,2}[Ee]\d{1,2}.*"), "")
+            .replace(Regex("\b(19\d{2}|20\d{2})\b.*"), "")
+            .replace(Regex("(2160p|1080p|720p|480p|4K|BluRay|WEBRip|WEB-DL|HDRip|x264|x265|HEVC|AAC|10bit).*", RegexOption.IGNORE_CASE), "")
             .trim()
-            .ifEmpty { withoutExt }
+            .ifEmpty { baseName.trim().ifEmpty { "Movie" } }
 
-        val (hash, size) = computeOpenSubtitlesHashAndSize(context, videoUri)
-        val imdbId = resolveImdbIdKeyless(cleaned, isSeries = (season != null), year = year)
+        val hashPair = if (videoUri.scheme == "content" || videoUri.scheme == "file") {
+            OpenSubtitlesHashCalculator.computeHashAndSize(context, videoUri)
+        } else null
 
         return SubtitleSearchRequest(
+            videoUri = videoUri,
             rawTitle = rawTitle,
-            cleanQuery = cleaned,
+            cleanQuery = cleanQuery,
             year = year,
             season = season,
             episode = episode,
-            movieHash = hash,
-            fileByteSize = size,
-            imdbId = imdbId,
+            movieHash = hashPair?.first,
+            fileByteSize = hashPair?.second ?: 0L,
             preferredLanguages = preferredLanguages
         )
     }
 
-    private fun computeOpenSubtitlesHashAndSize(context: Context, uri: Uri): Pair<String?, Long> {
-        return try {
-            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
-                val size = pfd.statSize
-                if (size < 131072L) return Pair(null, size.coerceAtLeast(0L))
-                FileInputStream(pfd.fileDescriptor).channel.use { channel ->
-                    val chunkSize = 65536
-                    val headBuf = ByteBuffer.allocate(chunkSize).order(ByteOrder.LITTLE_ENDIAN)
-                    val tailBuf = ByteBuffer.allocate(chunkSize).order(ByteOrder.LITTLE_ENDIAN)
-                    channel.read(headBuf, 0L)
-                    channel.read(tailBuf, size - chunkSize)
-                    headBuf.flip()
-                    tailBuf.flip()
-
-                    var hash = size
-                    while (headBuf.remaining() >= 8) {
-                        hash += headBuf.long
-                    }
-                    while (tailBuf.remaining() >= 8) {
-                        hash += tailBuf.long
-                    }
-                    Pair(String.format(Locale.US, "%016x", hash), size)
-                }
-            } ?: Pair(null, 0L)
-        } catch (_: Exception) {
-            Pair(null, 0L)
-        }
-    }
-
-    /**
-     * Queries all 6 SubtitleProviders in parallel using Coroutines async/awaitAll + withTimeout.
-     * Ranks results by MatchQuality (Hash > Exact > Fuzzy), Language Priority, and Rating/Downloads.
-     * Automatically downloads, extracts, and caches the #1 best subtitle in app storage!
-     */
     suspend fun searchAndAutoDownload(
         context: Context,
         videoUri: Uri,
@@ -1064,61 +842,46 @@ object SubtitleSearchEngine {
         val preferredLangs = PlaybackStore.getPreferredSubtitleLanguages(context)
         val request = buildSearchRequest(context, videoUri, rawTitle, preferredLangs, customSearchQuery)
 
-        var anyTimeout = false
-        var anyRateLimit = false
-
-        val providerLists = coroutineScope {
-            providers.map { provider ->
-                async {
-                    try {
-                        withTimeout(8500L) {
-                            provider.search(request)
+        val allResults = try {
+            withTimeout(14_000L) {
+                coroutineScope {
+                    providers.map { provider ->
+                        async {
+                            try {
+                                provider.search(request)
+                            } catch (_: Exception) {
+                                emptyList()
+                            }
                         }
-                    } catch (_: TimeoutCancellationException) {
-                        anyTimeout = true
-                        emptyList<SubtitleResultItem>()
-                    } catch (e: Exception) {
-                        if (e.message == "RATE_LIMIT") anyRateLimit = true
-                        emptyList<SubtitleResultItem>()
-                    }
+                    }.awaitAll().flatten()
                 }
-            }.awaitAll()
+            }
+        } catch (_: TimeoutCancellationException) {
+            return@withContext SubtitleSearchOutcome.Error(SubtitleSearchOutcome.ErrorType.TIMEOUT)
         }
 
-        val allResults = providerLists.flatten().distinctBy { it.downloadUrl }
         if (allResults.isEmpty()) {
-            val err = when {
-                anyRateLimit -> SubtitleSearchOutcome.ErrorType.RATE_LIMIT
-                anyTimeout -> SubtitleSearchOutcome.ErrorType.TIMEOUT
-                else -> SubtitleSearchOutcome.ErrorType.NOT_FOUND
-            }
-            return@withContext SubtitleSearchOutcome.Error(err)
+            return@withContext SubtitleSearchOutcome.Error(SubtitleSearchOutcome.ErrorType.NOT_FOUND)
         }
 
         val ranked = allResults.sortedWith(
-            compareByDescending<SubtitleResultItem> { it.matchQuality.score }
-                .thenBy { item ->
-                    val idx = preferredLangs.indexOfFirst { it.equals(item.languageCode, ignoreCase = true) }
-                    if (idx == -1) 999 else idx
-                }
+            compareBy<SubtitleResultItem> {
+                val idx = preferredLangs.indexOf(it.languageCode)
+                if (idx == -1) 999 else idx
+            }.thenByDescending { it.matchQuality.scoreBoost }
                 .thenByDescending { it.rating }
                 .thenByDescending { it.downloadCount }
         )
 
-        // Try downloading & caching starting from top-ranked result (automatic fallback if #1 link fails)
-        for (candidate in ranked.take(6)) {
+        for (candidate in ranked.take(5)) {
             val downloaded = downloadAndCacheSubtitle(context, candidate)
-            if (downloaded != null) {
-                val (file, cues) = downloaded
-                if (cues.isNotEmpty()) {
-                    PlaybackStore.saveVideoSubtitleCachePath(context, videoUri, file.absolutePath)
-                    return@withContext SubtitleSearchOutcome.Success(
-                        results = ranked,
-                        autoAppliedFile = file,
-                        autoAppliedCues = cues,
-                        bestItem = candidate
-                    )
-                }
+            if (downloaded != null && downloaded.second.isNotEmpty()) {
+                PlaybackStore.saveVideoSubtitleCachePath(context, videoUri, downloaded.first.absolutePath)
+                return@withContext SubtitleSearchOutcome.Success(
+                    bestItem = candidate,
+                    autoAppliedCues = downloaded.second,
+                    results = ranked
+                )
             }
         }
 
@@ -1129,20 +892,18 @@ object SubtitleSearchEngine {
         context: Context,
         item: SubtitleResultItem
     ): Pair<File, List<SubtitleCue>>? = withContext(Dispatchers.IO) {
-        val cacheDir = File(context.filesDir, "subtitles_cache").apply { mkdirs() }
-        val keyHash = MessageDigest.getInstance("MD5")
-            .digest(item.downloadUrl.toByteArray())
-            .joinToString("") { "%02x".format(it) }
-        val cachedFile = File(cacheDir, "sub_${item.languageCode}_$keyHash.srt")
-
-        if (cachedFile.exists() && cachedFile.length() > 32L) {
-            val cachedCues = SubtitleParser.parseFromFile(cachedFile)
-            if (cachedCues.isNotEmpty()) {
-                return@withContext Pair(cachedFile, cachedCues)
-            }
-        }
-
         try {
+            val cacheDir = File(context.filesDir, "subtitles_cache").apply { mkdirs() }
+            val safeId = item.id.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+            val cachedFile = File(cacheDir, "sub_${item.languageCode}_$safeId.srt")
+
+            if (cachedFile.exists() && cachedFile.length() > 64) {
+                val cachedCues = SubtitleParser.parseFromFile(cachedFile)
+                if (cachedCues.isNotEmpty()) {
+                    return@withContext Pair(cachedFile, cachedCues)
+                }
+            }
+
             val conn = (URL(item.downloadUrl).openConnection() as HttpURLConnection).apply {
                 instanceFollowRedirects = true
                 setRequestProperty("User-Agent", "Mozilla/5.0")
@@ -1166,10 +927,7 @@ object SubtitleSearchEngine {
         }
     }
 
-    /**
-     * Bounded stream reader (max 8 MB) to prevent Zip-Bomb / OutOfMemoryError attacks.
-     */
-    fun readBytesBounded(input: java.io.InputStream, maxBytes: Int = 8 * 1024 * 1024): ByteArray {
+    fun readBytesBounded(input: InputStream, maxBytes: Int = 8 * 1024 * 1024): ByteArray {
         val out = ByteArrayOutputStream()
         val buf = ByteArray(8192)
         var total = 0

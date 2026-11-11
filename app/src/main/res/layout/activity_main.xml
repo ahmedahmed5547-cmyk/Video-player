@@ -1,22 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/mainRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_dark"
-    android:layoutDirection="locale">
+    android:background="#090D16">
 
-    <!-- Top App Bar -->
     <LinearLayout
         android:id="@+id/topBar"
-        android:layout_width="match_parent"
-        android:layout_height="64dp"
-        android:background="@color/surface_dark"
+        android:layout_width="0dp"
+        android:layout_height="60dp"
+        android:background="#131C2E"
+        android:elevation="6dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="12dp"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
         <ImageButton
@@ -24,82 +25,82 @@
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/back_button_desc"
+            android:contentDescription="@string/back"
             android:src="@android:drawable/ic_menu_revert"
-            android:visibility="gone"
-            app:tint="@color/text_primary" />
+            android:tint="#FFFFFF"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/tvToolbarTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:layout_marginStart="8dp"
+            android:layout_weight="1"
             android:ellipsize="end"
             android:maxLines="1"
             android:text="@string/folders_title"
-            android:textColor="@color/text_primary"
-            android:textSize="18sp"
+            android:textColor="#FFFFFF"
+            android:textSize="19sp"
             android:textStyle="bold" />
 
         <ImageButton
             android:id="@+id/btnToggleSearch"
             android:layout_width="42dp"
             android:layout_height="42dp"
-            android:layout_marginEnd="4dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/search_button_desc"
+            android:contentDescription="@string/search_videos_hint"
             android:src="@android:drawable/ic_menu_search"
-            app:tint="@color/accent_blue" />
+            android:tint="#38BDF8" />
 
-        <com.google.android.material.button.MaterialButton
+        <ImageButton
             android:id="@+id/btnOpenFile"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/open_external_file"
-            android:textColor="@color/text_primary"
-            android:textSize="12sp"
-            app:backgroundTint="@color/bg_dark" />
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/open_external_file"
+            android:src="@android:drawable/ic_menu_upload"
+            android:tint="#FFFFFF" />
 
         <ImageButton
             android:id="@+id/btnSettings"
             android:layout_width="42dp"
             android:layout_height="42dp"
-            android:layout_marginStart="4dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/settings_title"
+            android:contentDescription="@string/settings_header"
             android:src="@android:drawable/ic_menu_preferences"
-            app:tint="@color/accent_blue" />
+            android:tint="#38BDF8" />
     </LinearLayout>
 
-    <!-- Smooth Expandable Top Search Bar for Instant Video Search -->
     <LinearLayout
         android:id="@+id/searchBarContainer"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:background="@color/surface_dark"
+        android:background="#131C2E"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="14dp"
+        android:paddingStart="14dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="14dp"
         android:paddingBottom="10dp"
         android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/topBar">
 
         <EditText
             android:id="@+id/etSearchVideos"
             android:layout_width="0dp"
-            android:layout_height="44dp"
+            android:layout_height="42dp"
             android:layout_weight="1"
-            android:background="@color/bg_dark"
             android:hint="@string/search_videos_hint"
             android:imeOptions="actionSearch"
             android:inputType="text"
-            android:paddingHorizontal="16dp"
-            android:singleLine="true"
-            android:textColor="@color/text_primary"
-            android:textColorHint="@color/text_secondary"
-            android:textSize="14sp" />
+            android:maxLines="1"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#94A3B8"
+            android:textSize="15sp" />
 
         <ImageButton
             android:id="@+id/btnClearSearch"
@@ -107,16 +108,18 @@
             android:layout_height="40dp"
             android:layout_marginStart="6dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/close_button_desc"
+            android:contentDescription="@string/close"
             android:src="@android:drawable/ic_menu_close_clear_cancel"
-            app:tint="@color/text_secondary" />
+            android:tint="#FFFFFF" />
     </LinearLayout>
 
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/swipeRefresh"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="0dp"
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/searchBarContainer">
 
         <androidx.recyclerview.widget.RecyclerView
@@ -124,9 +127,8 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clipToPadding="false"
-            android:padding="12dp"
-            android:paddingBottom="90dp" />
-
+            android:paddingTop="8dp"
+            android:paddingBottom="88dp" />
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
     <LinearLayout
@@ -135,23 +137,23 @@
         android:layout_height="wrap_content"
         android:gravity="center"
         android:orientation="vertical"
-        android:padding="24dp"
+        android:padding="28dp"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/searchBarContainer">
+        app:layout_constraintTop_toBottomOf="@id/topBar">
 
         <TextView
             android:id="@+id/tvEmptyMessage"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:text="@string/permission_needed"
-            android:textColor="@color/text_secondary"
+            android:text="@string/no_videos_found"
+            android:textColor="#CBD5E1"
             android:textSize="16sp" />
 
-        <com.google.android.material.button.MaterialButton
+        <Button
             android:id="@+id/btnGrantPermission"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -164,14 +166,13 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_margin="20dp"
-        android:contentDescription="@string/resume_last_video"
-        android:text="@string/resume_last_video"
-        android:textColor="@color/bg_dark"
+        android:text="@string/resume_last"
+        android:textColor="#090D16"
         android:textStyle="bold"
         android:visibility="gone"
-        app:backgroundTint="@color/accent_blue"
+        app:backgroundTint="#38BDF8"
         app:icon="@android:drawable/ic_media_play"
-        app:iconTint="@color/bg_dark"
+        app:iconTint="#090D16"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 

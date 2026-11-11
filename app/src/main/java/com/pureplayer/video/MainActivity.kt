@@ -80,7 +80,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Launcher for Android 10 / 11+ system file deletion confirmation dialog
     private val deleteRequestLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
@@ -181,12 +180,6 @@ class MainActivity : AppCompatActivity() {
         binding.recyclerView.adapter = adapter
     }
 
-    /**
-     * Long-Press Menu on any Video Item:
-     * 1. Play Video
-     * 2. Video Details (Name, Resolution, File Size, Duration, Folder, Full Path)
-     * 3. Delete Video from Device
-     */
     private fun showVideoLongPressMenu(video: VideoItem) {
         val options = arrayOf(
             getString(R.string.video_menu_play),
@@ -262,7 +255,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun confirmAndDeleteVideo(video: VideoItem) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // Android 11+ (API 30+): Official system delete confirmation sheet via MediaStore.createDeleteRequest
             try {
                 pendingDeleteVideo = video
                 val pendingIntent = MediaStore.createDeleteRequest(contentResolver, listOf(video.uri))
@@ -272,7 +264,6 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) {}
         }
 
-        // Android 10 and below: Show confirmation dialog and delete via ContentResolver
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.delete_confirm_title))
             .setMessage(getString(R.string.delete_confirm_message, video.title))
@@ -773,9 +764,6 @@ class MainActivity : AppCompatActivity() {
         permissionLauncher.launch(permission)
     }
 
-    /**
-     * 100% Non-Blocking Background MediaStore Query (Zero UI Freeze / Zero ANR).
-     */
     private fun loadVideoFoldersOnly() {
         loadMediaJob?.cancel()
         binding.swipeRefresh.isRefreshing = true
