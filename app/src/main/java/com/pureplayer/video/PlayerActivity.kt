@@ -242,11 +242,32 @@ class PlayerActivity : AppCompatActivity() {
         if (incomingIntent == null) return
         var resolvedUri: Uri? = incomingIntent.data
 
+        if (resolvedUri == null && incomingIntent.clipData != null && incomingIntent.clipData!!.itemCount > 0) {
+            resolvedUri = incomingIntent.clipData!!.getItemAt(0).uri
+        }
+
         if (resolvedUri == null && incomingIntent.action == Intent.ACTION_SEND) {
             val sharedText = incomingIntent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
             if (!sharedText.isNullOrEmpty()) {
                 val urlMatch = Regex("https?://\\S+").find(sharedText)
                 resolvedUri = Uri.parse(urlMatch?.value ?: sharedText)
+            }
+        }
+
+        if (resolvedUri == null) {
+            val extraUrl = incomingIntent.getStringExtra("url") ?: incomingIntent.getStringExtra("video_url")
+            if (!extraUrl.isNullOrBlank()) {
+                resolvedUri = Uri.parse(extraUrl.trim())
+            }
+        }
+
+        val rawStr = resolvedUri?.toString() ?: ""
+        if (rawStr.startsWith("vlc://", ignoreCase = true)) {
+            val inner = rawStr.substring(6)
+            resolvedUri = if (inner.startsWith("http://", ignoreCase = true) || inner.startsWith("https://", ignoreCase = true)) {
+                Uri.parse(inner)
+            } else {
+                Uri.parse("https://$inner")
             }
         }
 
@@ -271,7 +292,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun isSafeExternalOrMediaUri(uri: Uri): Boolean {
         val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return false
-        val allowedSchemes = setOf("content", "file", "http", "https", "rtsp", "rtmp", "mms")
+        val allowedSchemes = setOf("content", "file", "http", "https", "rtsp", "rtmp", "mms", "vlc")
         if (scheme !in allowedSchemes) return false
 
         if (scheme == "file") {
