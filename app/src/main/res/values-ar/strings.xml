@@ -158,4 +158,7 @@
     <string name="folder_mode_all_videos_flat">🎬 عرض كل الفيديوهات مباشرة في قائمة واحدة</string>
     <string name="folder_picker_dialog_title">حدد المجلدات التي تريد إظهار فيديوهاتها فقط</string>
     <string name="folder_picker_saved_toast">✅ يتم الآن عرض %1$d مجلد محدد فقط</string>
+    <string name="privacy_current_pin_hint">اكتب الباسورد الحالي أولاً...</string>
+    <string name="privacy_new_fingerprint_blocked_toast">🛡️ تنبيه أمني: تم اكتشاف تسجيل بصمة جديدة في الجهاز! لا يمكن الفتح إلا بإدخال الباسورد أولاً.</string>
+    <string name="privacy_new_fingerprint_warning">🛡️ تم اكتشاف بصمة جديدة في الجهاز! يجب إدخال الباسورد السري أولاً للتحقق من هويتك.</string>
 </resources>

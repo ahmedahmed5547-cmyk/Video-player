@@ -109,6 +109,7 @@ object PlaybackStore {
     private const val KEY_HDR_MODE_IDX = "hdr_mode_idx"
     private const val KEY_PRIVACY_PIN = "privacy_pin_code"
     private const val KEY_PRIVACY_BIOMETRIC = "privacy_biometric_enabled"
+    private const val KEY_BIOMETRIC_PWD_VERIFIED = "privacy_bio_pwd_verified"
     private const val KEY_LOCKED_FOLDERS = "privacy_locked_folders_set"
     private const val KEY_FOLDER_FILTER_MODE = "folder_filter_mode"
     private const val KEY_ALLOWED_FOLDERS = "allowed_visible_folders_set"
@@ -302,6 +303,13 @@ object PlaybackStore {
 
     fun setPrivacyPin(context: Context, newPin: String) {
         prefs(context).edit().putString(KEY_PRIVACY_PIN, newPin.trim()).apply()
+    }
+
+    fun isBiometricPasswordVerified(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_BIOMETRIC_PWD_VERIFIED, false)
+
+    fun setBiometricPasswordVerified(context: Context, verified: Boolean) {
+        prefs(context).edit().putBoolean(KEY_BIOMETRIC_PWD_VERIFIED, verified).apply()
     }
 
     fun isBiometricEnabled(context: Context): Boolean =

@@ -158,4 +158,7 @@
     <string name="folder_mode_all_videos_flat">🎬 Show All Videos Directly in One List</string>
     <string name="folder_picker_dialog_title">Select Which Folders to Display in App</string>
     <string name="folder_picker_saved_toast">✅ Showing %1$d selected folders only</string>
+    <string name="privacy_current_pin_hint">Enter CURRENT password...</string>
+    <string name="privacy_new_fingerprint_blocked_toast">🛡️ Security Alert: New fingerprint detected on device! Please enter your Password first.</string>
+    <string name="privacy_new_fingerprint_warning">🛡️ New fingerprint or security change detected! You MUST enter your Password first to unlock.</string>
 </resources>

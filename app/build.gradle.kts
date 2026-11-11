@@ -19,8 +19,8 @@ android {
         applicationId = "com.pureplayer.video"
         minSdk = 24
         targetSdk = 34
-        versionCode = 22
-        versionName = "22.0.0-PrivacyAndFolders"
+        versionCode = 23
+        versionName = "23.0.0-HardwareSecurity"
 
         resourceConfigurations += listOf("en", "ar")
 

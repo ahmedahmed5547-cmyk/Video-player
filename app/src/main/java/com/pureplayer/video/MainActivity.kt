@@ -18,6 +18,9 @@ import android.os.Build
 import android.os.Bundle
 import android.os.CancellationSignal
 import android.provider.MediaStore
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
+import android.security.keystore.KeyProperties
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -47,7 +50,97 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.security.KeyStore
 import java.util.Locale
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+
+/**
+ * Hardware-backed AndroidKeyStore guard that binds Biometric authentication to the current
+ * enrolled fingerprints ONLY after the owner enters the app Password.
+ * If ANY new fingerprint is registered in Android Settings, AndroidKeyStore permanently invalidates
+ * the key (setInvalidatedByBiometricEnrollment(true)), blocking fingerprint access until the
+ * owner enters the Password again!
+ */
+object BiometricHardwareGuard {
+    private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
+    private const val KEY_ALIAS = "pure_player_privacy_bio_key_v1"
+
+    sealed class CipherResult {
+        data class Ready(val cipher: Cipher) : CipherResult()
+        object EnrollmentChangedOrUnbound : CipherResult()
+        object Unavailable : CipherResult()
+    }
+
+    fun bindKeyAfterPasswordVerified(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            PlaybackStore.setBiometricPasswordVerified(context, false)
+            return
+        }
+        try {
+            val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
+            if (keyStore.containsAlias(KEY_ALIAS)) {
+                keyStore.deleteEntry(KEY_ALIAS)
+            }
+            val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE_PROVIDER)
+            val builder = KeyGenParameterSpec.Builder(
+                KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_CBC)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_PKCS7)
+                .setUserAuthenticationRequired(true)
+                .setInvalidatedByBiometricEnrollment(true)
+
+            keyGenerator.init(builder.build())
+            keyGenerator.generateKey()
+
+            // Verify the newly generated key can initialize a Cipher right now
+            val secretKey = keyStore.getKey(KEY_ALIAS, null) as? SecretKey
+            if (secretKey != null) {
+                val testCipher = Cipher.getInstance(
+                    "${KeyProperties.KEY_ALGORITHM_AES}/${KeyProperties.BLOCK_MODE_CBC}/${KeyProperties.ENCRYPTION_PADDING_PKCS7}"
+                )
+                testCipher.init(Cipher.ENCRYPT_MODE, secretKey)
+                PlaybackStore.setBiometricPasswordVerified(context, true)
+            } else {
+                PlaybackStore.setBiometricPasswordVerified(context, false)
+            }
+        } catch (_: Exception) {
+            // E.g. no fingerprint enrolled on device yet -> keep false so if someone enrolls a fingerprint later, password is still required first!
+            PlaybackStore.setBiometricPasswordVerified(context, false)
+        }
+    }
+
+    fun prepareCipherForBiometricPrompt(context: Context): CipherResult {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return CipherResult.Unavailable
+        if (!PlaybackStore.isBiometricPasswordVerified(context)) {
+            return CipherResult.EnrollmentChangedOrUnbound
+        }
+        return try {
+            val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
+            val secretKey = keyStore.getKey(KEY_ALIAS, null) as? SecretKey
+                ?: return CipherResult.EnrollmentChangedOrUnbound
+
+            val cipher = Cipher.getInstance(
+                "${KeyProperties.KEY_ALGORITHM_AES}/${KeyProperties.BLOCK_MODE_CBC}/${KeyProperties.ENCRYPTION_PADDING_PKCS7}"
+            )
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey)
+            CipherResult.Ready(cipher)
+        } catch (_: KeyPermanentlyInvalidatedException) {
+            // A new fingerprint was added to the device! Invalidate biometric unlock until password is entered!
+            PlaybackStore.setBiometricPasswordVerified(context, false)
+            try {
+                val ks = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
+                ks.deleteEntry(KEY_ALIAS)
+            } catch (_: Exception) {}
+            CipherResult.EnrollmentChangedOrUnbound
+        } catch (_: Exception) {
+            CipherResult.Unavailable
+        }
+    }
+}
 
 class MainActivity : AppCompatActivity() {
 
@@ -148,7 +241,6 @@ class MainActivity : AppCompatActivity() {
         val lastVideo = PlaybackStore.getLastPlayedVideo(this)
         if (lastVideo != null) {
             val (uri, title, positionMs) = lastVideo
-            // Hide Resume FAB if the video belongs to a locked folder
             val matchingItem = allDiscoveredVideos.find { it.uri == uri }
             if (matchingItem != null && PlaybackStore.isFolderLocked(this, matchingItem.folderName)) {
                 binding.fabResumeLast.visibility = View.GONE
@@ -195,7 +287,7 @@ class MainActivity : AppCompatActivity() {
                 showVideoLongPressMenu(video)
             },
             onFolderLongClick = { folder ->
-                showFolderLongPressMenu(folder)
+                showFolderLockMenu(folder)
             }
         )
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
@@ -211,30 +303,30 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Long-Press Menu on a Folder Card:
-     * Quick access to lock/unlock the folder with Password & Fingerprint or customize displayed folders.
+     * Requirement: Long-pressing a Folder card in the list is dedicated strictly to
+     * locking/unlocking that folder with Password & Fingerprint + Changing the Password.
      */
-    private fun showFolderLongPressMenu(folder: VideoFolder) {
+    private fun showFolderLockMenu(folder: VideoFolder) {
         val isLocked = PlaybackStore.isFolderLocked(this, folder.name)
-        val lockOptionLabel = if (isLocked) {
+        val lockToggleText = if (isLocked) {
             getString(R.string.folder_menu_unlock)
         } else {
             getString(R.string.folder_menu_lock)
         }
 
         val options = arrayOf(
-            lockOptionLabel,
-            getString(R.string.setting_privacy_section),
-            getString(R.string.setting_folder_visibility)
+            lockToggleText,
+            getString(R.string.privacy_change_pin_option),
+            getString(R.string.privacy_select_locked_folders, PlaybackStore.getLockedFolders(this).size)
         )
 
         AlertDialog.Builder(this)
-            .setTitle(folder.name)
+            .setTitle("🔒 ${folder.name}")
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> {
                         if (!PlaybackStore.hasPrivacyPin(this)) {
-                            showSetOrChangePinDialog(isFirstSetup = true) {
+                            showFirstTimeSetupPinDialog {
                                 toggleSingleFolderLock(folder.name)
                             }
                         } else {
@@ -243,8 +335,14 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     }
-                    1 -> openPrivacyControlSection()
-                    2 -> showFolderVisibilityModeDialog()
+                    1 -> {
+                        if (!PlaybackStore.hasPrivacyPin(this)) {
+                            showFirstTimeSetupPinDialog()
+                        } else {
+                            showChangePasswordWithCurrentVerifyDialog()
+                        }
+                    }
+                    2 -> openPrivacyControlSection()
                 }
             }
             .setNegativeButton(getString(R.string.cancel), null)
@@ -268,63 +366,92 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Privacy Authentication: Supports both Android Fingerprint (BiometricPrompt) and Password/PIN.
+     * Hardware-Secured Privacy Authentication:
+     * - If a new fingerprint was registered on the device (or password has not yet authorized the current biometric set),
+     *   Fingerprint unlock is BLOCKED and the user MUST enter the Password first!
      */
     private fun authenticatePrivacyAccess(subtitle: String, onAuthenticated: () -> Unit) {
         if (!PlaybackStore.hasPrivacyPin(this)) {
-            showSetOrChangePinDialog(isFirstSetup = true, onPinSaved = onAuthenticated)
+            showFirstTimeSetupPinDialog(onPinSaved = onAuthenticated)
             return
         }
 
         if (PlaybackStore.isBiometricEnabled(this) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            try {
-                val cancellationSignal = CancellationSignal()
-                val prompt = BiometricPrompt.Builder(this)
-                    .setTitle(getString(R.string.privacy_biometric_title))
-                    .setSubtitle(subtitle)
-                    .setDescription(getString(R.string.privacy_biometric_desc))
-                    .setNegativeButton(
-                        getString(R.string.privacy_use_pin_btn),
-                        mainExecutor,
-                        DialogInterface.OnClickListener { _, _ ->
-                            showPinUnlockDialog(subtitle, onAuthenticated)
-                        }
-                    )
-                    .build()
+            when (val cipherStatus = BiometricHardwareGuard.prepareCipherForBiometricPrompt(this)) {
+                is BiometricHardwareGuard.CipherResult.Ready -> {
+                    try {
+                        val cancellationSignal = CancellationSignal()
+                        val prompt = BiometricPrompt.Builder(this)
+                            .setTitle(getString(R.string.privacy_biometric_title))
+                            .setSubtitle(subtitle)
+                            .setDescription(getString(R.string.privacy_biometric_desc))
+                            .setNegativeButton(
+                                getString(R.string.privacy_use_pin_btn),
+                                mainExecutor,
+                                DialogInterface.OnClickListener { _, _ ->
+                                    showPinUnlockDialog(subtitle, onAuthenticated, allowBiometricRetry = true)
+                                }
+                            )
+                            .build()
 
-                prompt.authenticate(
-                    cancellationSignal,
-                    mainExecutor,
-                    object : BiometricPrompt.AuthenticationCallback() {
-                        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult?) {
-                            super.onAuthenticationSucceeded(result)
-                            runOnUiThread { onAuthenticated() }
-                        }
+                        prompt.authenticate(
+                            BiometricPrompt.CryptoObject(cipherStatus.cipher),
+                            cancellationSignal,
+                            mainExecutor,
+                            object : BiometricPrompt.AuthenticationCallback() {
+                                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult?) {
+                                    super.onAuthenticationSucceeded(result)
+                                    runOnUiThread { onAuthenticated() }
+                                }
 
-                        override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) {
-                            super.onAuthenticationError(errorCode, errString)
-                            // If device has no enrolled fingerprint or sensor unavailable, open PIN dialog automatically
-                            if (errorCode != BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED &&
-                                errorCode != BiometricPrompt.BIOMETRIC_ERROR_CANCELED
-                            ) {
-                                runOnUiThread {
-                                    showPinUnlockDialog(subtitle, onAuthenticated)
+                                override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) {
+                                    super.onAuthenticationError(errorCode, errString)
+                                    if (errorCode != BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED &&
+                                        errorCode != BiometricPrompt.BIOMETRIC_ERROR_CANCELED
+                                    ) {
+                                        runOnUiThread {
+                                            showPinUnlockDialog(subtitle, onAuthenticated, allowBiometricRetry = false)
+                                        }
+                                    }
                                 }
                             }
-                        }
+                        )
+                        return
+                    } catch (_: Exception) {
+                        showPinUnlockDialog(subtitle, onAuthenticated, allowBiometricRetry = false)
+                        return
                     }
-                )
-                return
-            } catch (_: Exception) {
-                showPinUnlockDialog(subtitle, onAuthenticated)
-                return
+                }
+                is BiometricHardwareGuard.CipherResult.EnrollmentChangedOrUnbound -> {
+                    // A new fingerprint was added to the phone (or biometrics not yet bound by password)!
+                    // Block fingerprint and force password entry first!
+                    Toast.makeText(
+                        this,
+                        getString(R.string.privacy_new_fingerprint_blocked_toast),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    showPinUnlockDialog(
+                        subtitle = getString(R.string.privacy_new_fingerprint_warning),
+                        onAuthenticated = onAuthenticated,
+                        allowBiometricRetry = false
+                    )
+                    return
+                }
+                is BiometricHardwareGuard.CipherResult.Unavailable -> {
+                    showPinUnlockDialog(subtitle, onAuthenticated, allowBiometricRetry = false)
+                    return
+                }
             }
         }
 
-        showPinUnlockDialog(subtitle, onAuthenticated)
+        showPinUnlockDialog(subtitle, onAuthenticated, allowBiometricRetry = false)
     }
 
-    private fun showPinUnlockDialog(subtitle: String, onAuthenticated: () -> Unit) {
+    private fun showPinUnlockDialog(
+        subtitle: String,
+        onAuthenticated: () -> Unit,
+        allowBiometricRetry: Boolean
+    ) {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(54, 32, 54, 16)
@@ -332,7 +459,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvSub = TextView(this).apply {
             text = subtitle
-            setTextColor(Color.parseColor("#94A3B8"))
+            setTextColor(Color.parseColor("#FACC15"))
             textSize = 14f
             setPadding(0, 0, 0, 16)
         }
@@ -353,6 +480,8 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton(getString(R.string.privacy_unlock_btn)) { _, _ ->
                 val entered = etPin.text.toString()
                 if (PlaybackStore.verifyPrivacyPin(this, entered)) {
+                    // Owner verified by Password! Re-bind hardware biometric key to current device fingerprints
+                    BiometricHardwareGuard.bindKeyAfterPasswordVerified(this)
                     onAuthenticated()
                 } else {
                     Toast.makeText(this, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
@@ -360,7 +489,7 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton(getString(R.string.cancel), null)
 
-        if (PlaybackStore.isBiometricEnabled(this) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        if (allowBiometricRetry && PlaybackStore.isBiometricEnabled(this) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             builder.setNeutralButton(getString(R.string.privacy_use_fingerprint_btn)) { _, _ ->
                 authenticatePrivacyAccess(subtitle, onAuthenticated)
             }
@@ -369,7 +498,7 @@ class MainActivity : AppCompatActivity() {
         builder.show()
     }
 
-    private fun showSetOrChangePinDialog(isFirstSetup: Boolean, onPinSaved: () -> Unit = {}) {
+    private fun showFirstTimeSetupPinDialog(onPinSaved: () -> Unit = {}) {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(54, 32, 54, 16)
@@ -393,7 +522,7 @@ class MainActivity : AppCompatActivity() {
         container.addView(etNewPin)
 
         AlertDialog.Builder(this)
-            .setTitle(if (isFirstSetup) getString(R.string.privacy_setup_title) else getString(R.string.privacy_change_pin_title))
+            .setTitle(getString(R.string.privacy_setup_title))
             .setView(container)
             .setPositiveButton(getString(R.string.save)) { _, _ ->
                 val newPin = etNewPin.text.toString().trim()
@@ -401,6 +530,7 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, getString(R.string.privacy_pin_too_short), Toast.LENGTH_SHORT).show()
                 } else {
                     PlaybackStore.setPrivacyPin(this, newPin)
+                    BiometricHardwareGuard.bindKeyAfterPasswordVerified(this)
                     Toast.makeText(this, getString(R.string.privacy_pin_saved_toast), Toast.LENGTH_SHORT).show()
                     onPinSaved()
                 }
@@ -409,9 +539,56 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * Requirement: Option to Change Password (strictly requires entering the Current Password first,
+     * then the New Password, and re-binds the hardware biometric key).
+     */
+    private fun showChangePasswordWithCurrentVerifyDialog() {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(54, 28, 54, 16)
+        }
+
+        val etCurrentPin = EditText(this).apply {
+            hint = getString(R.string.privacy_current_pin_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            setPadding(32, 24, 32, 24)
+        }
+
+        val etNewPin = EditText(this).apply {
+            hint = getString(R.string.privacy_new_pin_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            setPadding(32, 24, 32, 24)
+        }
+
+        container.addView(etCurrentPin)
+        container.addView(etNewPin)
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.privacy_change_pin_title))
+            .setView(container)
+            .setPositiveButton(getString(R.string.save)) { _, _ ->
+                val currentInput = etCurrentPin.text.toString()
+                val newPin = etNewPin.text.toString().trim()
+                if (!PlaybackStore.verifyPrivacyPin(this, currentInput)) {
+                    Toast.makeText(this, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
+                } else if (newPin.length < 2) {
+                    Toast.makeText(this, getString(R.string.privacy_pin_too_short), Toast.LENGTH_SHORT).show()
+                } else {
+                    PlaybackStore.setPrivacyPin(this, newPin)
+                    BiometricHardwareGuard.bindKeyAfterPasswordVerified(this)
+                    Toast.makeText(this, getString(R.string.privacy_pin_saved_toast), Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
     private fun openPrivacyControlSection() {
         if (!PlaybackStore.hasPrivacyPin(this)) {
-            showSetOrChangePinDialog(isFirstSetup = true) {
+            showFirstTimeSetupPinDialog {
                 showPrivacyDashboardDialog()
             }
         } else {
@@ -437,7 +614,7 @@ class MainActivity : AppCompatActivity() {
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> showLockedFoldersMultiPickerDialog()
-                    1 -> showSetOrChangePinDialog(isFirstSetup = false)
+                    1 -> showChangePasswordWithCurrentVerifyDialog()
                     2 -> {
                         val nextState = !bioEnabled
                         PlaybackStore.setBiometricEnabled(this, nextState)
@@ -487,7 +664,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Feature 2: Choose whether ALL folders/videos appear or ONLY specific user-selected folders appear.
+     * Requirement: Triggered by Long-Pressing "Video Folders / مجلدات الفيديو" at the top of the app!
+     * Lets the user choose whether ALL folders/videos appear or ONLY specific selected folders appear.
      */
     private fun showFolderVisibilityModeDialog() {
         val currentMode = PlaybackStore.getFolderFilterMode(this)
@@ -720,6 +898,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
+        // Requirement: Long-Pressing on "Video Folders / مجلدات الفيديو" title in the top bar opens the Folder Visibility Selector!
+        binding.tvToolbarTitle.isLongClickable = true
+        binding.tvToolbarTitle.setOnLongClickListener {
+            showFolderVisibilityModeDialog()
+            true
+        }
+
         binding.btnBackFolder.setOnClickListener {
             if (isSearchActive) {
                 closeSearchBar()
@@ -812,7 +997,6 @@ class MainActivity : AppCompatActivity() {
         val query = rawQuery.trim()
         if (!isSearchActive) return
 
-        // If inside an already unlocked/opened folder, search within it; otherwise search only unlocked visible folders!
         val sourcePool = if (isShowingFolderVideos && currentOpenedFolder != null) {
             currentOpenedFolder!!.videos
         } else {
@@ -834,6 +1018,7 @@ class MainActivity : AppCompatActivity() {
     private fun showProSettingsDialog() {
         val options = arrayOf(
             getString(R.string.setting_privacy_section),
+            getString(R.string.privacy_change_pin_option),
             getString(R.string.setting_folder_visibility),
             getString(R.string.setting_app_language),
             getString(R.string.setting_subtitle_languages),
@@ -847,13 +1032,20 @@ class MainActivity : AppCompatActivity() {
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> openPrivacyControlSection()
-                    1 -> showFolderVisibilityModeDialog()
-                    2 -> showAppLanguageDialog()
-                    3 -> showSubtitleLanguagePriorityDialog()
-                    4 -> showThemeSelectorDialog()
-                    5 -> showSubtitleStyleDialog()
-                    6 -> showDefaultOrientationDialog()
-                    7 -> {
+                    1 -> {
+                        if (!PlaybackStore.hasPrivacyPin(this)) {
+                            showFirstTimeSetupPinDialog()
+                        } else {
+                            showChangePasswordWithCurrentVerifyDialog()
+                        }
+                    }
+                    2 -> showFolderVisibilityModeDialog()
+                    3 -> showAppLanguageDialog()
+                    4 -> showSubtitleLanguagePriorityDialog()
+                    5 -> showThemeSelectorDialog()
+                    6 -> showSubtitleStyleDialog()
+                    7 -> showDefaultOrientationDialog()
+                    8 -> {
                         PlaybackStore.resetSubPosition(this)
                         Toast.makeText(this, getString(R.string.sub_position_reset_toast), Toast.LENGTH_SHORT).show()
                     }
@@ -1139,7 +1331,7 @@ class MainActivity : AppCompatActivity() {
         if (filterMode == 2) {
             val lockedSet = PlaybackStore.getLockedFolders(this)
             val unlockedVideos = allVideosFlat.filter { it.folderName !in lockedSet }
-            binding.tvToolbarTitle.text = "${getString(R.string.app_name)} (${unlockedVideos.size})"
+            binding.tvToolbarTitle.text = "${getString(R.string.folders_title)} (${unlockedVideos.size})"
             binding.btnBackFolder.visibility = View.GONE
             adapter.submitVideos(unlockedVideos)
         } else {
