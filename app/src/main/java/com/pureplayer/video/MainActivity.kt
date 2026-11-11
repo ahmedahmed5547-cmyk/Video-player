@@ -10,6 +10,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.hardware.biometrics.BiometricPrompt
 import android.media.MediaMetadataRetriever
@@ -26,8 +28,11 @@ import android.text.InputType
 import android.text.TextWatcher
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.RadioButton
@@ -96,7 +101,6 @@ object BiometricHardwareGuard {
             keyGenerator.init(builder.build())
             keyGenerator.generateKey()
 
-            // Verify the newly generated key can initialize a Cipher right now
             val secretKey = keyStore.getKey(KEY_ALIAS, null) as? SecretKey
             if (secretKey != null) {
                 val testCipher = Cipher.getInstance(
@@ -108,7 +112,6 @@ object BiometricHardwareGuard {
                 PlaybackStore.setBiometricPasswordVerified(context, false)
             }
         } catch (_: Exception) {
-            // E.g. no fingerprint enrolled on device yet -> keep false so if someone enrolls a fingerprint later, password is still required first!
             PlaybackStore.setBiometricPasswordVerified(context, false)
         }
     }
@@ -129,7 +132,6 @@ object BiometricHardwareGuard {
             cipher.init(Cipher.ENCRYPT_MODE, secretKey)
             CipherResult.Ready(cipher)
         } catch (_: KeyPermanentlyInvalidatedException) {
-            // A new fingerprint was added to the device! Invalidate biometric unlock until password is entered!
             PlaybackStore.setBiometricPasswordVerified(context, false)
             try {
                 val ks = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
@@ -141,6 +143,15 @@ object BiometricHardwareGuard {
         }
     }
 }
+
+data class PremiumMenuItem(
+    val iconEmoji: String,
+    val title: String,
+    val subtitle: String? = null,
+    val isAccentHighlighted: Boolean = false,
+    val isDanger: Boolean = false,
+    val onClick: () -> Unit
+)
 
 class MainActivity : AppCompatActivity() {
 
@@ -159,10 +170,11 @@ class MainActivity : AppCompatActivity() {
     private var pendingDeleteVideo: VideoItem? = null
     private var loadMediaJob: Job? = null
 
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
+    // Supports Android 14+ "Allow Limited Access" (READ_MEDIA_VISUAL_USER_SELECTED) as well as Full Access!
+    private val multiPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ ->
+        if (hasVideoAccessPermission()) {
             loadVideoFoldersOnly()
         } else {
             showEmptyState(getString(R.string.permission_needed), showButton = true)
@@ -209,8 +221,272 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         applyUserTheme()
+        if (hasVideoAccessPermission()) {
+            loadVideoFoldersOnly()
+        }
         updateResumeLastFab()
-        adapter.notifyDataSetChanged()
+    }
+
+    /**
+     * Returns true if the user granted EITHER Full Video Access OR Android 14+ "Allow Limited Access"!
+     */
+    private fun hasVideoAccessPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= 34) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
+        } else {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    /**
+     * Returns true if the user specifically chose "Allow limited access" on Android 14+ (API 34+).
+     */
+    private fun isUsingLimitedAccessMode(): Boolean {
+        if (Build.VERSION.SDK_INT >= 34) {
+            val fullGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
+            val partialGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
+            return !fullGranted && partialGranted
+        }
+        return false
+    }
+
+    private fun dp(value: Int): Int {
+        return TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            value.toFloat(),
+            resources.displayMetrics
+        ).toInt()
+    }
+
+    /**
+     * Premium UI Engine: Builds a sleek, floating, theme-harmonious card popup dialog
+     * with a glowing top pill, bold header, subtitle badge, and tactile option cards!
+     */
+    private fun showPremiumMenuDialog(
+        headerIcon: String,
+        title: String,
+        subtitle: String?,
+        items: List<PremiumMenuItem>
+    ) {
+        val accent = PlaybackStore.getAccentColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+
+        val outerScroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+        }
+
+        val cardContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(16), dp(20), dp(20))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(28).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(95, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+        outerScroll.addView(cardContainer)
+
+        // Glowing top drag/accent pill
+        val topPill = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(44), dp(4)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(14)
+            }
+            background = GradientDrawable().apply {
+                cornerRadius = dp(4).toFloat()
+                setColor(accent)
+            }
+        }
+        cardContainer.addView(topPill)
+
+        // Header Row (Icon Badge + Title & Subtitle)
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), 0, dp(4), dp(14))
+        }
+
+        val tvHeaderIcon = TextView(this).apply {
+            text = headerIcon
+            textSize = 22f
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48)).apply {
+                marginEnd = dp(14)
+            }
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(16).toFloat()
+                setColor(Color.argb(38, Color.red(accent), Color.green(accent), Color.blue(accent)))
+                setStroke(dp(1), Color.argb(80, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+
+        val headerTextCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+
+        val tvTitle = TextView(this).apply {
+            text = title
+            setTextColor(Color.WHITE)
+            textSize = 17.5f
+            setTypeface(typeface, Typeface.BOLD)
+            maxLines = 2
+        }
+        headerTextCol.addView(tvTitle)
+
+        if (!subtitle.isNullOrBlank()) {
+            val tvSubtitle = TextView(this).apply {
+                text = subtitle
+                setTextColor(accent)
+                textSize = 12.5f
+                setPadding(0, dp(3), 0, 0)
+            }
+            headerTextCol.addView(tvSubtitle)
+        }
+
+        headerRow.addView(tvHeaderIcon)
+        headerRow.addView(headerTextCol)
+        cardContainer.addView(headerRow)
+
+        // Subtle Divider
+        val divider = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                bottomMargin = dp(12)
+            }
+            setBackgroundColor(Color.parseColor("#22FFFFFF"))
+        }
+        cardContainer.addView(divider)
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(outerScroll)
+            .create()
+
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        // Add each option as a sleek interactive mini-card
+        for (item in items) {
+            val rowCard = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(13), dp(14), dp(13))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dp(9)
+                }
+                val strokeC = when {
+                    item.isDanger -> Color.parseColor("#55F43F5E")
+                    item.isAccentHighlighted -> Color.argb(120, Color.red(accent), Color.green(accent), Color.blue(accent))
+                    else -> Color.parseColor("#1FFFFFFF")
+                }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dp(16).toFloat()
+                    setColor(bg)
+                    setStroke(dp(1), strokeC)
+                }
+            }
+
+            val iconBadge = TextView(this).apply {
+                text = item.iconEmoji
+                textSize = 18f
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply {
+                    marginEnd = dp(12)
+                }
+                val badgeBg = if (item.isDanger) {
+                    Color.parseColor("#28F43F5E")
+                } else {
+                    Color.argb(32, Color.red(accent), Color.green(accent), Color.blue(accent))
+                }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dp(12).toFloat()
+                    setColor(badgeBg)
+                }
+            }
+
+            val textCol = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+
+            val tvItemTitle = TextView(this).apply {
+                text = item.title
+                setTextColor(if (item.isDanger) Color.parseColor("#FDA4AF") else Color.WHITE)
+                textSize = 15f
+                setTypeface(typeface, Typeface.BOLD)
+            }
+            textCol.addView(tvItemTitle)
+
+            if (!item.subtitle.isNullOrBlank()) {
+                val tvItemSub = TextView(this).apply {
+                    text = item.subtitle
+                    setTextColor(if (item.isAccentHighlighted) accent else Color.parseColor("#94A3B8"))
+                    textSize = 12f
+                    setPadding(0, dp(2), 0, 0)
+                }
+                textCol.addView(tvItemSub)
+            }
+
+            val tvArrow = TextView(this).apply {
+                text = "›"
+                setTextColor(if (item.isDanger) Color.parseColor("#F43F5E") else accent)
+                textSize = 22f
+                setTypeface(typeface, Typeface.BOLD)
+                setPadding(dp(8), 0, dp(2), 0)
+            }
+
+            rowCard.addView(iconBadge)
+            rowCard.addView(textCol)
+            rowCard.addView(tvArrow)
+
+            rowCard.setOnTouchListener { v, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> v.animate().scaleX(0.97f).scaleY(0.97f).setDuration(90L).start()
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> v.animate().scaleX(1f).scaleY(1f).setDuration(140L).start()
+                }
+                false
+            }
+
+            rowCard.setOnClickListener {
+                dialog.dismiss()
+                item.onClick()
+            }
+
+            cardContainer.addView(rowCard)
+        }
+
+        // Sleek Close Button at bottom
+        val btnClose = TextView(this).apply {
+            text = getString(R.string.close)
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#CBD5E1"))
+            textSize = 14.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, dp(12), 0, dp(12))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(4)
+            }
+            background = GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(Color.parseColor("#18FFFFFF"))
+            }
+            setOnClickListener { dialog.dismiss() }
+        }
+        cardContainer.addView(btnClose)
+
+        dialog.show()
     }
 
     private fun applyUserTheme() {
@@ -303,50 +579,63 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Requirement: Long-pressing a Folder card in the list is dedicated strictly to
-     * locking/unlocking that folder with Password & Fingerprint + Changing the Password.
+     * Premium Folder Long-Press Popup Menu:
+     * Dedicated strictly to locking/unlocking the folder with Password & Fingerprint + Changing Password.
      */
     private fun showFolderLockMenu(folder: VideoFolder) {
         val isLocked = PlaybackStore.isFolderLocked(this, folder.name)
-        val lockToggleText = if (isLocked) {
-            getString(R.string.folder_menu_unlock)
+        val statusSubtitle = if (isLocked) {
+            getString(R.string.folder_locked_badge, folder.videos.size)
         } else {
-            getString(R.string.folder_menu_lock)
+            getString(R.string.videos_count_format, folder.videos.size)
         }
 
-        val options = arrayOf(
-            lockToggleText,
-            getString(R.string.privacy_change_pin_option),
-            getString(R.string.privacy_select_locked_folders, PlaybackStore.getLockedFolders(this).size)
+        val items = listOf(
+            PremiumMenuItem(
+                iconEmoji = if (isLocked) "🔓" else "🔒",
+                title = if (isLocked) getString(R.string.folder_menu_unlock) else getString(R.string.folder_menu_lock),
+                subtitle = getString(R.string.folder_lock_item_sub),
+                isAccentHighlighted = true,
+                onClick = {
+                    if (!PlaybackStore.hasPrivacyPin(this)) {
+                        showFirstTimeSetupPinDialog {
+                            toggleSingleFolderLock(folder.name)
+                        }
+                    } else {
+                        authenticatePrivacyAccess(folder.name) {
+                            toggleSingleFolderLock(folder.name)
+                        }
+                    }
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🔑",
+                title = getString(R.string.privacy_change_pin_option),
+                subtitle = getString(R.string.privacy_change_pin_sub),
+                onClick = {
+                    if (!PlaybackStore.hasPrivacyPin(this)) {
+                        showFirstTimeSetupPinDialog()
+                    } else {
+                        showChangePasswordWithCurrentVerifyDialog()
+                    }
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🛡️",
+                title = getString(R.string.privacy_select_locked_folders, PlaybackStore.getLockedFolders(this).size),
+                subtitle = getString(R.string.privacy_manage_all_sub),
+                onClick = {
+                    openPrivacyControlSection()
+                }
+            )
         )
 
-        AlertDialog.Builder(this)
-            .setTitle("🔒 ${folder.name}")
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> {
-                        if (!PlaybackStore.hasPrivacyPin(this)) {
-                            showFirstTimeSetupPinDialog {
-                                toggleSingleFolderLock(folder.name)
-                            }
-                        } else {
-                            authenticatePrivacyAccess(folder.name) {
-                                toggleSingleFolderLock(folder.name)
-                            }
-                        }
-                    }
-                    1 -> {
-                        if (!PlaybackStore.hasPrivacyPin(this)) {
-                            showFirstTimeSetupPinDialog()
-                        } else {
-                            showChangePasswordWithCurrentVerifyDialog()
-                        }
-                    }
-                    2 -> openPrivacyControlSection()
-                }
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
+        showPremiumMenuDialog(
+            headerIcon = if (isLocked) "🔒" else "📁",
+            title = folder.name,
+            subtitle = statusSubtitle,
+            items = items
+        )
     }
 
     private fun toggleSingleFolderLock(folderName: String) {
@@ -365,11 +654,6 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, getString(msgRes, folderName), Toast.LENGTH_SHORT).show()
     }
 
-    /**
-     * Hardware-Secured Privacy Authentication:
-     * - If a new fingerprint was registered on the device (or password has not yet authorized the current biometric set),
-     *   Fingerprint unlock is BLOCKED and the user MUST enter the Password first!
-     */
     private fun authenticatePrivacyAccess(subtitle: String, onAuthenticated: () -> Unit) {
         if (!PlaybackStore.hasPrivacyPin(this)) {
             showFirstTimeSetupPinDialog(onPinSaved = onAuthenticated)
@@ -423,8 +707,6 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 is BiometricHardwareGuard.CipherResult.EnrollmentChangedOrUnbound -> {
-                    // A new fingerprint was added to the phone (or biometrics not yet bound by password)!
-                    // Block fingerprint and force password entry first!
                     Toast.makeText(
                         this,
                         getString(R.string.privacy_new_fingerprint_blocked_toast),
@@ -447,143 +729,310 @@ class MainActivity : AppCompatActivity() {
         showPinUnlockDialog(subtitle, onAuthenticated, allowBiometricRetry = false)
     }
 
+    private fun stylePremiumInputBox(editText: EditText, bg: Int, accent: Int) {
+        editText.setTextColor(Color.WHITE)
+        editText.setHintTextColor(Color.parseColor("#64748B"))
+        editText.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(14).toFloat()
+            setColor(bg)
+            setStroke(dp(1), Color.argb(120, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+    }
+
     private fun showPinUnlockDialog(
         subtitle: String,
         onAuthenticated: () -> Unit,
         allowBiometricRetry: Boolean
     ) {
+        val accent = PlaybackStore.getAccentColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(54, 32, 54, 16)
+            setPadding(dp(22), dp(20), dp(22), dp(20))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(26).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(100, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+
+        val tvTitle = TextView(this).apply {
+            text = getString(R.string.privacy_unlock_title)
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            setTypeface(typeface, Typeface.BOLD)
         }
 
         val tvSub = TextView(this).apply {
             text = subtitle
             setTextColor(Color.parseColor("#FACC15"))
-            textSize = 14f
-            setPadding(0, 0, 0, 16)
+            textSize = 13.5f
+            setPadding(0, dp(6), 0, dp(16))
         }
 
         val etPin = EditText(this).apply {
             hint = getString(R.string.privacy_enter_pin_hint)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
-            setPadding(32, 28, 32, 28)
+            setPadding(dp(16), dp(14), dp(16), dp(14))
         }
+        stylePremiumInputBox(etPin, bg, accent)
 
+        container.addView(tvTitle)
         container.addView(tvSub)
         container.addView(etPin)
 
-        val builder = AlertDialog.Builder(this)
-            .setTitle(getString(R.string.privacy_unlock_title))
-            .setView(container)
-            .setPositiveButton(getString(R.string.privacy_unlock_btn)) { _, _ ->
-                val entered = etPin.text.toString()
-                if (PlaybackStore.verifyPrivacyPin(this, entered)) {
-                    // Owner verified by Password! Re-bind hardware biometric key to current device fingerprints
-                    BiometricHardwareGuard.bindKeyAfterPasswordVerified(this)
-                    onAuthenticated()
-                } else {
-                    Toast.makeText(this, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
-                }
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, dp(18), 0, 0)
+        }
+
+        val dialog = AlertDialog.Builder(this).setView(container).create()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
 
         if (allowBiometricRetry && PlaybackStore.isBiometricEnabled(this) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            builder.setNeutralButton(getString(R.string.privacy_use_fingerprint_btn)) { _, _ ->
-                authenticatePrivacyAccess(subtitle, onAuthenticated)
+            val btnBio = TextView(this).apply {
+                text = getString(R.string.privacy_use_fingerprint_btn)
+                setTextColor(accent)
+                textSize = 14f
+                setTypeface(typeface, Typeface.BOLD)
+                setPadding(dp(14), dp(10), dp(14), dp(10))
+                setOnClickListener {
+                    dialog.dismiss()
+                    authenticatePrivacyAccess(subtitle, onAuthenticated)
+                }
+            }
+            btnRow.addView(btnBio)
+        }
+
+        val btnCancel = TextView(this).apply {
+            text = getString(R.string.cancel)
+            setTextColor(Color.parseColor("#94A3B8"))
+            textSize = 14f
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            setOnClickListener { dialog.dismiss() }
+        }
+
+        val btnUnlock = TextView(this).apply {
+            text = getString(R.string.privacy_unlock_btn)
+            setTextColor(Color.parseColor("#090D16"))
+            textSize = 14.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(20), dp(10), dp(20), dp(10))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(accent)
+            }
+            setOnClickListener {
+                val entered = etPin.text.toString()
+                if (PlaybackStore.verifyPrivacyPin(this@MainActivity, entered)) {
+                    dialog.dismiss()
+                    BiometricHardwareGuard.bindKeyAfterPasswordVerified(this@MainActivity)
+                    onAuthenticated()
+                } else {
+                    Toast.makeText(this@MainActivity, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
-        builder.show()
+        btnRow.addView(btnCancel)
+        btnRow.addView(btnUnlock)
+        container.addView(btnRow)
+
+        dialog.show()
     }
 
     private fun showFirstTimeSetupPinDialog(onPinSaved: () -> Unit = {}) {
+        val accent = PlaybackStore.getAccentColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(54, 32, 54, 16)
+            setPadding(dp(22), dp(20), dp(22), dp(20))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(26).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(100, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+
+        val tvTitle = TextView(this).apply {
+            text = getString(R.string.privacy_setup_title)
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            setTypeface(typeface, Typeface.BOLD)
         }
 
         val tvHint = TextView(this).apply {
             text = getString(R.string.privacy_setup_pin_desc)
             setTextColor(Color.parseColor("#CBD5E1"))
-            textSize = 14f
-            setPadding(0, 0, 0, 16)
+            textSize = 13.5f
+            setPadding(0, dp(6), 0, dp(16))
         }
 
         val etNewPin = EditText(this).apply {
             hint = getString(R.string.privacy_new_pin_hint)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
-            setPadding(32, 28, 32, 28)
+            setPadding(dp(16), dp(14), dp(16), dp(14))
         }
+        stylePremiumInputBox(etNewPin, bg, accent)
 
+        container.addView(tvTitle)
         container.addView(tvHint)
         container.addView(etNewPin)
 
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.privacy_setup_title))
-            .setView(container)
-            .setPositiveButton(getString(R.string.save)) { _, _ ->
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, dp(18), 0, 0)
+        }
+
+        val dialog = AlertDialog.Builder(this).setView(container).create()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        val btnCancel = TextView(this).apply {
+            text = getString(R.string.cancel)
+            setTextColor(Color.parseColor("#94A3B8"))
+            textSize = 14f
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+            setOnClickListener { dialog.dismiss() }
+        }
+
+        val btnSave = TextView(this).apply {
+            text = getString(R.string.save)
+            setTextColor(Color.parseColor("#090D16"))
+            textSize = 14.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(22), dp(10), dp(22), dp(10))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(accent)
+            }
+            setOnClickListener {
                 val newPin = etNewPin.text.toString().trim()
                 if (newPin.length < 2) {
-                    Toast.makeText(this, getString(R.string.privacy_pin_too_short), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, getString(R.string.privacy_pin_too_short), Toast.LENGTH_SHORT).show()
                 } else {
-                    PlaybackStore.setPrivacyPin(this, newPin)
-                    BiometricHardwareGuard.bindKeyAfterPasswordVerified(this)
-                    Toast.makeText(this, getString(R.string.privacy_pin_saved_toast), Toast.LENGTH_SHORT).show()
+                    dialog.dismiss()
+                    PlaybackStore.setPrivacyPin(this@MainActivity, newPin)
+                    BiometricHardwareGuard.bindKeyAfterPasswordVerified(this@MainActivity)
+                    Toast.makeText(this@MainActivity, getString(R.string.privacy_pin_saved_toast), Toast.LENGTH_SHORT).show()
                     onPinSaved()
                 }
             }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
+        }
+
+        btnRow.addView(btnCancel)
+        btnRow.addView(btnSave)
+        container.addView(btnRow)
+        dialog.show()
     }
 
-    /**
-     * Requirement: Option to Change Password (strictly requires entering the Current Password first,
-     * then the New Password, and re-binds the hardware biometric key).
-     */
     private fun showChangePasswordWithCurrentVerifyDialog() {
+        val accent = PlaybackStore.getAccentColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(54, 28, 54, 16)
+            setPadding(dp(22), dp(20), dp(22), dp(20))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(26).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(100, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+
+        val tvTitle = TextView(this).apply {
+            text = getString(R.string.privacy_change_pin_title)
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, 0, 0, dp(14))
         }
 
         val etCurrentPin = EditText(this).apply {
             hint = getString(R.string.privacy_current_pin_hint)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
-            setPadding(32, 24, 32, 24)
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dp(12)
+            }
         }
+        stylePremiumInputBox(etCurrentPin, bg, accent)
 
         val etNewPin = EditText(this).apply {
             hint = getString(R.string.privacy_new_pin_hint)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
-            setPadding(32, 24, 32, 24)
+            setPadding(dp(16), dp(14), dp(16), dp(14))
         }
+        stylePremiumInputBox(etNewPin, bg, accent)
 
+        container.addView(tvTitle)
         container.addView(etCurrentPin)
         container.addView(etNewPin)
 
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.privacy_change_pin_title))
-            .setView(container)
-            .setPositiveButton(getString(R.string.save)) { _, _ ->
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, dp(18), 0, 0)
+        }
+
+        val dialog = AlertDialog.Builder(this).setView(container).create()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        val btnCancel = TextView(this).apply {
+            text = getString(R.string.cancel)
+            setTextColor(Color.parseColor("#94A3B8"))
+            textSize = 14f
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+            setOnClickListener { dialog.dismiss() }
+        }
+
+        val btnSave = TextView(this).apply {
+            text = getString(R.string.save)
+            setTextColor(Color.parseColor("#090D16"))
+            textSize = 14.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(22), dp(10), dp(22), dp(10))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(accent)
+            }
+            setOnClickListener {
                 val currentInput = etCurrentPin.text.toString()
                 val newPin = etNewPin.text.toString().trim()
-                if (!PlaybackStore.verifyPrivacyPin(this, currentInput)) {
-                    Toast.makeText(this, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
+                if (!PlaybackStore.verifyPrivacyPin(this@MainActivity, currentInput)) {
+                    Toast.makeText(this@MainActivity, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
                 } else if (newPin.length < 2) {
-                    Toast.makeText(this, getString(R.string.privacy_pin_too_short), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, getString(R.string.privacy_pin_too_short), Toast.LENGTH_SHORT).show()
                 } else {
-                    PlaybackStore.setPrivacyPin(this, newPin)
-                    BiometricHardwareGuard.bindKeyAfterPasswordVerified(this)
-                    Toast.makeText(this, getString(R.string.privacy_pin_saved_toast), Toast.LENGTH_SHORT).show()
+                    dialog.dismiss()
+                    PlaybackStore.setPrivacyPin(this@MainActivity, newPin)
+                    BiometricHardwareGuard.bindKeyAfterPasswordVerified(this@MainActivity)
+                    Toast.makeText(this@MainActivity, getString(R.string.privacy_pin_saved_toast), Toast.LENGTH_SHORT).show()
                 }
             }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
+        }
+
+        btnRow.addView(btnCancel)
+        btnRow.addView(btnSave)
+        container.addView(btnRow)
+        dialog.show()
     }
 
     private fun openPrivacyControlSection() {
@@ -603,133 +1052,322 @@ class MainActivity : AppCompatActivity() {
         val lockedCount = PlaybackStore.getLockedFolders(this).size
         val bioStatus = if (bioEnabled) getString(R.string.privacy_bio_on) else getString(R.string.privacy_bio_off)
 
-        val options = arrayOf(
-            getString(R.string.privacy_select_locked_folders, lockedCount),
-            getString(R.string.privacy_change_pin_option),
-            getString(R.string.privacy_toggle_biometric_option, bioStatus)
+        val items = listOf(
+            PremiumMenuItem(
+                iconEmoji = "📁",
+                title = getString(R.string.privacy_select_locked_folders, lockedCount),
+                subtitle = getString(R.string.privacy_locked_folders_dialog_title),
+                isAccentHighlighted = true,
+                onClick = { showLockedFoldersMultiPickerDialog() }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🔑",
+                title = getString(R.string.privacy_change_pin_option),
+                subtitle = getString(R.string.privacy_change_pin_sub),
+                onClick = { showChangePasswordWithCurrentVerifyDialog() }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "👆",
+                title = getString(R.string.privacy_toggle_biometric_option, bioStatus),
+                subtitle = getString(R.string.privacy_biometric_desc),
+                onClick = {
+                    val nextState = !bioEnabled
+                    PlaybackStore.setBiometricEnabled(this, nextState)
+                    val stateStr = if (nextState) getString(R.string.privacy_bio_on) else getString(R.string.privacy_bio_off)
+                    Toast.makeText(this, stateStr, Toast.LENGTH_SHORT).show()
+                }
+            )
         )
 
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.setting_privacy_section))
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> showLockedFoldersMultiPickerDialog()
-                    1 -> showChangePasswordWithCurrentVerifyDialog()
-                    2 -> {
-                        val nextState = !bioEnabled
-                        PlaybackStore.setBiometricEnabled(this, nextState)
-                        val stateStr = if (nextState) getString(R.string.privacy_bio_on) else getString(R.string.privacy_bio_off)
-                        Toast.makeText(this, stateStr, Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-            .setNegativeButton(getString(R.string.close), null)
-            .show()
+        showPremiumMenuDialog(
+            headerIcon = "🔒",
+            title = getString(R.string.setting_privacy_section),
+            subtitle = getString(R.string.privacy_locked_saved_toast, lockedCount),
+            items = items
+        )
     }
 
-    private fun showLockedFoldersMultiPickerDialog() {
+    /**
+     * Premium Multi-Choice Folder Picker (used for both Locking Folders and Selecting Visible Folders).
+     */
+    private fun showPremiumFolderMultiPicker(
+        headerIcon: String,
+        title: String,
+        subtitle: String,
+        initialSelected: Set<String>,
+        onSaveSelection: (Set<String>) -> Unit,
+        neutralActionLabel: String? = null,
+        onNeutralAction: (() -> Unit)? = null
+    ) {
         if (allDiscoveredFolders.isEmpty()) {
             Toast.makeText(this, getString(R.string.no_videos_found), Toast.LENGTH_SHORT).show()
             return
         }
-        val folderNames = allDiscoveredFolders.map { it.name }.toTypedArray()
-        val displayLabels = allDiscoveredFolders.map { "${it.name} (${it.videos.size})" }.toTypedArray()
-        val currentLocked = PlaybackStore.getLockedFolders(this).toMutableSet()
-        val checked = BooleanArray(folderNames.size) { idx ->
-            currentLocked.contains(folderNames[idx])
+
+        val accent = PlaybackStore.getAccentColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+
+        val outerScroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
         }
 
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.privacy_locked_folders_dialog_title))
-            .setMultiChoiceItems(displayLabels, checked) { _, which, isChecked ->
-                val name = folderNames[which]
-                if (isChecked) {
-                    currentLocked.add(name)
-                } else {
-                    currentLocked.remove(name)
+        val cardContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(16), dp(20), dp(20))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(28).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(95, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+        outerScroll.addView(cardContainer)
+
+        val topPill = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(44), dp(4)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(14)
+            }
+            background = GradientDrawable().apply {
+                cornerRadius = dp(4).toFloat()
+                setColor(accent)
+            }
+        }
+        cardContainer.addView(topPill)
+
+        val tvTitle = TextView(this).apply {
+            text = "$headerIcon  $title"
+            setTextColor(Color.WHITE)
+            textSize = 17.5f
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        val tvSub = TextView(this).apply {
+            text = subtitle
+            setTextColor(accent)
+            textSize = 12.5f
+            setPadding(0, dp(4), 0, dp(12))
+        }
+        cardContainer.addView(tvTitle)
+        cardContainer.addView(tvSub)
+
+        val selectedSet = initialSelected.toMutableSet()
+        val checkBoxes = mutableListOf<Pair<String, CheckBox>>()
+
+        for (folder in allDiscoveredFolders) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(10), dp(14), dp(10))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dp(8)
+                }
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(14).toFloat()
+                    setColor(bg)
+                    setStroke(dp(1), Color.parseColor("#1FFFFFFF"))
                 }
             }
-            .setPositiveButton(getString(R.string.save)) { _, _ ->
-                PlaybackStore.setLockedFolders(this, currentLocked)
+
+            val cb = CheckBox(this).apply {
+                isChecked = selectedSet.contains(folder.name)
+                buttonTintList = ColorStateList.valueOf(accent)
+            }
+            checkBoxes.add(Pair(folder.name, cb))
+
+            val textCol = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginStart = dp(10)
+                }
+            }
+
+            val tvName = TextView(this).apply {
+                text = folder.name
+                setTextColor(Color.WHITE)
+                textSize = 15f
+                setTypeface(typeface, Typeface.BOLD)
+            }
+            val tvCount = TextView(this).apply {
+                text = getString(R.string.videos_count_format, folder.videos.size)
+                setTextColor(Color.parseColor("#94A3B8"))
+                textSize = 12f
+            }
+            textCol.addView(tvName)
+            textCol.addView(tvCount)
+
+            row.addView(cb)
+            row.addView(textCol)
+
+            cb.setOnCheckedChangeListener { _, isChecked ->
+                if (isChecked) selectedSet.add(folder.name) else selectedSet.remove(folder.name)
+            }
+            row.setOnClickListener {
+                cb.isChecked = !cb.isChecked
+            }
+
+            cardContainer.addView(row)
+        }
+
+        val dialog = AlertDialog.Builder(this).setView(outerScroll).create()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        val actionsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, dp(12), 0, 0)
+        }
+
+        if (!neutralActionLabel.isNullOrBlank() && onNeutralAction != null) {
+            val btnNeutral = TextView(this).apply {
+                text = neutralActionLabel
+                setTextColor(accent)
+                textSize = 13.5f
+                setTypeface(typeface, Typeface.BOLD)
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                setOnClickListener {
+                    dialog.dismiss()
+                    onNeutralAction()
+                }
+            }
+            actionsRow.addView(btnNeutral)
+        }
+
+        val btnCancel = TextView(this).apply {
+            text = getString(R.string.cancel)
+            setTextColor(Color.parseColor("#94A3B8"))
+            textSize = 14f
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            setOnClickListener { dialog.dismiss() }
+        }
+
+        val btnSave = TextView(this).apply {
+            text = getString(R.string.save)
+            setTextColor(Color.parseColor("#090D16"))
+            textSize = 14.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(22), dp(10), dp(22), dp(10))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(accent)
+            }
+            setOnClickListener {
+                dialog.dismiss()
+                onSaveSelection(selectedSet)
+            }
+        }
+
+        actionsRow.addView(btnCancel)
+        actionsRow.addView(btnSave)
+        cardContainer.addView(actionsRow)
+
+        dialog.show()
+    }
+
+    private fun showLockedFoldersMultiPickerDialog() {
+        showPremiumFolderMultiPicker(
+            headerIcon = "🔒",
+            title = getString(R.string.privacy_locked_folders_dialog_title),
+            subtitle = getString(R.string.privacy_biometric_desc),
+            initialSelected = PlaybackStore.getLockedFolders(this),
+            onSaveSelection = { newLocked ->
+                PlaybackStore.setLockedFolders(this, newLocked)
                 applyFolderVisibilityAndRefreshUI()
                 updateResumeLastFab()
                 Toast.makeText(
                     this,
-                    getString(R.string.privacy_locked_saved_toast, currentLocked.size),
+                    getString(R.string.privacy_locked_saved_toast, newLocked.size),
                     Toast.LENGTH_SHORT
                 ).show()
             }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
+        )
     }
 
     /**
-     * Requirement: Triggered by Long-Pressing "Video Folders / مجلدات الفيديو" at the top of the app!
-     * Lets the user choose whether ALL folders/videos appear or ONLY specific selected folders appear.
+     * Triggered by Long-Pressing "Video Folders / مجلدات الفيديو" at the top of the app!
+     * Styled as a Premium Popup Card with full support for Android 14+ Allow Limited Access!
      */
     private fun showFolderVisibilityModeDialog() {
         val currentMode = PlaybackStore.getFolderFilterMode(this)
         val allowedCount = PlaybackStore.getAllowedFolders(this).size
-        val modes = arrayOf(
-            getString(R.string.folder_mode_all),
-            getString(R.string.folder_mode_selected_only, allowedCount),
-            getString(R.string.folder_mode_all_videos_flat)
+        val isLimited = isUsingLimitedAccessMode()
+
+        val items = mutableListOf(
+            PremiumMenuItem(
+                iconEmoji = "🌐",
+                title = getString(R.string.folder_mode_all),
+                subtitle = if (currentMode == 0) "✅ " + getString(R.string.active_mode_badge) else getString(R.string.folder_mode_all_sub),
+                isAccentHighlighted = (currentMode == 0),
+                onClick = {
+                    PlaybackStore.setFolderFilterMode(this, 0)
+                    isShowingFolderVideos = false
+                    currentOpenedFolder = null
+                    applyFolderVisibilityAndRefreshUI()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "✅",
+                title = getString(R.string.folder_mode_selected_only, allowedCount),
+                subtitle = if (currentMode == 1) "✅ " + getString(R.string.active_mode_badge) else getString(R.string.folder_picker_dialog_title),
+                isAccentHighlighted = (currentMode == 1),
+                onClick = {
+                    showAllowedFoldersMultiPickerDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🎬",
+                title = getString(R.string.folder_mode_all_videos_flat),
+                subtitle = if (currentMode == 2) "✅ " + getString(R.string.active_mode_badge) else getString(R.string.folder_mode_flat_sub),
+                isAccentHighlighted = (currentMode == 2),
+                onClick = {
+                    PlaybackStore.setFolderFilterMode(this, 2)
+                    isShowingFolderVideos = false
+                    currentOpenedFolder = null
+                    applyFolderVisibilityAndRefreshUI()
+                }
+            )
         )
 
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.setting_folder_visibility))
-            .setSingleChoiceItems(modes, currentMode) { dialog, which ->
-                dialog.dismiss()
-                when (which) {
-                    0 -> {
-                        PlaybackStore.setFolderFilterMode(this, 0)
-                        isShowingFolderVideos = false
-                        currentOpenedFolder = null
-                        applyFolderVisibilityAndRefreshUI()
+        // If on Android 14+ (or Limited Access mode), add option to re-open Android's system "Allow Limited Access" video selector!
+        if (Build.VERSION.SDK_INT >= 34) {
+            items.add(
+                PremiumMenuItem(
+                    iconEmoji = "➕",
+                    title = getString(R.string.limited_access_manage_title),
+                    subtitle = if (isLimited) getString(R.string.limited_access_active_sub) else getString(R.string.limited_access_manage_sub),
+                    isAccentHighlighted = isLimited,
+                    onClick = {
+                        requestStoragePermission()
                     }
-                    1 -> {
-                        showAllowedFoldersMultiPickerDialog()
-                    }
-                    2 -> {
-                        PlaybackStore.setFolderFilterMode(this, 2)
-                        isShowingFolderVideos = false
-                        currentOpenedFolder = null
-                        applyFolderVisibilityAndRefreshUI()
-                    }
-                }
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
+                )
+            )
+        }
+
+        showPremiumMenuDialog(
+            headerIcon = "📂",
+            title = getString(R.string.setting_folder_visibility),
+            subtitle = if (isLimited) getString(R.string.limited_access_active_sub) else getString(R.string.videos_count_format, allDiscoveredVideos.size),
+            items = items
+        )
     }
 
     private fun showAllowedFoldersMultiPickerDialog() {
-        if (allDiscoveredFolders.isEmpty()) {
-            Toast.makeText(this, getString(R.string.no_videos_found), Toast.LENGTH_SHORT).show()
-            return
-        }
-        val folderNames = allDiscoveredFolders.map { it.name }.toTypedArray()
-        val displayLabels = allDiscoveredFolders.map { "${it.name} (${it.videos.size})" }.toTypedArray()
         val savedAllowed = PlaybackStore.getAllowedFolders(this)
-        val selectedSet = if (savedAllowed.isEmpty()) {
-            folderNames.toMutableSet()
+        val initialSet = if (savedAllowed.isEmpty()) {
+            allDiscoveredFolders.map { it.name }.toSet()
         } else {
-            savedAllowed.toMutableSet()
-        }
-        val checked = BooleanArray(folderNames.size) { idx ->
-            selectedSet.contains(folderNames[idx])
+            savedAllowed
         }
 
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.folder_picker_dialog_title))
-            .setMultiChoiceItems(displayLabels, checked) { _, which, isChecked ->
-                val name = folderNames[which]
-                if (isChecked) {
-                    selectedSet.add(name)
-                } else {
-                    selectedSet.remove(name)
-                }
-            }
-            .setPositiveButton(getString(R.string.save)) { _, _ ->
+        showPremiumFolderMultiPicker(
+            headerIcon = "✅",
+            title = getString(R.string.folder_picker_dialog_title),
+            subtitle = getString(R.string.setting_folder_visibility),
+            initialSelected = initialSet,
+            onSaveSelection = { selectedSet ->
                 if (selectedSet.isEmpty()) {
                     PlaybackStore.setFolderFilterMode(this, 0)
                     Toast.makeText(this, getString(R.string.folder_mode_all), Toast.LENGTH_SHORT).show()
@@ -745,34 +1383,52 @@ class MainActivity : AppCompatActivity() {
                 isShowingFolderVideos = false
                 currentOpenedFolder = null
                 applyFolderVisibilityAndRefreshUI()
+            },
+            neutralActionLabel = if (Build.VERSION.SDK_INT >= 34) getString(R.string.limited_access_add_more_btn) else getString(R.string.folder_mode_all),
+            onNeutralAction = {
+                if (Build.VERSION.SDK_INT >= 34 && isUsingLimitedAccessMode()) {
+                    requestStoragePermission()
+                } else {
+                    PlaybackStore.setFolderFilterMode(this, 0)
+                    isShowingFolderVideos = false
+                    currentOpenedFolder = null
+                    applyFolderVisibilityAndRefreshUI()
+                }
             }
-            .setNeutralButton(getString(R.string.folder_mode_all)) { _, _ ->
-                PlaybackStore.setFolderFilterMode(this, 0)
-                isShowingFolderVideos = false
-                currentOpenedFolder = null
-                applyFolderVisibilityAndRefreshUI()
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
+        )
     }
 
     private fun showVideoLongPressMenu(video: VideoItem) {
-        val options = arrayOf(
-            getString(R.string.video_menu_play),
-            getString(R.string.video_menu_details),
-            getString(R.string.video_menu_delete)
+        val sizeMb = String.format(Locale.US, "%.1f MB", video.size / (1024.0 * 1024.0))
+        val items = listOf(
+            PremiumMenuItem(
+                iconEmoji = "▶️",
+                title = getString(R.string.video_menu_play),
+                subtitle = "${video.folderName} • $sizeMb",
+                isAccentHighlighted = true,
+                onClick = { handleVideoSelection(video.uri, video.title) }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "ℹ️",
+                title = getString(R.string.video_menu_details),
+                subtitle = video.getResolutionLabel(),
+                onClick = { showVideoDetailsDialog(video) }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🗑️",
+                title = getString(R.string.video_menu_delete),
+                subtitle = getString(R.string.delete_action),
+                isDanger = true,
+                onClick = { confirmAndDeleteVideo(video) }
+            )
         )
-        AlertDialog.Builder(this)
-            .setTitle(video.title)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> handleVideoSelection(video.uri, video.title)
-                    1 -> showVideoDetailsDialog(video)
-                    2 -> confirmAndDeleteVideo(video)
-                }
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
+
+        showPremiumMenuDialog(
+            headerIcon = "🎬",
+            title = video.title,
+            subtitle = "$sizeMb • ${PlaybackStore.formatTime(video.duration)}",
+            items = items
+        )
     }
 
     private fun showVideoDetailsDialog(video: VideoItem) {
@@ -806,26 +1462,25 @@ class MainActivity : AppCompatActivity() {
             val durationFormatted = PlaybackStore.formatTime(enrichedVideo.duration)
             val displayPath = enrichedVideo.path.ifEmpty { enrichedVideo.uri.toString() }
 
-            val detailsMessage = listOf(
-                getString(R.string.video_detail_name, enrichedVideo.title),
-                getString(R.string.video_detail_resolution, enrichedVideo.getResolutionLabel()),
-                getString(R.string.video_detail_size, sizeFormatted),
-                getString(R.string.video_detail_duration, durationFormatted),
-                getString(R.string.video_detail_folder, enrichedVideo.folderName),
-                getString(R.string.video_detail_path, displayPath)
-            ).joinToString("\n\n")
-
-            AlertDialog.Builder(this@MainActivity)
-                .setTitle(getString(R.string.video_details_title))
-                .setMessage(detailsMessage)
-                .setPositiveButton(getString(R.string.video_menu_play)) { _, _ ->
+            val items = listOf(
+                PremiumMenuItem("🎬", getString(R.string.video_detail_name, enrichedVideo.title), enrichedVideo.folderName, true) {
                     handleVideoSelection(enrichedVideo.uri, enrichedVideo.title)
-                }
-                .setNeutralButton(getString(R.string.video_menu_delete)) { _, _ ->
+                },
+                PremiumMenuItem("📐", getString(R.string.video_detail_resolution, enrichedVideo.getResolutionLabel()), "$sizeFormatted • $durationFormatted") {
+                    handleVideoSelection(enrichedVideo.uri, enrichedVideo.title)
+                },
+                PremiumMenuItem("📍", getString(R.string.video_detail_path, displayPath), null) {},
+                PremiumMenuItem("🗑️", getString(R.string.video_menu_delete), getString(R.string.delete_action), isDanger = true) {
                     confirmAndDeleteVideo(enrichedVideo)
                 }
-                .setNegativeButton(getString(R.string.close), null)
-                .show()
+            )
+
+            showPremiumMenuDialog(
+                headerIcon = "ℹ️",
+                title = getString(R.string.video_details_title),
+                subtitle = "${enrichedVideo.getResolutionLabel()} • $sizeFormatted",
+                items = items
+            )
         }
     }
 
@@ -881,24 +1536,34 @@ class MainActivity : AppCompatActivity() {
         val savedPositionMs = PlaybackStore.getSavedPosition(this, uri)
         if (savedPositionMs > 3_000L) {
             val formattedTime = PlaybackStore.formatTime(savedPositionMs)
-            AlertDialog.Builder(this)
-                .setTitle(getString(R.string.resume_dialog_title))
-                .setMessage(getString(R.string.resume_dialog_message, title, formattedTime))
-                .setPositiveButton(getString(R.string.resume_from_format, formattedTime)) { _, _ ->
-                    launchPlayer(uri, title, startPositionMs = savedPositionMs)
-                }
-                .setNegativeButton(getString(R.string.start_from_beginning)) { _, _ ->
-                    launchPlayer(uri, title, startPositionMs = 0L)
-                }
-                .setNeutralButton(getString(R.string.cancel), null)
-                .show()
+            val items = listOf(
+                PremiumMenuItem(
+                    iconEmoji = "▶️",
+                    title = getString(R.string.resume_from_format, formattedTime),
+                    subtitle = title,
+                    isAccentHighlighted = true,
+                    onClick = { launchPlayer(uri, title, startPositionMs = savedPositionMs) }
+                ),
+                PremiumMenuItem(
+                    iconEmoji = "🔄",
+                    title = getString(R.string.start_from_beginning),
+                    subtitle = "00:00",
+                    onClick = { launchPlayer(uri, title, startPositionMs = 0L) }
+                )
+            )
+            showPremiumMenuDialog(
+                headerIcon = "⏱️",
+                title = getString(R.string.resume_dialog_title),
+                subtitle = formattedTime,
+                items = items
+            )
         } else {
             launchPlayer(uri, title, startPositionMs = 0L)
         }
     }
 
     private fun setupListeners() {
-        // Requirement: Long-Pressing on "Video Folders / مجلدات الفيديو" title in the top bar opens the Folder Visibility Selector!
+        // Long-Pressing on "Video Folders / مجلدات الفيديو" title in the top bar opens the Premium Folder Visibility Selector!
         binding.tvToolbarTitle.isLongClickable = true
         binding.tvToolbarTitle.setOnLongClickListener {
             showFolderVisibilityModeDialog()
@@ -1015,65 +1680,141 @@ class MainActivity : AppCompatActivity() {
         adapter.submitVideos(filtered)
     }
 
+    /**
+     * Premium Settings Menu: Styled with sleek cards, emoji badges, and live status subtitles!
+     */
     private fun showProSettingsDialog() {
-        val options = arrayOf(
-            getString(R.string.setting_privacy_section),
-            getString(R.string.privacy_change_pin_option),
-            getString(R.string.setting_folder_visibility),
-            getString(R.string.setting_app_language),
-            getString(R.string.setting_subtitle_languages),
-            getString(R.string.setting_app_theme),
-            getString(R.string.setting_subtitle_style),
-            getString(R.string.setting_default_orientation),
-            getString(R.string.setting_reset_sub_position)
+        val lockedCount = PlaybackStore.getLockedFolders(this).size
+        val filterMode = PlaybackStore.getFolderFilterMode(this)
+        val filterSub = when (filterMode) {
+            1 -> getString(R.string.folder_picker_saved_toast, PlaybackStore.getAllowedFolders(this).size)
+            2 -> getString(R.string.folder_mode_all_videos_flat)
+            else -> getString(R.string.folder_mode_all)
+        }
+        val langTag = PlaybackStore.getAppLanguageTag(this)
+        val langSub = when (langTag) {
+            "ar" -> getString(R.string.lang_arabic)
+            "en" -> getString(R.string.lang_english)
+            else -> getString(R.string.lang_system_default)
+        }
+        val subLangs = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(" → ") { it.uppercase() }
+        val themeNames = arrayOf(
+            getString(R.string.theme_cyber_blue),
+            getString(R.string.theme_amoled_gold),
+            getString(R.string.theme_emerald),
+            getString(R.string.theme_crimson),
+            getString(R.string.theme_violet)
         )
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.settings_header))
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> openPrivacyControlSection()
-                    1 -> {
-                        if (!PlaybackStore.hasPrivacyPin(this)) {
-                            showFirstTimeSetupPinDialog()
-                        } else {
-                            showChangePasswordWithCurrentVerifyDialog()
-                        }
+        val currentThemeName = themeNames[PlaybackStore.getThemeIndex(this).coerceIn(0, themeNames.size - 1)]
+        val subSize = PlaybackStore.getSubSizeSp(this).toInt()
+        val subBgOpacity = PlaybackStore.getSubBgOpacityPct(this)
+
+        val items = mutableListOf(
+            PremiumMenuItem(
+                iconEmoji = "🔒",
+                title = getString(R.string.setting_privacy_section),
+                subtitle = getString(R.string.privacy_locked_saved_toast, lockedCount),
+                isAccentHighlighted = true,
+                onClick = { openPrivacyControlSection() }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🔑",
+                title = getString(R.string.privacy_change_pin_option),
+                subtitle = getString(R.string.privacy_change_pin_sub),
+                onClick = {
+                    if (!PlaybackStore.hasPrivacyPin(this)) {
+                        showFirstTimeSetupPinDialog()
+                    } else {
+                        showChangePasswordWithCurrentVerifyDialog()
                     }
-                    2 -> showFolderVisibilityModeDialog()
-                    3 -> showAppLanguageDialog()
-                    4 -> showSubtitleLanguagePriorityDialog()
-                    5 -> showThemeSelectorDialog()
-                    6 -> showSubtitleStyleDialog()
-                    7 -> showDefaultOrientationDialog()
-                    8 -> {
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "📂",
+                title = getString(R.string.setting_folder_visibility),
+                subtitle = filterSub,
+                onClick = { showFolderVisibilityModeDialog() }
+            )
+        )
+
+        if (Build.VERSION.SDK_INT >= 34) {
+            items.add(
+                PremiumMenuItem(
+                    iconEmoji = "➕",
+                    title = getString(R.string.limited_access_manage_title),
+                    subtitle = if (isUsingLimitedAccessMode()) getString(R.string.limited_access_active_sub) else getString(R.string.limited_access_manage_sub),
+                    isAccentHighlighted = isUsingLimitedAccessMode(),
+                    onClick = { requestStoragePermission() }
+                )
+            )
+        }
+
+        items.addAll(
+            listOf(
+                PremiumMenuItem(
+                    iconEmoji = "🌐",
+                    title = getString(R.string.setting_app_language),
+                    subtitle = langSub,
+                    onClick = { showAppLanguageDialog() }
+                ),
+                PremiumMenuItem(
+                    iconEmoji = "💬",
+                    title = getString(R.string.setting_subtitle_languages),
+                    subtitle = subLangs,
+                    onClick = { showSubtitleLanguagePriorityDialog() }
+                ),
+                PremiumMenuItem(
+                    iconEmoji = "🎨",
+                    title = getString(R.string.setting_app_theme),
+                    subtitle = currentThemeName,
+                    onClick = { showThemeSelectorDialog() }
+                ),
+                PremiumMenuItem(
+                    iconEmoji = "🔤",
+                    title = getString(R.string.setting_subtitle_style),
+                    subtitle = "${subSize}sp • ${getString(R.string.style_bg_opacity_label, subBgOpacity)}",
+                    onClick = { showSubtitleStyleDialog() }
+                ),
+                PremiumMenuItem(
+                    iconEmoji = "🔄",
+                    title = getString(R.string.setting_default_orientation),
+                    subtitle = getString(R.string.orientation_landscape),
+                    onClick = { showDefaultOrientationDialog() }
+                ),
+                PremiumMenuItem(
+                    iconEmoji = "🎯",
+                    title = getString(R.string.setting_reset_sub_position),
+                    subtitle = getString(R.string.sub_position_reset_toast),
+                    onClick = {
                         PlaybackStore.resetSubPosition(this)
                         Toast.makeText(this, getString(R.string.sub_position_reset_toast), Toast.LENGTH_SHORT).show()
                     }
-                }
-            }
-            .setNegativeButton(getString(R.string.close), null)
-            .show()
+                )
+            )
+        )
+
+        showPremiumMenuDialog(
+            headerIcon = "⚙️",
+            title = getString(R.string.settings_header),
+            subtitle = "Pure Video Player Premium",
+            items = items
+        )
     }
 
     private fun showAppLanguageDialog() {
-        val labels = arrayOf(
-            getString(R.string.lang_system_default),
-            getString(R.string.lang_arabic),
-            getString(R.string.lang_english)
-        )
-        val tags = arrayOf("", "ar", "en")
         val currentTag = PlaybackStore.getAppLanguageTag(this)
-        val currentIndex = tags.indexOf(currentTag).coerceAtLeast(0)
-
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.setting_app_language))
-            .setSingleChoiceItems(labels, currentIndex) { dialog, which ->
-                val chosenTag = tags[which]
-                dialog.dismiss()
-                PlaybackStore.setAppLanguageTag(this, chosenTag)
+        val items = listOf(
+            PremiumMenuItem("📱", getString(R.string.lang_system_default), null, currentTag == "") {
+                PlaybackStore.setAppLanguageTag(this, "")
+            },
+            PremiumMenuItem("🇸🇦", getString(R.string.lang_arabic), "العربية", currentTag == "ar") {
+                PlaybackStore.setAppLanguageTag(this, "ar")
+            },
+            PremiumMenuItem("🇺🇸", getString(R.string.lang_english), "English", currentTag == "en") {
+                PlaybackStore.setAppLanguageTag(this, "en")
             }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
+        )
+        showPremiumMenuDialog("🌐", getString(R.string.setting_app_language), null, items)
     }
 
     private fun showSubtitleLanguagePriorityDialog() {
@@ -1117,22 +1858,27 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showThemeSelectorDialog() {
-        val themes = arrayOf(
-            getString(R.string.theme_cyber_blue),
-            getString(R.string.theme_amoled_gold),
-            getString(R.string.theme_emerald),
-            getString(R.string.theme_crimson),
-            getString(R.string.theme_violet)
-        )
         val current = PlaybackStore.getThemeIndex(this)
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.theme_dialog_title))
-            .setSingleChoiceItems(themes, current) { dialog, which ->
-                PlaybackStore.setThemeIndex(this, which)
-                applyUserTheme()
-                dialog.dismiss()
-            }
-            .show()
+        val themes = listOf(
+            Triple("💎", getString(R.string.theme_cyber_blue), "#38BDF8"),
+            Triple("✨", getString(R.string.theme_amoled_gold), "#F59E0B"),
+            Triple("🌿", getString(R.string.theme_emerald), "#10B981"),
+            Triple("🔥", getString(R.string.theme_crimson), "#F43F5E"),
+            Triple("🔮", getString(R.string.theme_violet), "#A855F7")
+        )
+        val items = themes.mapIndexed { idx, (emoji, name, hex) ->
+            PremiumMenuItem(
+                iconEmoji = emoji,
+                title = name,
+                subtitle = hex,
+                isAccentHighlighted = (idx == current),
+                onClick = {
+                    PlaybackStore.setThemeIndex(this, idx)
+                    applyUserTheme()
+                }
+            )
+        }
+        showPremiumMenuDialog("🎨", getString(R.string.theme_dialog_title), null, items)
     }
 
     private fun showSubtitleStyleDialog() {
@@ -1309,19 +2055,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showDefaultOrientationDialog() {
-        val modes = arrayOf(
-            getString(R.string.orientation_auto),
-            getString(R.string.orientation_landscape),
-            getString(R.string.orientation_portrait)
-        )
         val current = PlaybackStore.getDefaultOrientationIndex(this)
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.setting_default_orientation))
-            .setSingleChoiceItems(modes, current) { dialog, which ->
-                PlaybackStore.setDefaultOrientationIndex(this, which)
-                dialog.dismiss()
+        val items = listOf(
+            PremiumMenuItem("🔄", getString(R.string.orientation_auto), null, current == 0) {
+                PlaybackStore.setDefaultOrientationIndex(this, 0)
+            },
+            PremiumMenuItem("↔️", getString(R.string.orientation_landscape), null, current == 1) {
+                PlaybackStore.setDefaultOrientationIndex(this, 1)
+            },
+            PremiumMenuItem("↕️", getString(R.string.orientation_portrait), null, current == 2) {
+                PlaybackStore.setDefaultOrientationIndex(this, 2)
             }
-            .show()
+        )
+        showPremiumMenuDialog("🔄", getString(R.string.setting_default_orientation), null, items)
     }
 
     private fun showFoldersList() {
@@ -1335,7 +2081,8 @@ class MainActivity : AppCompatActivity() {
             binding.btnBackFolder.visibility = View.GONE
             adapter.submitVideos(unlockedVideos)
         } else {
-            binding.tvToolbarTitle.text = getString(R.string.folders_title)
+            val suffix = if (isUsingLimitedAccessMode()) " • Limited" else ""
+            binding.tvToolbarTitle.text = "${getString(R.string.folders_title)}$suffix"
             binding.btnBackFolder.visibility = View.GONE
             adapter.submitFolders(videoFoldersOnly)
         }
@@ -1345,17 +2092,30 @@ class MainActivity : AppCompatActivity() {
         val mode = PlaybackStore.getFolderFilterMode(this)
         val allowedSet = PlaybackStore.getAllowedFolders(this)
 
-        videoFoldersOnly = if (mode == 1 && allowedSet.isNotEmpty()) {
+        val filteredBySelection = if (mode == 1 && allowedSet.isNotEmpty()) {
             allDiscoveredFolders.filter { it.name in allowedSet }
         } else {
             allDiscoveredFolders
+        }
+
+        // If user is in "Allow Limited Access" mode or deleted/changed folders such that allowedSet didn't match,
+        // automatically fall back to showing all discovered folders so the screen is never blank!
+        videoFoldersOnly = if (filteredBySelection.isEmpty() && allDiscoveredFolders.isNotEmpty()) {
+            allDiscoveredFolders
+        } else {
+            filteredBySelection
         }
 
         val visibleFolderNames = videoFoldersOnly.map { it.name }.toSet()
         allVideosFlat = allDiscoveredVideos.filter { it.folderName in visibleFolderNames }
 
         if (videoFoldersOnly.isEmpty()) {
-            showEmptyState(getString(R.string.no_videos_found), showButton = false)
+            val msg = if (isUsingLimitedAccessMode()) {
+                getString(R.string.limited_access_empty_msg)
+            } else {
+                getString(R.string.no_videos_found)
+            }
+            showEmptyState(msg, showButton = isUsingLimitedAccessMode())
         } else {
             binding.emptyLayout.visibility = View.GONE
             binding.recyclerView.visibility = View.VISIBLE
@@ -1377,13 +2137,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissionAndLoad() {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_VIDEO
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
-        }
-
-        if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {
+        if (hasVideoAccessPermission()) {
             loadVideoFoldersOnly()
         } else {
             binding.swipeRefresh.isRefreshing = false
@@ -1392,12 +2146,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestStoragePermission() {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_VIDEO
+        val permissions = if (Build.VERSION.SDK_INT >= 34) {
+            arrayOf(
+                Manifest.permission.READ_MEDIA_VIDEO,
+                Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(Manifest.permission.READ_MEDIA_VIDEO)
         } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
+            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
-        permissionLauncher.launch(permission)
+        multiPermissionLauncher.launch(permissions)
     }
 
     private fun loadVideoFoldersOnly() {
@@ -1432,7 +2191,7 @@ class MainActivity : AppCompatActivity() {
                         val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
                         val durCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
                         val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
-                        val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
+                        val dataCol = cursor.getColumnIndex(MediaStore.Video.Media.DATA)
                         val bucketCol = cursor.getColumnIndex(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)
                         val widthCol = cursor.getColumnIndex(MediaStore.Video.Media.WIDTH)
                         val heightCol = cursor.getColumnIndex(MediaStore.Video.Media.HEIGHT)
@@ -1442,11 +2201,9 @@ class MainActivity : AppCompatActivity() {
                             val title = cursor.getString(nameCol) ?: continue
                             val duration = cursor.getLong(durCol)
                             val size = cursor.getLong(sizeCol)
-                            val path = cursor.getString(dataCol) ?: ""
+                            val path = if (dataCol != -1) (cursor.getString(dataCol) ?: "") else ""
                             val width = if (widthCol != -1) cursor.getInt(widthCol) else 0
                             val height = if (heightCol != -1) cursor.getInt(heightCol) else 0
-
-                            if (path.isNotEmpty() && !File(path).exists()) continue
 
                             val bucketName = if (bucketCol != -1) cursor.getString(bucketCol) else null
                             val folderName = when {

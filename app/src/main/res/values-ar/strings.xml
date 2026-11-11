@@ -161,4 +161,15 @@
     <string name="privacy_current_pin_hint">اكتب الباسورد الحالي أولاً...</string>
     <string name="privacy_new_fingerprint_blocked_toast">🛡️ تنبيه أمني: تم اكتشاف تسجيل بصمة جديدة في الجهاز! لا يمكن الفتح إلا بإدخال الباسورد أولاً.</string>
     <string name="privacy_new_fingerprint_warning">🛡️ تم اكتشاف بصمة جديدة في الجهاز! يجب إدخال الباسورد السري أولاً للتحقق من هويتك.</string>
+    <string name="folder_lock_item_sub">حماية الفولدر ببصمة الإصبع والرقم السري</string>
+    <string name="privacy_change_pin_sub">تحديث كلمة المرور الحالية للمجلدات الخاصة</string>
+    <string name="privacy_manage_all_sub">تحديد عدة مجلدات لقفلها أو التحكم في البصمة</string>
+    <string name="active_mode_badge">الوضع المفعّل حالياً</string>
+    <string name="folder_mode_all_sub">عرض جميع مجلدات الفيديو المتاحة</string>
+    <string name="folder_mode_flat_sub">عرض جميع الفيديوهات مباشرة بدون مجلدات</string>
+    <string name="limited_access_manage_title">تعديل فيديوهات الوصول المحدود (Allow Limited Access)</string>
+    <string name="limited_access_active_sub">الوصول المحدود مفعّل • اضغط لإضافة أو تعديل الفيديوهات</string>
+    <string name="limited_access_manage_sub">اختيار أو إضافة فيديوهات جديدة من نافذة النظام</string>
+    <string name="limited_access_add_more_btn">➕ إضافة فيديوهات من النظام</string>
+    <string name="limited_access_empty_msg">لم يتم اختيار فيديوهات في وضع الوصول المحدود؛ اضغط أدناه لاختيار الفيديوهات.</string>
 </resources>

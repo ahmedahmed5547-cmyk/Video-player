@@ -161,4 +161,15 @@
     <string name="privacy_current_pin_hint">Enter CURRENT password...</string>
     <string name="privacy_new_fingerprint_blocked_toast">🛡️ Security Alert: New fingerprint detected on device! Please enter your Password first.</string>
     <string name="privacy_new_fingerprint_warning">🛡️ New fingerprint or security change detected! You MUST enter your Password first to unlock.</string>
+    <string name="folder_lock_item_sub">Protect folder with Fingerprint &amp; Password</string>
+    <string name="privacy_change_pin_sub">Update your current privacy password</string>
+    <string name="privacy_manage_all_sub">Select multiple folders to lock or toggle Fingerprint</string>
+    <string name="active_mode_badge">Currently Active</string>
+    <string name="folder_mode_all_sub">Display all video folders available</string>
+    <string name="folder_mode_flat_sub">Display all videos in a single list without folders</string>
+    <string name="limited_access_manage_title">Manage Limited Access Videos (System Picker)</string>
+    <string name="limited_access_active_sub">Allow Limited Access active • Tap to add/edit videos</string>
+    <string name="limited_access_manage_sub">Select or modify videos shared with Pure Video Player</string>
+    <string name="limited_access_add_more_btn">➕ Add System Videos</string>
+    <string name="limited_access_empty_msg">No videos selected in Limited Access mode. Tap below to select videos.</string>
 </resources>
