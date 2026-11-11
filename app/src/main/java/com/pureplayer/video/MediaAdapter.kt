@@ -37,7 +37,6 @@ object VideoThumbnailLoader {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-
     fun loadVideoThumbnail(context: Context, video: VideoItem, imageView: ImageView, accentColor: Int): Job {
         val key = video.uri.toString()
         imageView.tag = key
@@ -118,7 +117,8 @@ object VideoThumbnailLoader {
 class MediaAdapter(
     private val onFolderClick: (VideoFolder) -> Unit,
     private val onVideoClick: (VideoItem) -> Unit,
-    private val onVideoLongClick: (VideoItem) -> Unit = {}
+    private val onVideoLongClick: (VideoItem) -> Unit = {},
+    private val onFolderLongClick: (VideoFolder) -> Unit = {}
 ) : RecyclerView.Adapter<MediaAdapter.MediaViewHolder>() {
 
     private val items = mutableListOf<Any>()
@@ -196,18 +196,27 @@ class MediaAdapter(
 
             when (item) {
                 is VideoFolder -> {
+                    val isLocked = PlaybackStore.isFolderLocked(ctx, item.name)
                     binding.tvDurationBadge.visibility = View.GONE
                     binding.ivIcon.tag = null
                     binding.ivIcon.alpha = 1f
                     binding.ivIcon.scaleType = ImageView.ScaleType.CENTER_INSIDE
                     binding.ivIcon.setPadding(20, 20, 20, 20)
                     binding.ivIcon.imageTintList = ColorStateList.valueOf(accentColor)
-                    binding.ivIcon.setImageResource(android.R.drawable.ic_menu_agenda)
-
-                    binding.tvTitle.text = item.name
-                    binding.tvSubtitle.text = ctx.getString(R.string.videos_count_format, item.videos.size)
+                    if (isLocked) {
+                        binding.ivIcon.setImageResource(android.R.drawable.ic_lock_lock)
+                        binding.tvTitle.text = "🔒 ${item.name}"
+                        binding.tvSubtitle.text = ctx.getString(R.string.folder_locked_badge, item.videos.size)
+                    } else {
+                        binding.ivIcon.setImageResource(android.R.drawable.ic_menu_agenda)
+                        binding.tvTitle.text = item.name
+                        binding.tvSubtitle.text = ctx.getString(R.string.videos_count_format, item.videos.size)
+                    }
                     binding.root.setOnClickListener { onFolderClick(item) }
-                    binding.root.setOnLongClickListener(null)
+                    binding.root.setOnLongClickListener {
+                        onFolderLongClick(item)
+                        true
+                    }
                 }
                 is VideoItem -> {
                     binding.tvTitle.text = item.title

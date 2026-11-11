@@ -5,22 +5,27 @@ import android.app.Activity
 import android.app.RecoverableSecurityException
 import android.content.ContentUris
 import android.content.Context
+import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.hardware.biometrics.BiometricPrompt
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.CancellationSignal
 import android.provider.MediaStore
 import android.text.Editable
+import android.text.InputType
 import android.text.TextWatcher
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -48,8 +53,13 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: MediaAdapter
+
+    private var allDiscoveredVideos = listOf<VideoItem>()
+    private var allDiscoveredFolders = listOf<VideoFolder>()
+
     private var allVideosFlat = listOf<VideoItem>()
     private var videoFoldersOnly = listOf<VideoFolder>()
+
     private var isShowingFolderVideos = false
     private var currentOpenedFolder: VideoFolder? = null
     private var isSearchActive = false
@@ -138,6 +148,13 @@ class MainActivity : AppCompatActivity() {
         val lastVideo = PlaybackStore.getLastPlayedVideo(this)
         if (lastVideo != null) {
             val (uri, title, positionMs) = lastVideo
+            // Hide Resume FAB if the video belongs to a locked folder
+            val matchingItem = allDiscoveredVideos.find { it.uri == uri }
+            if (matchingItem != null && PlaybackStore.isFolderLocked(this, matchingItem.folderName)) {
+                binding.fabResumeLast.visibility = View.GONE
+                return
+            }
+
             val timeFormatted = PlaybackStore.formatTime(positionMs)
             binding.fabResumeLast.text = getString(R.string.resume_fab_format, timeFormatted)
             if (binding.fabResumeLast.visibility != View.VISIBLE) {
@@ -163,21 +180,402 @@ class MainActivity : AppCompatActivity() {
     private fun setupRecyclerView() {
         adapter = MediaAdapter(
             onFolderClick = { folder ->
-                isShowingFolderVideos = true
-                currentOpenedFolder = folder
-                binding.tvToolbarTitle.text = "${folder.name} (${folder.videos.size})"
-                binding.btnBackFolder.visibility = View.VISIBLE
-                adapter.submitVideos(folder.videos)
+                if (PlaybackStore.isFolderLocked(this, folder.name)) {
+                    authenticatePrivacyAccess(folder.name) {
+                        openFolderNow(folder)
+                    }
+                } else {
+                    openFolderNow(folder)
+                }
             },
             onVideoClick = { video ->
                 handleVideoSelection(video.uri, video.title)
             },
             onVideoLongClick = { video ->
                 showVideoLongPressMenu(video)
+            },
+            onFolderLongClick = { folder ->
+                showFolderLongPressMenu(folder)
             }
         )
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
         binding.recyclerView.adapter = adapter
+    }
+
+    private fun openFolderNow(folder: VideoFolder) {
+        isShowingFolderVideos = true
+        currentOpenedFolder = folder
+        binding.tvToolbarTitle.text = "${folder.name} (${folder.videos.size})"
+        binding.btnBackFolder.visibility = View.VISIBLE
+        adapter.submitVideos(folder.videos)
+    }
+
+    /**
+     * Long-Press Menu on a Folder Card:
+     * Quick access to lock/unlock the folder with Password & Fingerprint or customize displayed folders.
+     */
+    private fun showFolderLongPressMenu(folder: VideoFolder) {
+        val isLocked = PlaybackStore.isFolderLocked(this, folder.name)
+        val lockOptionLabel = if (isLocked) {
+            getString(R.string.folder_menu_unlock)
+        } else {
+            getString(R.string.folder_menu_lock)
+        }
+
+        val options = arrayOf(
+            lockOptionLabel,
+            getString(R.string.setting_privacy_section),
+            getString(R.string.setting_folder_visibility)
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle(folder.name)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> {
+                        if (!PlaybackStore.hasPrivacyPin(this)) {
+                            showSetOrChangePinDialog(isFirstSetup = true) {
+                                toggleSingleFolderLock(folder.name)
+                            }
+                        } else {
+                            authenticatePrivacyAccess(folder.name) {
+                                toggleSingleFolderLock(folder.name)
+                            }
+                        }
+                    }
+                    1 -> openPrivacyControlSection()
+                    2 -> showFolderVisibilityModeDialog()
+                }
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    private fun toggleSingleFolderLock(folderName: String) {
+        val currentLocked = PlaybackStore.getLockedFolders(this).toMutableSet()
+        val nowLocked = if (currentLocked.contains(folderName)) {
+            currentLocked.remove(folderName)
+            false
+        } else {
+            currentLocked.add(folderName)
+            true
+        }
+        PlaybackStore.setLockedFolders(this, currentLocked)
+        applyFolderVisibilityAndRefreshUI()
+        updateResumeLastFab()
+        val msgRes = if (nowLocked) R.string.folder_locked_toast else R.string.folder_unlocked_toast
+        Toast.makeText(this, getString(msgRes, folderName), Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * Privacy Authentication: Supports both Android Fingerprint (BiometricPrompt) and Password/PIN.
+     */
+    private fun authenticatePrivacyAccess(subtitle: String, onAuthenticated: () -> Unit) {
+        if (!PlaybackStore.hasPrivacyPin(this)) {
+            showSetOrChangePinDialog(isFirstSetup = true, onPinSaved = onAuthenticated)
+            return
+        }
+
+        if (PlaybackStore.isBiometricEnabled(this) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                val cancellationSignal = CancellationSignal()
+                val prompt = BiometricPrompt.Builder(this)
+                    .setTitle(getString(R.string.privacy_biometric_title))
+                    .setSubtitle(subtitle)
+                    .setDescription(getString(R.string.privacy_biometric_desc))
+                    .setNegativeButton(
+                        getString(R.string.privacy_use_pin_btn),
+                        mainExecutor,
+                        DialogInterface.OnClickListener { _, _ ->
+                            showPinUnlockDialog(subtitle, onAuthenticated)
+                        }
+                    )
+                    .build()
+
+                prompt.authenticate(
+                    cancellationSignal,
+                    mainExecutor,
+                    object : BiometricPrompt.AuthenticationCallback() {
+                        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult?) {
+                            super.onAuthenticationSucceeded(result)
+                            runOnUiThread { onAuthenticated() }
+                        }
+
+                        override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) {
+                            super.onAuthenticationError(errorCode, errString)
+                            // If device has no enrolled fingerprint or sensor unavailable, open PIN dialog automatically
+                            if (errorCode != BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED &&
+                                errorCode != BiometricPrompt.BIOMETRIC_ERROR_CANCELED
+                            ) {
+                                runOnUiThread {
+                                    showPinUnlockDialog(subtitle, onAuthenticated)
+                                }
+                            }
+                        }
+                    }
+                )
+                return
+            } catch (_: Exception) {
+                showPinUnlockDialog(subtitle, onAuthenticated)
+                return
+            }
+        }
+
+        showPinUnlockDialog(subtitle, onAuthenticated)
+    }
+
+    private fun showPinUnlockDialog(subtitle: String, onAuthenticated: () -> Unit) {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(54, 32, 54, 16)
+        }
+
+        val tvSub = TextView(this).apply {
+            text = subtitle
+            setTextColor(Color.parseColor("#94A3B8"))
+            textSize = 14f
+            setPadding(0, 0, 0, 16)
+        }
+
+        val etPin = EditText(this).apply {
+            hint = getString(R.string.privacy_enter_pin_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            setPadding(32, 28, 32, 28)
+        }
+
+        container.addView(tvSub)
+        container.addView(etPin)
+
+        val builder = AlertDialog.Builder(this)
+            .setTitle(getString(R.string.privacy_unlock_title))
+            .setView(container)
+            .setPositiveButton(getString(R.string.privacy_unlock_btn)) { _, _ ->
+                val entered = etPin.text.toString()
+                if (PlaybackStore.verifyPrivacyPin(this, entered)) {
+                    onAuthenticated()
+                } else {
+                    Toast.makeText(this, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+
+        if (PlaybackStore.isBiometricEnabled(this) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            builder.setNeutralButton(getString(R.string.privacy_use_fingerprint_btn)) { _, _ ->
+                authenticatePrivacyAccess(subtitle, onAuthenticated)
+            }
+        }
+
+        builder.show()
+    }
+
+    private fun showSetOrChangePinDialog(isFirstSetup: Boolean, onPinSaved: () -> Unit = {}) {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(54, 32, 54, 16)
+        }
+
+        val tvHint = TextView(this).apply {
+            text = getString(R.string.privacy_setup_pin_desc)
+            setTextColor(Color.parseColor("#CBD5E1"))
+            textSize = 14f
+            setPadding(0, 0, 0, 16)
+        }
+
+        val etNewPin = EditText(this).apply {
+            hint = getString(R.string.privacy_new_pin_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            setPadding(32, 28, 32, 28)
+        }
+
+        container.addView(tvHint)
+        container.addView(etNewPin)
+
+        AlertDialog.Builder(this)
+            .setTitle(if (isFirstSetup) getString(R.string.privacy_setup_title) else getString(R.string.privacy_change_pin_title))
+            .setView(container)
+            .setPositiveButton(getString(R.string.save)) { _, _ ->
+                val newPin = etNewPin.text.toString().trim()
+                if (newPin.length < 2) {
+                    Toast.makeText(this, getString(R.string.privacy_pin_too_short), Toast.LENGTH_SHORT).show()
+                } else {
+                    PlaybackStore.setPrivacyPin(this, newPin)
+                    Toast.makeText(this, getString(R.string.privacy_pin_saved_toast), Toast.LENGTH_SHORT).show()
+                    onPinSaved()
+                }
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    private fun openPrivacyControlSection() {
+        if (!PlaybackStore.hasPrivacyPin(this)) {
+            showSetOrChangePinDialog(isFirstSetup = true) {
+                showPrivacyDashboardDialog()
+            }
+        } else {
+            authenticatePrivacyAccess(getString(R.string.setting_privacy_section)) {
+                showPrivacyDashboardDialog()
+            }
+        }
+    }
+
+    private fun showPrivacyDashboardDialog() {
+        val bioEnabled = PlaybackStore.isBiometricEnabled(this)
+        val lockedCount = PlaybackStore.getLockedFolders(this).size
+        val bioStatus = if (bioEnabled) getString(R.string.privacy_bio_on) else getString(R.string.privacy_bio_off)
+
+        val options = arrayOf(
+            getString(R.string.privacy_select_locked_folders, lockedCount),
+            getString(R.string.privacy_change_pin_option),
+            getString(R.string.privacy_toggle_biometric_option, bioStatus)
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.setting_privacy_section))
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showLockedFoldersMultiPickerDialog()
+                    1 -> showSetOrChangePinDialog(isFirstSetup = false)
+                    2 -> {
+                        val nextState = !bioEnabled
+                        PlaybackStore.setBiometricEnabled(this, nextState)
+                        val stateStr = if (nextState) getString(R.string.privacy_bio_on) else getString(R.string.privacy_bio_off)
+                        Toast.makeText(this, stateStr, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton(getString(R.string.close), null)
+            .show()
+    }
+
+    private fun showLockedFoldersMultiPickerDialog() {
+        if (allDiscoveredFolders.isEmpty()) {
+            Toast.makeText(this, getString(R.string.no_videos_found), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val folderNames = allDiscoveredFolders.map { it.name }.toTypedArray()
+        val displayLabels = allDiscoveredFolders.map { "${it.name} (${it.videos.size})" }.toTypedArray()
+        val currentLocked = PlaybackStore.getLockedFolders(this).toMutableSet()
+        val checked = BooleanArray(folderNames.size) { idx ->
+            currentLocked.contains(folderNames[idx])
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.privacy_locked_folders_dialog_title))
+            .setMultiChoiceItems(displayLabels, checked) { _, which, isChecked ->
+                val name = folderNames[which]
+                if (isChecked) {
+                    currentLocked.add(name)
+                } else {
+                    currentLocked.remove(name)
+                }
+            }
+            .setPositiveButton(getString(R.string.save)) { _, _ ->
+                PlaybackStore.setLockedFolders(this, currentLocked)
+                applyFolderVisibilityAndRefreshUI()
+                updateResumeLastFab()
+                Toast.makeText(
+                    this,
+                    getString(R.string.privacy_locked_saved_toast, currentLocked.size),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    /**
+     * Feature 2: Choose whether ALL folders/videos appear or ONLY specific user-selected folders appear.
+     */
+    private fun showFolderVisibilityModeDialog() {
+        val currentMode = PlaybackStore.getFolderFilterMode(this)
+        val allowedCount = PlaybackStore.getAllowedFolders(this).size
+        val modes = arrayOf(
+            getString(R.string.folder_mode_all),
+            getString(R.string.folder_mode_selected_only, allowedCount),
+            getString(R.string.folder_mode_all_videos_flat)
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.setting_folder_visibility))
+            .setSingleChoiceItems(modes, currentMode) { dialog, which ->
+                dialog.dismiss()
+                when (which) {
+                    0 -> {
+                        PlaybackStore.setFolderFilterMode(this, 0)
+                        isShowingFolderVideos = false
+                        currentOpenedFolder = null
+                        applyFolderVisibilityAndRefreshUI()
+                    }
+                    1 -> {
+                        showAllowedFoldersMultiPickerDialog()
+                    }
+                    2 -> {
+                        PlaybackStore.setFolderFilterMode(this, 2)
+                        isShowingFolderVideos = false
+                        currentOpenedFolder = null
+                        applyFolderVisibilityAndRefreshUI()
+                    }
+                }
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    private fun showAllowedFoldersMultiPickerDialog() {
+        if (allDiscoveredFolders.isEmpty()) {
+            Toast.makeText(this, getString(R.string.no_videos_found), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val folderNames = allDiscoveredFolders.map { it.name }.toTypedArray()
+        val displayLabels = allDiscoveredFolders.map { "${it.name} (${it.videos.size})" }.toTypedArray()
+        val savedAllowed = PlaybackStore.getAllowedFolders(this)
+        val selectedSet = if (savedAllowed.isEmpty()) {
+            folderNames.toMutableSet()
+        } else {
+            savedAllowed.toMutableSet()
+        }
+        val checked = BooleanArray(folderNames.size) { idx ->
+            selectedSet.contains(folderNames[idx])
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.folder_picker_dialog_title))
+            .setMultiChoiceItems(displayLabels, checked) { _, which, isChecked ->
+                val name = folderNames[which]
+                if (isChecked) {
+                    selectedSet.add(name)
+                } else {
+                    selectedSet.remove(name)
+                }
+            }
+            .setPositiveButton(getString(R.string.save)) { _, _ ->
+                if (selectedSet.isEmpty()) {
+                    PlaybackStore.setFolderFilterMode(this, 0)
+                    Toast.makeText(this, getString(R.string.folder_mode_all), Toast.LENGTH_SHORT).show()
+                } else {
+                    PlaybackStore.setAllowedFolders(this, selectedSet)
+                    PlaybackStore.setFolderFilterMode(this, 1)
+                    Toast.makeText(
+                        this,
+                        getString(R.string.folder_picker_saved_toast, selectedSet.size),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                isShowingFolderVideos = false
+                currentOpenedFolder = null
+                applyFolderVisibilityAndRefreshUI()
+            }
+            .setNeutralButton(getString(R.string.folder_mode_all)) { _, _ ->
+                PlaybackStore.setFolderFilterMode(this, 0)
+                isShowingFolderVideos = false
+                currentOpenedFolder = null
+                applyFolderVisibilityAndRefreshUI()
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
     }
 
     private fun showVideoLongPressMenu(video: VideoItem) {
@@ -414,18 +812,16 @@ class MainActivity : AppCompatActivity() {
         val query = rawQuery.trim()
         if (!isSearchActive) return
 
+        // If inside an already unlocked/opened folder, search within it; otherwise search only unlocked visible folders!
         val sourcePool = if (isShowingFolderVideos && currentOpenedFolder != null) {
             currentOpenedFolder!!.videos
         } else {
-            allVideosFlat
+            val lockedSet = PlaybackStore.getLockedFolders(this)
+            allVideosFlat.filter { it.folderName !in lockedSet }
         }
 
         if (query.isEmpty()) {
-            if (isShowingFolderVideos && currentOpenedFolder != null) {
-                adapter.submitVideos(currentOpenedFolder!!.videos)
-            } else {
-                adapter.submitVideos(allVideosFlat)
-            }
+            adapter.submitVideos(sourcePool)
             return
         }
 
@@ -437,6 +833,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun showProSettingsDialog() {
         val options = arrayOf(
+            getString(R.string.setting_privacy_section),
+            getString(R.string.setting_folder_visibility),
             getString(R.string.setting_app_language),
             getString(R.string.setting_subtitle_languages),
             getString(R.string.setting_app_theme),
@@ -448,12 +846,14 @@ class MainActivity : AppCompatActivity() {
             .setTitle(getString(R.string.settings_header))
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> showAppLanguageDialog()
-                    1 -> showSubtitleLanguagePriorityDialog()
-                    2 -> showThemeSelectorDialog()
-                    3 -> showSubtitleStyleDialog()
-                    4 -> showDefaultOrientationDialog()
-                    5 -> {
+                    0 -> openPrivacyControlSection()
+                    1 -> showFolderVisibilityModeDialog()
+                    2 -> showAppLanguageDialog()
+                    3 -> showSubtitleLanguagePriorityDialog()
+                    4 -> showThemeSelectorDialog()
+                    5 -> showSubtitleStyleDialog()
+                    6 -> showDefaultOrientationDialog()
+                    7 -> {
                         PlaybackStore.resetSubPosition(this)
                         Toast.makeText(this, getString(R.string.sub_position_reset_toast), Toast.LENGTH_SHORT).show()
                     }
@@ -735,9 +1135,53 @@ class MainActivity : AppCompatActivity() {
     private fun showFoldersList() {
         isShowingFolderVideos = false
         currentOpenedFolder = null
-        binding.tvToolbarTitle.text = getString(R.string.folders_title)
-        binding.btnBackFolder.visibility = View.GONE
-        adapter.submitFolders(videoFoldersOnly)
+        val filterMode = PlaybackStore.getFolderFilterMode(this)
+        if (filterMode == 2) {
+            val lockedSet = PlaybackStore.getLockedFolders(this)
+            val unlockedVideos = allVideosFlat.filter { it.folderName !in lockedSet }
+            binding.tvToolbarTitle.text = "${getString(R.string.app_name)} (${unlockedVideos.size})"
+            binding.btnBackFolder.visibility = View.GONE
+            adapter.submitVideos(unlockedVideos)
+        } else {
+            binding.tvToolbarTitle.text = getString(R.string.folders_title)
+            binding.btnBackFolder.visibility = View.GONE
+            adapter.submitFolders(videoFoldersOnly)
+        }
+    }
+
+    private fun applyFolderVisibilityAndRefreshUI() {
+        val mode = PlaybackStore.getFolderFilterMode(this)
+        val allowedSet = PlaybackStore.getAllowedFolders(this)
+
+        videoFoldersOnly = if (mode == 1 && allowedSet.isNotEmpty()) {
+            allDiscoveredFolders.filter { it.name in allowedSet }
+        } else {
+            allDiscoveredFolders
+        }
+
+        val visibleFolderNames = videoFoldersOnly.map { it.name }.toSet()
+        allVideosFlat = allDiscoveredVideos.filter { it.folderName in visibleFolderNames }
+
+        if (videoFoldersOnly.isEmpty()) {
+            showEmptyState(getString(R.string.no_videos_found), showButton = false)
+        } else {
+            binding.emptyLayout.visibility = View.GONE
+            binding.recyclerView.visibility = View.VISIBLE
+            if (isSearchActive) {
+                filterVideosByQuery(binding.etSearchVideos.text.toString())
+            } else if (isShowingFolderVideos && currentOpenedFolder != null) {
+                val updated = videoFoldersOnly.find { it.name == currentOpenedFolder?.name }
+                if (updated != null) {
+                    currentOpenedFolder = updated
+                    binding.tvToolbarTitle.text = "${updated.name} (${updated.videos.size})"
+                    adapter.submitVideos(updated.videos)
+                } else {
+                    showFoldersList()
+                }
+            } else {
+                showFoldersList()
+            }
+        }
     }
 
     private fun checkPermissionAndLoad() {
@@ -851,29 +1295,11 @@ class MainActivity : AppCompatActivity() {
 
             if (isFinishing || isDestroyed) return@launch
             binding.swipeRefresh.isRefreshing = false
-            allVideosFlat = videoList
-            videoFoldersOnly = groupedFolders
+            allDiscoveredVideos = videoList
+            allDiscoveredFolders = groupedFolders
 
-            if (videoFoldersOnly.isEmpty()) {
-                showEmptyState(getString(R.string.no_videos_found), showButton = false)
-            } else {
-                binding.emptyLayout.visibility = View.GONE
-                binding.recyclerView.visibility = View.VISIBLE
-                if (isSearchActive) {
-                    filterVideosByQuery(binding.etSearchVideos.text.toString())
-                } else if (isShowingFolderVideos && currentOpenedFolder != null) {
-                    val updated = videoFoldersOnly.find { it.name == currentOpenedFolder?.name }
-                    if (updated != null) {
-                        currentOpenedFolder = updated
-                        binding.tvToolbarTitle.text = "${updated.name} (${updated.videos.size})"
-                        adapter.submitVideos(updated.videos)
-                    } else {
-                        showFoldersList()
-                    }
-                } else {
-                    showFoldersList()
-                }
-            }
+            applyFolderVisibilityAndRefreshUI()
+            updateResumeLastFab()
         }
     }
 

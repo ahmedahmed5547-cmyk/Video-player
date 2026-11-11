@@ -107,6 +107,11 @@ object PlaybackStore {
     private const val KEY_SUB_POS_PCT_Y = "sub_pos_pct_y"
     private const val KEY_DEFAULT_ORIENTATION = "default_orientation_idx"
     private const val KEY_HDR_MODE_IDX = "hdr_mode_idx"
+    private const val KEY_PRIVACY_PIN = "privacy_pin_code"
+    private const val KEY_PRIVACY_BIOMETRIC = "privacy_biometric_enabled"
+    private const val KEY_LOCKED_FOLDERS = "privacy_locked_folders_set"
+    private const val KEY_FOLDER_FILTER_MODE = "folder_filter_mode"
+    private const val KEY_ALLOWED_FOLDERS = "allowed_visible_folders_set"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -285,6 +290,49 @@ object PlaybackStore {
 
     fun setDefaultOrientationIndex(context: Context, idx: Int) {
         prefs(context).edit().putInt(KEY_DEFAULT_ORIENTATION, idx.coerceIn(0, 2)).apply()
+    }
+
+    fun hasPrivacyPin(context: Context): Boolean =
+        !prefs(context).getString(KEY_PRIVACY_PIN, "").isNullOrEmpty()
+
+    fun verifyPrivacyPin(context: Context, inputPin: String): Boolean {
+        val saved = prefs(context).getString(KEY_PRIVACY_PIN, "") ?: ""
+        return saved.isNotEmpty() && saved == inputPin.trim()
+    }
+
+    fun setPrivacyPin(context: Context, newPin: String) {
+        prefs(context).edit().putString(KEY_PRIVACY_PIN, newPin.trim()).apply()
+    }
+
+    fun isBiometricEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_PRIVACY_BIOMETRIC, true)
+
+    fun setBiometricEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_PRIVACY_BIOMETRIC, enabled).apply()
+    }
+
+    fun getLockedFolders(context: Context): Set<String> =
+        prefs(context).getStringSet(KEY_LOCKED_FOLDERS, emptySet())?.toSet() ?: emptySet()
+
+    fun setLockedFolders(context: Context, folders: Set<String>) {
+        prefs(context).edit().putStringSet(KEY_LOCKED_FOLDERS, folders.toSet()).apply()
+    }
+
+    fun isFolderLocked(context: Context, folderName: String): Boolean =
+        getLockedFolders(context).contains(folderName)
+
+    fun getFolderFilterMode(context: Context): Int =
+        prefs(context).getInt(KEY_FOLDER_FILTER_MODE, 0).coerceIn(0, 2)
+
+    fun setFolderFilterMode(context: Context, mode: Int) {
+        prefs(context).edit().putInt(KEY_FOLDER_FILTER_MODE, mode.coerceIn(0, 2)).apply()
+    }
+
+    fun getAllowedFolders(context: Context): Set<String> =
+        prefs(context).getStringSet(KEY_ALLOWED_FOLDERS, emptySet())?.toSet() ?: emptySet()
+
+    fun setAllowedFolders(context: Context, folders: Set<String>) {
+        prefs(context).edit().putStringSet(KEY_ALLOWED_FOLDERS, folders.toSet()).apply()
     }
 
     fun getHdrModeIndex(context: Context): Int =
