@@ -45,6 +45,16 @@ class PureVideoApp : Application() {
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(savedLang))
         }
     }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        VideoThumbnailLoader.trimMemory(level)
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        VideoThumbnailLoader.clearAll()
+    }
 }
 
 data class VideoItem(
@@ -1141,7 +1151,7 @@ object SubtitleSearchEngine {
                 readTimeout = 10_000
             }
             if (conn.responseCode !in 200..299) return@withContext null
-            val rawBytes = conn.inputStream.use { it.readBytes() }
+            val rawBytes = conn.inputStream.use { readBytesBounded(it, 8 * 1024 * 1024) }
             if (rawBytes.isEmpty()) return@withContext null
 
             val extractedBytes = extractSubtitleBytesFromArchiveIfNeeded(rawBytes)
@@ -1156,6 +1166,23 @@ object SubtitleSearchEngine {
         }
     }
 
+    /**
+     * Bounded stream reader (max 8 MB) to prevent Zip-Bomb / OutOfMemoryError attacks.
+     */
+    fun readBytesBounded(input: java.io.InputStream, maxBytes: Int = 8 * 1024 * 1024): ByteArray {
+        val out = ByteArrayOutputStream()
+        val buf = ByteArray(8192)
+        var total = 0
+        while (true) {
+            val read = input.read(buf)
+            if (read <= 0) break
+            if (total + read > maxBytes) break
+            out.write(buf, 0, read)
+            total += read
+        }
+        return out.toByteArray()
+    }
+
     fun extractSubtitleBytesFromArchiveIfNeeded(rawBytes: ByteArray): ByteArray {
         if (rawBytes.size < 4) return rawBytes
         if (rawBytes[0] == 0x50.toByte() && rawBytes[1] == 0x4B.toByte()) {
@@ -1164,10 +1191,10 @@ object SubtitleSearchEngine {
                     var entry = zis.nextEntry
                     while (entry != null) {
                         val name = entry.name.lowercase(Locale.ROOT)
-                        if (!entry.isDirectory && (name.endsWith(".srt") || name.endsWith(".vtt") || name.endsWith(".ass") || name.endsWith(".ssa") || name.endsWith(".sub"))) {
-                            val out = ByteArrayOutputStream()
-                            zis.copyTo(out)
-                            return out.toByteArray()
+                        if (!entry.isDirectory && !name.contains("..") &&
+                            (name.endsWith(".srt") || name.endsWith(".vtt") || name.endsWith(".ass") || name.endsWith(".ssa") || name.endsWith(".sub"))
+                        ) {
+                            return readBytesBounded(zis, 8 * 1024 * 1024)
                         }
                         entry = zis.nextEntry
                     }
@@ -1177,7 +1204,7 @@ object SubtitleSearchEngine {
         if (rawBytes[0] == 0x1F.toByte() && rawBytes[1] == 0x8B.toByte()) {
             try {
                 GZIPInputStream(ByteArrayInputStream(rawBytes)).use { gis ->
-                    return gis.readBytes()
+                    return readBytesBounded(gis, 8 * 1024 * 1024)
                 }
             } catch (_: Exception) {}
         }

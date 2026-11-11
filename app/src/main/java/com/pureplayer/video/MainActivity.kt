@@ -34,8 +34,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.pureplayer.video.databinding.ActivityMainBinding
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
@@ -49,6 +54,7 @@ class MainActivity : AppCompatActivity() {
     private var currentOpenedFolder: VideoFolder? = null
     private var isSearchActive = false
     private var pendingDeleteVideo: VideoItem? = null
+    private var loadMediaJob: Job? = null
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -201,50 +207,57 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showVideoDetailsDialog(video: VideoItem) {
-        var w = video.width
-        var h = video.height
-        // If MediaStore didn't index width/height for this file, extract it on the fly
-        if (w <= 0 || h <= 0) {
-            val retriever = MediaMetadataRetriever()
-            try {
-                retriever.setDataSource(this, video.uri)
-                w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
-                h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
-            } catch (_: Exception) {
-            } finally {
-                try { retriever.release() } catch (_: Exception) {}
+        lifecycleScope.launch {
+            val enrichedVideo = withContext(Dispatchers.IO) {
+                var w = video.width
+                var h = video.height
+                if (w <= 0 || h <= 0) {
+                    val retriever = MediaMetadataRetriever()
+                    try {
+                        retriever.setDataSource(this@MainActivity, video.uri)
+                        w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+                        h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+                    } catch (_: Exception) {
+                    } finally {
+                        try {
+                            retriever.release()
+                        } catch (_: Exception) {}
+                    }
+                }
+                video.copy(width = w, height = h)
             }
+
+            if (isFinishing || isDestroyed) return@launch
+
+            val sizeFormatted = if (enrichedVideo.size >= 1024L * 1024L * 1024L) {
+                String.format(Locale.US, "%.2f GB (%d MB)", enrichedVideo.size / (1024.0 * 1024.0 * 1024.0), enrichedVideo.size / (1024L * 1024L))
+            } else {
+                String.format(Locale.US, "%.2f MB", enrichedVideo.size / (1024.0 * 1024.0))
+            }
+            val durationFormatted = PlaybackStore.formatTime(enrichedVideo.duration)
+            val displayPath = enrichedVideo.path.ifEmpty { enrichedVideo.uri.toString() }
+
+            val detailsMessage = listOf(
+                getString(R.string.video_detail_name, enrichedVideo.title),
+                getString(R.string.video_detail_resolution, enrichedVideo.getResolutionLabel()),
+                getString(R.string.video_detail_size, sizeFormatted),
+                getString(R.string.video_detail_duration, durationFormatted),
+                getString(R.string.video_detail_folder, enrichedVideo.folderName),
+                getString(R.string.video_detail_path, displayPath)
+            ).joinToString("\n\n")
+
+            AlertDialog.Builder(this@MainActivity)
+                .setTitle(getString(R.string.video_details_title))
+                .setMessage(detailsMessage)
+                .setPositiveButton(getString(R.string.video_menu_play)) { _, _ ->
+                    handleVideoSelection(enrichedVideo.uri, enrichedVideo.title)
+                }
+                .setNeutralButton(getString(R.string.video_menu_delete)) { _, _ ->
+                    confirmAndDeleteVideo(enrichedVideo)
+                }
+                .setNegativeButton(getString(R.string.close), null)
+                .show()
         }
-
-        val enrichedVideo = video.copy(width = w, height = h)
-        val sizeFormatted = if (video.size >= 1024L * 1024L * 1024L) {
-            String.format(Locale.US, "%.2f GB (%d MB)", video.size / (1024.0 * 1024.0 * 1024.0), video.size / (1024L * 1024L))
-        } else {
-            String.format(Locale.US, "%.2f MB", video.size / (1024.0 * 1024.0))
-        }
-        val durationFormatted = PlaybackStore.formatTime(video.duration)
-        val displayPath = video.path.ifEmpty { video.uri.toString() }
-
-        val detailsMessage = listOf(
-            getString(R.string.video_detail_name, video.title),
-            getString(R.string.video_detail_resolution, enrichedVideo.getResolutionLabel()),
-            getString(R.string.video_detail_size, sizeFormatted),
-            getString(R.string.video_detail_duration, durationFormatted),
-            getString(R.string.video_detail_folder, video.folderName),
-            getString(R.string.video_detail_path, displayPath)
-        ).joinToString("\n\n")
-
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.video_details_title))
-            .setMessage(detailsMessage)
-            .setPositiveButton(getString(R.string.video_menu_play)) { _, _ ->
-                handleVideoSelection(video.uri, video.title)
-            }
-            .setNeutralButton(getString(R.string.video_menu_delete)) { _, _ ->
-                confirmAndDeleteVideo(video)
-            }
-            .setNegativeButton(getString(R.string.close), null)
-            .show()
     }
 
     private fun confirmAndDeleteVideo(video: VideoItem) {
@@ -271,24 +284,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun performDirectDelete(video: VideoItem) {
-        try {
-            val rows = contentResolver.delete(video.uri, null, null)
-            if (rows > 0 || (video.path.isNotEmpty() && File(video.path).delete())) {
-                Toast.makeText(this, getString(R.string.video_deleted_toast), Toast.LENGTH_SHORT).show()
-                loadVideoFoldersOnly()
-            } else {
-                Toast.makeText(this, getString(R.string.video_delete_failed_toast), Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            try {
+                val deleted = withContext(Dispatchers.IO) {
+                    val rows = contentResolver.delete(video.uri, null, null)
+                    rows > 0 || (video.path.isNotEmpty() && File(video.path).delete())
+                }
+                if (deleted) {
+                    Toast.makeText(this@MainActivity, getString(R.string.video_deleted_toast), Toast.LENGTH_SHORT).show()
+                    loadVideoFoldersOnly()
+                } else {
+                    Toast.makeText(this@MainActivity, getString(R.string.video_delete_failed_toast), Toast.LENGTH_SHORT).show()
+                }
+            } catch (secEx: SecurityException) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && secEx is RecoverableSecurityException) {
+                    pendingDeleteVideo = video
+                    val request = IntentSenderRequest.Builder(secEx.userAction.actionIntent.intentSender).build()
+                    deleteRequestLauncher.launch(request)
+                } else {
+                    Toast.makeText(this@MainActivity, getString(R.string.video_delete_failed_toast), Toast.LENGTH_SHORT).show()
+                }
+            } catch (_: Exception) {
+                Toast.makeText(this@MainActivity, getString(R.string.video_delete_failed_toast), Toast.LENGTH_SHORT).show()
             }
-        } catch (secEx: SecurityException) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && secEx is RecoverableSecurityException) {
-                pendingDeleteVideo = video
-                val request = IntentSenderRequest.Builder(secEx.userAction.actionIntent.intentSender).build()
-                deleteRequestLauncher.launch(request)
-            } else {
-                Toast.makeText(this, getString(R.string.video_delete_failed_toast), Toast.LENGTH_SHORT).show()
-            }
-        } catch (_: Exception) {
-            Toast.makeText(this, getString(R.string.video_delete_failed_toast), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -755,104 +773,118 @@ class MainActivity : AppCompatActivity() {
         permissionLauncher.launch(permission)
     }
 
+    /**
+     * 100% Non-Blocking Background MediaStore Query (Zero UI Freeze / Zero ANR).
+     */
     private fun loadVideoFoldersOnly() {
+        loadMediaJob?.cancel()
         binding.swipeRefresh.isRefreshing = true
-        val videoList = mutableListOf<VideoItem>()
 
-        val projection = arrayOf(
-            MediaStore.Video.Media._ID,
-            MediaStore.Video.Media.DISPLAY_NAME,
-            MediaStore.Video.Media.DURATION,
-            MediaStore.Video.Media.SIZE,
-            MediaStore.Video.Media.DATA,
-            MediaStore.Video.Media.BUCKET_DISPLAY_NAME,
-            MediaStore.Video.Media.WIDTH,
-            MediaStore.Video.Media.HEIGHT
-        )
-        val selection = "${MediaStore.Video.Media.SIZE} > 0"
-        val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} DESC"
-
-        contentResolver.query(
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            selection,
-            null,
-            sortOrder
-        )?.use { cursor ->
-            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
-            val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
-            val durCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
-            val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
-            val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
-            val bucketCol = cursor.getColumnIndex(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)
-            val widthCol = cursor.getColumnIndex(MediaStore.Video.Media.WIDTH)
-            val heightCol = cursor.getColumnIndex(MediaStore.Video.Media.HEIGHT)
-
-            while (cursor.moveToNext()) {
-                val id = cursor.getLong(idCol)
-                val title = cursor.getString(nameCol) ?: continue
-                val duration = cursor.getLong(durCol)
-                val size = cursor.getLong(sizeCol)
-                val path = cursor.getString(dataCol) ?: ""
-                val width = if (widthCol != -1) cursor.getInt(widthCol) else 0
-                val height = if (heightCol != -1) cursor.getInt(heightCol) else 0
-
-                if (path.isNotEmpty() && !File(path).exists()) continue
-
-                val bucketName = if (bucketCol != -1) cursor.getString(bucketCol) else null
-                val folderName = when {
-                    !bucketName.isNullOrBlank() -> bucketName
-                    path.isNotEmpty() -> File(path).parentFile?.name ?: "Videos"
-                    else -> "Videos"
-                }
-
-                val contentUri = ContentUris.withAppendedId(
-                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                    id
+        loadMediaJob = lifecycleScope.launch {
+            val (videoList, groupedFolders) = withContext(Dispatchers.IO) {
+                val list = mutableListOf<VideoItem>()
+                val projection = arrayOf(
+                    MediaStore.Video.Media._ID,
+                    MediaStore.Video.Media.DISPLAY_NAME,
+                    MediaStore.Video.Media.DURATION,
+                    MediaStore.Video.Media.SIZE,
+                    MediaStore.Video.Media.DATA,
+                    MediaStore.Video.Media.BUCKET_DISPLAY_NAME,
+                    MediaStore.Video.Media.WIDTH,
+                    MediaStore.Video.Media.HEIGHT
                 )
-                videoList.add(
-                    VideoItem(
-                        id = id,
-                        title = title,
-                        uri = contentUri,
-                        duration = duration,
-                        size = size,
-                        folderName = folderName,
-                        width = width,
-                        height = height,
-                        path = path
-                    )
-                )
+                val selection = "${MediaStore.Video.Media.SIZE} > 0"
+                val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} DESC"
+
+                try {
+                    contentResolver.query(
+                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                        projection,
+                        selection,
+                        null,
+                        sortOrder
+                    )?.use { cursor ->
+                        val idCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                        val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+                        val durCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+                        val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+                        val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
+                        val bucketCol = cursor.getColumnIndex(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)
+                        val widthCol = cursor.getColumnIndex(MediaStore.Video.Media.WIDTH)
+                        val heightCol = cursor.getColumnIndex(MediaStore.Video.Media.HEIGHT)
+
+                        while (cursor.moveToNext()) {
+                            val id = cursor.getLong(idCol)
+                            val title = cursor.getString(nameCol) ?: continue
+                            val duration = cursor.getLong(durCol)
+                            val size = cursor.getLong(sizeCol)
+                            val path = cursor.getString(dataCol) ?: ""
+                            val width = if (widthCol != -1) cursor.getInt(widthCol) else 0
+                            val height = if (heightCol != -1) cursor.getInt(heightCol) else 0
+
+                            if (path.isNotEmpty() && !File(path).exists()) continue
+
+                            val bucketName = if (bucketCol != -1) cursor.getString(bucketCol) else null
+                            val folderName = when {
+                                !bucketName.isNullOrBlank() -> bucketName
+                                path.isNotEmpty() -> File(path).parentFile?.name ?: "Videos"
+                                else -> "Videos"
+                            }
+
+                            val contentUri = ContentUris.withAppendedId(
+                                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                                id
+                            )
+                            list.add(
+                                VideoItem(
+                                    id = id,
+                                    title = title,
+                                    uri = contentUri,
+                                    duration = duration,
+                                    size = size,
+                                    folderName = folderName,
+                                    width = width,
+                                    height = height,
+                                    path = path
+                                )
+                            )
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                val folders = list
+                    .groupBy { it.folderName }
+                    .filter { (_, videos) -> videos.isNotEmpty() }
+                    .map { (folderName, videos) -> VideoFolder(folderName, videos) }
+                    .sortedByDescending { it.videos.size }
+
+                Pair(list, folders)
             }
-        }
 
-        binding.swipeRefresh.isRefreshing = false
-        allVideosFlat = videoList
+            if (isFinishing || isDestroyed) return@launch
+            binding.swipeRefresh.isRefreshing = false
+            allVideosFlat = videoList
+            videoFoldersOnly = groupedFolders
 
-        videoFoldersOnly = videoList
-            .groupBy { it.folderName }
-            .filter { (_, videos) -> videos.isNotEmpty() }
-            .map { (folderName, videos) -> VideoFolder(folderName, videos) }
-            .sortedByDescending { it.videos.size }
-
-        if (videoFoldersOnly.isEmpty()) {
-            showEmptyState(getString(R.string.no_videos_found), showButton = false)
-        } else {
-            binding.emptyLayout.visibility = View.GONE
-            binding.recyclerView.visibility = View.VISIBLE
-            if (isSearchActive) {
-                filterVideosByQuery(binding.etSearchVideos.text.toString())
-            } else if (isShowingFolderVideos && currentOpenedFolder != null) {
-                val updated = videoFoldersOnly.find { it.name == currentOpenedFolder?.name }
-                if (updated != null) {
-                    currentOpenedFolder = updated
-                    binding.tvToolbarTitle.text = "${updated.name} (${updated.videos.size})"
-                    adapter.submitVideos(updated.videos)
+            if (videoFoldersOnly.isEmpty()) {
+                showEmptyState(getString(R.string.no_videos_found), showButton = false)
+            } else {
+                binding.emptyLayout.visibility = View.GONE
+                binding.recyclerView.visibility = View.VISIBLE
+                if (isSearchActive) {
+                    filterVideosByQuery(binding.etSearchVideos.text.toString())
+                } else if (isShowingFolderVideos && currentOpenedFolder != null) {
+                    val updated = videoFoldersOnly.find { it.name == currentOpenedFolder?.name }
+                    if (updated != null) {
+                        currentOpenedFolder = updated
+                        binding.tvToolbarTitle.text = "${updated.name} (${updated.videos.size})"
+                        adapter.submitVideos(updated.videos)
+                    } else {
+                        showFoldersList()
+                    }
                 } else {
                     showFoldersList()
                 }
-            } else {
-                showFoldersList()
             }
         }
     }

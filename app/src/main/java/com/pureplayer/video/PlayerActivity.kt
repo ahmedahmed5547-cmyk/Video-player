@@ -7,9 +7,8 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
-import android.widget.RadioButton
-import android.widget.RadioGroup
-import android.widget.ScrollView
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
@@ -22,20 +21,16 @@ import android.util.Rational
 import android.util.TypedValue
 import android.view.GestureDetector
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowManager
-import android.webkit.DownloadListener
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.ProgressBar
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
@@ -53,8 +48,6 @@ import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -69,6 +62,9 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var subtitleScaleDetector: ScaleGestureDetector
 
     private var activePfd: ParcelFileDescriptor? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private var wasPlayingBeforeFocusLoss = false
+    private var viewsAttached = true
 
     private val handler = Handler(Looper.getMainLooper())
     private var isLocked = false
@@ -82,6 +78,8 @@ class PlayerActivity : AppCompatActivity() {
     private var currentVideoTitle = "Video"
     private var pendingStartPositionMs = 0L
     private var hasAppliedInitialSeek = false
+    private var externalUserAgent: String? = null
+    private var externalHttpReferer: String? = null
 
     // External Custom Draggable Subtitles & Sync Offset (100ms precision)
     private var externalSubtitleCues = listOf<SubtitleCue>()
@@ -111,6 +109,85 @@ class PlayerActivity : AppCompatActivity() {
     )
     private var currentScaleIndex = 0
 
+    private fun isPlayerReady(): Boolean {
+        return ::libVLC.isInitialized && ::mediaPlayer.isInitialized && !mediaPlayer.isReleased
+    }
+
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        if (!isPlayerReady()) return@OnAudioFocusChangeListener
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                wasPlayingBeforeFocusLoss = false
+                if (mediaPlayer.isPlaying) {
+                    saveCurrentPositionNow()
+                    mediaPlayer.pause()
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    binding.btnPlayPause.setImageResource(android.R.drawable.ic_media_play)
+                }
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                if (mediaPlayer.isPlaying) {
+                    wasPlayingBeforeFocusLoss = true
+                    saveCurrentPositionNow()
+                    mediaPlayer.pause()
+                    binding.btnPlayPause.setImageResource(android.R.drawable.ic_media_play)
+                }
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                try {
+                    mediaPlayer.volume = 30
+                } catch (_: Exception) {}
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                try {
+                    mediaPlayer.volume = 100
+                    if (wasPlayingBeforeFocusLoss && !mediaPlayer.isPlaying) {
+                        wasPlayingBeforeFocusLoss = false
+                        mediaPlayer.play()
+                        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        binding.btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    private fun requestAudioFocusSafely() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val attrs = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+                    .build()
+                val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(attrs)
+                    .setAcceptsDelayedFocusGain(true)
+                    .setOnAudioFocusChangeListener(audioFocusChangeListener, handler)
+                    .build()
+                audioFocusRequest = req
+                audioManager.requestAudioFocus(req)
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager.requestAudioFocus(
+                    audioFocusChangeListener,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN
+                )
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun abandonAudioFocusSafely() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager.abandonAudioFocus(audioFocusChangeListener)
+            }
+        } catch (_: Exception) {}
+    }
+
     private val subtitlePickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -118,29 +195,33 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private val sleepTimerRunnable = Runnable {
-        if (mediaPlayer.isPlaying) {
+        if (isPlayerReady() && mediaPlayer.isPlaying) {
             saveCurrentPositionNow()
             mediaPlayer.pause()
+            abandonAudioFocusSafely()
             showToastIndicator(getString(R.string.pro_sleep_30))
         }
     }
 
     private val updateProgressRunnable = object : Runnable {
         override fun run() {
-            if (mediaPlayer.isPlaying && !isUserSeeking) {
-                val length = mediaPlayer.length
-                val time = mediaPlayer.time
-                if (length > 0) {
-                    val progress = ((time.toDouble() / length.toDouble()) * 1000).toInt()
-                    binding.seekBar.progress = progress
-                    binding.tvCurrentTime.text = formatTime(time)
-                    binding.tvTotalTime.text = formatTime(length)
-                    currentVideoUri?.let { uri ->
-                        PlaybackStore.saveProgress(this@PlayerActivity, uri, currentVideoTitle, time, length)
+            if (!isPlayerReady()) return
+            try {
+                if (mediaPlayer.isPlaying && !isUserSeeking) {
+                    val length = mediaPlayer.length
+                    val time = mediaPlayer.time
+                    if (length > 0) {
+                        val progress = ((time.toDouble() / length.toDouble()) * 1000).toInt()
+                        binding.seekBar.progress = progress
+                        binding.tvCurrentTime.text = formatTime(time)
+                        binding.tvTotalTime.text = formatTime(length)
+                        currentVideoUri?.let { uri ->
+                            PlaybackStore.saveProgress(this@PlayerActivity, uri, currentVideoTitle, time, length)
+                        }
                     }
+                    updateDraggableSubtitleText(time)
                 }
-                updateDraggableSubtitleText(time)
-            }
+            } catch (_: Exception) {}
             handler.postDelayed(this, 200)
         }
     }
@@ -164,10 +245,7 @@ class PlayerActivity : AppCompatActivity() {
         requestedOrientation = orientationModes[currentOrientationIndex]
         binding.btnOrientation.text = getOrientationLabel(currentOrientationIndex)
 
-        currentVideoUri = intent.data
-        currentVideoTitle = intent.getStringExtra("VIDEO_TITLE") ?: currentVideoUri?.lastPathSegment ?: "Video"
-        pendingStartPositionMs = intent.getLongExtra("START_POSITION_MS", 0L)
-        binding.tvVideoTitle.text = currentVideoTitle
+        extractIntentDataAndConfigure(intent)
 
         // Restore per-video subtitle sync offset and cached subtitle if available
         currentVideoUri?.let { uri ->
@@ -214,10 +292,13 @@ class PlayerActivity : AppCompatActivity() {
         libVLC = LibVLC(this, options)
         mediaPlayer = MediaPlayer(libVLC)
         mediaPlayer.attachViews(binding.vlcVideoLayout, null, true, false)
+        viewsAttached = true
 
         mediaPlayer.setEventListener { event ->
+            if (!isPlayerReady()) return@setEventListener
             when (event.type) {
                 MediaPlayer.Event.Playing -> {
+                    binding.playerLoadingBar.visibility = View.GONE
                     binding.btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
                     if (externalSubtitleCues.isNotEmpty()) {
                         mediaPlayer.spuTrack = -1
@@ -230,24 +311,66 @@ class PlayerActivity : AppCompatActivity() {
                         }
                     }
                 }
-                MediaPlayer.Event.Paused -> {
+                MediaPlayer.Event.Paused, MediaPlayer.Event.Stopped, MediaPlayer.Event.EndReached -> {
                     binding.btnPlayPause.setImageResource(android.R.drawable.ic_media_play)
+                }
+                MediaPlayer.Event.EncounteredError -> {
+                    binding.playerLoadingBar.visibility = View.GONE
                 }
             }
         }
 
         val targetUri = currentVideoUri
-        if (targetUri != null) {
+        if (targetUri != null && isSafeExternalOrMediaUri(targetUri)) {
             binding.vlcVideoLayout.post {
                 restoreSubtitlePositionFromPercentage()
                 startVideoPlaybackSafely(targetUri)
             }
         } else {
             finish()
+            return
         }
 
         setupControls()
         setupTouchGestures()
+    }
+
+    /**
+     * Android Exported Activity Security Guard:
+     * Protects against malicious third-party intents attempting internal sandbox file theft
+     * (e.g., file:///data/data/com.pureplayer.video/...) or path traversal ("..").
+     */
+    private fun isSafeExternalOrMediaUri(uri: Uri): Boolean {
+        val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return false
+        val allowedSchemes = setOf("content", "file", "http", "https", "rtsp", "rtmp", "mms")
+        if (scheme !in allowedSchemes) return false
+
+        if (scheme == "file") {
+            val rawPath = uri.path ?: return false
+            if (rawPath.contains("..")) return false
+            try {
+                val canonicalTarget = File(rawPath).canonicalPath
+                val internalDataDir = applicationInfo.dataDir
+                val filesCanonical = filesDir.canonicalPath
+                val cacheCanonical = cacheDir.canonicalPath
+                if (canonicalTarget.startsWith(internalDataDir) ||
+                    canonicalTarget.startsWith(filesCanonical) ||
+                    canonicalTarget.startsWith(cacheCanonical) ||
+                    canonicalTarget.startsWith("/data/data/") ||
+                    canonicalTarget.startsWith("/data/user/")
+                ) {
+                    return false
+                }
+            } catch (_: Exception) {
+                return false
+            }
+        }
+        return true
+    }
+
+    private fun sanitizeHeaderValue(value: String?): String? {
+        if (value.isNullOrBlank()) return null
+        return value.replace("\r", "").replace("\n", "").trim().take(512)
     }
 
     private fun getOrientationLabel(index: Int): String {
@@ -268,12 +391,85 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        hasAppliedInitialSeek = false
+        extractIntentDataAndConfigure(intent)
+        val uri = currentVideoUri
+        if (uri != null && isSafeExternalOrMediaUri(uri)) {
+            startVideoPlaybackSafely(uri)
+        }
+    }
+
+    private fun extractIntentDataAndConfigure(incomingIntent: android.content.Intent) {
+        var resolvedUri: Uri? = incomingIntent.data
+
+        // Support ACTION_SEND ("Share link to Pure Video Player")
+        if (resolvedUri == null && incomingIntent.action == android.content.Intent.ACTION_SEND) {
+            val sharedText = incomingIntent.getStringExtra(android.content.Intent.EXTRA_TEXT)?.trim()
+            if (!sharedText.isNullOrEmpty()) {
+                val urlMatch = Regex("https?://\\S+").find(sharedText)
+                resolvedUri = Uri.parse(urlMatch?.value ?: sharedText)
+            } else {
+                @Suppress("DEPRECATION")
+                val streamUri = incomingIntent.getParcelableExtra<Uri>(android.content.Intent.EXTRA_STREAM)
+                resolvedUri = streamUri
+            }
+        }
+
+        currentVideoUri = resolvedUri
+
+        // Support internal title + MX Player / VLC standard "title" extra
+        currentVideoTitle = incomingIntent.getStringExtra("VIDEO_TITLE")
+            ?: incomingIntent.getStringExtra("title")
+            ?: incomingIntent.getStringExtra(android.content.Intent.EXTRA_TITLE)
+            ?: resolvedUri?.lastPathSegment
+            ?: "Video Stream"
+        binding.tvVideoTitle.text = currentVideoTitle
+
+        // Support internal START_POSITION_MS + MX Player standard "position" (Int or Long)
+        val mxPos = incomingIntent.getIntExtra("position", -1)
+        pendingStartPositionMs = if (mxPos > 0) {
+            mxPos.toLong()
+        } else {
+            incomingIntent.getLongExtra("START_POSITION_MS", 0L)
+        }
+
+        // Extract and sanitize optional HTTP headers passed by streaming platforms
+        externalUserAgent = sanitizeHeaderValue(incomingIntent.getStringExtra("user-agent"))
+        externalHttpReferer = sanitizeHeaderValue(incomingIntent.getStringExtra("referer"))
+        val headersArray = incomingIntent.getStringArrayExtra("headers")
+        if (headersArray != null && headersArray.size >= 2) {
+            var i = 0
+            while (i + 1 < headersArray.size) {
+                val k = headersArray[i].trim().lowercase(Locale.ROOT)
+                val v = sanitizeHeaderValue(headersArray[i + 1])
+                if (k == "user-agent") externalUserAgent = v
+                if (k == "referer" || k == "referrer") externalHttpReferer = v
+                i += 2
+            }
+        }
+
+        // Support external subtitles passed via MX Player "subs" Parcelable[] extra
+        @Suppress("DEPRECATION")
+        val subsExtra = incomingIntent.getParcelableArrayExtra("subs")
+        if (!subsExtra.isNullOrEmpty()) {
+            val firstSubUri = subsExtra.firstOrNull() as? Uri
+            if (firstSubUri != null && isSafeExternalOrMediaUri(firstSubUri)) {
+                loadExternalSubtitleUri(firstSubUri)
+            }
+        }
+    }
+
     private fun startVideoPlaybackSafely(uri: Uri) {
+        if (!isPlayerReady()) return
         try {
             activePfd?.close()
             activePfd = null
 
-            val media = if (uri.scheme == "content") {
+            val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: ""
+            val media = if (scheme == "content") {
                 val pfd = contentResolver.openFileDescriptor(uri, "r")
                 activePfd = pfd
                 if (pfd != null) {
@@ -283,6 +479,18 @@ class PlayerActivity : AppCompatActivity() {
                 }
             } else {
                 Media(libVLC, uri)
+            }
+
+            // If playing an online stream from an external platform (http/https/rtsp/rtmp), apply network caching & headers
+            if (scheme.startsWith("http") || scheme == "rtsp" || scheme == "rtmp" || scheme == "mms") {
+                binding.playerLoadingBar.visibility = View.VISIBLE
+                media.addOption(":network-caching=2500")
+                media.addOption(":http-reconnect")
+                val ua = externalUserAgent ?: "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+                media.addOption(":http-user-agent=$ua")
+                if (!externalHttpReferer.isNullOrEmpty()) {
+                    media.addOption(":http-referrer=$externalHttpReferer")
+                }
             }
 
             media.setHWDecoderEnabled(true, false)
@@ -301,6 +509,7 @@ class PlayerActivity : AppCompatActivity() {
             mediaPlayer.attachViews(binding.vlcVideoLayout, null, true, false)
             viewsAttached = true
         }
+        requestAudioFocusSafely()
         mediaPlayer.play()
         mediaPlayer.videoScale = scaleTypes[currentScaleIndex]
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -310,9 +519,16 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun loadExternalSubtitleUri(uri: Uri) {
+        if (!isSafeExternalOrMediaUri(uri)) return
         lifecycleScope.launch {
             val bytes = withContext(Dispatchers.IO) {
-                contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                try {
+                    contentResolver.openInputStream(uri)?.use {
+                        SubtitleSearchEngine.readBytesBounded(it, 8 * 1024 * 1024)
+                    }
+                } catch (_: Exception) {
+                    null
+                }
             }
             if (bytes != null && bytes.isNotEmpty()) {
                 val cues = withContext(Dispatchers.Default) {
@@ -333,7 +549,7 @@ class PlayerActivity : AppCompatActivity() {
                 } else {
                     showToastIndicator(getString(R.string.sub_err_corrupted))
                 }
-            } else {
+            } else if (isPlayerReady()) {
                 mediaPlayer.addSlave(0, uri, true)
             }
         }
@@ -341,10 +557,14 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun applyLoadedSubtitleCues(cues: List<SubtitleCue>) {
         externalSubtitleCues = cues
-        mediaPlayer.spuTrack = -1
+        if (isPlayerReady()) {
+            mediaPlayer.spuTrack = -1
+        }
         binding.tvDraggableSubtitle.visibility = View.VISIBLE
         restoreSubtitlePositionFromPercentage()
-        updateDraggableSubtitleText(mediaPlayer.time)
+        if (isPlayerReady()) {
+            updateDraggableSubtitleText(mediaPlayer.time)
+        }
     }
 
     /**
@@ -378,14 +598,6 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Requirement 1 & 5:
-     * - Touching the subtitle text makes it immediately draggable (no re-layout on move; uses translationX & translationY).
-     * - Stays exactly where the user releases their finger and NEVER snaps back.
-     * - Clamped strictly inside video bounds so it cannot go off-screen.
-     * - Saved as a percentage of the container size (works across fullscreen, rotation, and any screen size).
-     * - Supports Pinch-to-Zoom directly on the subtitle to resize font smoothly!
-     */
     private fun setupFluidDraggableAndPinchSubtitle() {
         subtitleScaleDetector = ScaleGestureDetector(
             this,
@@ -422,7 +634,10 @@ class PlayerActivity : AppCompatActivity() {
                     dragStartRawY = event.rawY
                     dragStartTransX = view.translationX
                     dragStartTransY = view.translationY
-                    view.background = GradientDrawable().apply { cornerRadius = 18f; setColor(Color.parseColor("#CC0284C7")) }
+                    view.background = GradientDrawable().apply {
+                        cornerRadius = 18f
+                        setColor(Color.parseColor("#CC0284C7"))
+                    }
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -541,12 +756,15 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun saveCurrentPositionNow() {
-        val uri = currentVideoUri ?: return
-        val time = mediaPlayer.time
-        val length = mediaPlayer.length
-        if (time > 0L) {
-            PlaybackStore.saveProgress(this, uri, currentVideoTitle, time, length)
-        }
+        if (!isPlayerReady()) return
+        try {
+            val uri = currentVideoUri ?: return
+            val time = mediaPlayer.time
+            val length = mediaPlayer.length
+            if (time > 0L) {
+                PlaybackStore.saveProgress(this, uri, currentVideoTitle, time, length)
+            }
+        } catch (_: Exception) {}
     }
 
     private fun adjustSubtitleSyncBy(deltaMs: Long) {
@@ -554,8 +772,41 @@ class PlayerActivity : AppCompatActivity() {
         currentVideoUri?.let { uri ->
             PlaybackStore.saveVideoSubtitleSyncMs(this, uri, subtitleSyncOffsetMs)
         }
-        updateDraggableSubtitleText(mediaPlayer.time)
+        if (isPlayerReady()) {
+            updateDraggableSubtitleText(mediaPlayer.time)
+        }
         showToastIndicator(getString(R.string.sub_sync_offset_format, subtitleSyncOffsetMs))
+    }
+
+    /**
+     * Hardware & Bluetooth Headset Media Button Harmony (Play/Pause/Seek via Earbuds/Keyboard).
+     */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (isPlayerReady()) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_HEADSETHOOK, KeyEvent.KEYCODE_SPACE -> {
+                    binding.btnPlayPause.performClick()
+                    return true
+                }
+                KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                    if (!mediaPlayer.isPlaying) binding.btnPlayPause.performClick()
+                    return true
+                }
+                KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                    if (mediaPlayer.isPlaying) binding.btnPlayPause.performClick()
+                    return true
+                }
+                KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    binding.btnForward.performClick()
+                    return true
+                }
+                KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    binding.btnRewind.performClick()
+                    return true
+                }
+            }
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     private fun setupControls() {
@@ -565,12 +816,15 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         binding.btnPlayPause.setOnClickListener {
+            if (!isPlayerReady()) return@setOnClickListener
             if (mediaPlayer.isPlaying) {
                 saveCurrentPositionNow()
                 mediaPlayer.pause()
+                abandonAudioFocusSafely()
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 binding.btnPlayPause.setImageResource(android.R.drawable.ic_media_play)
             } else {
+                requestAudioFocusSafely()
                 mediaPlayer.play()
                 window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 binding.btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
@@ -620,6 +874,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         binding.btnRewind.setOnClickListener {
+            if (!isPlayerReady()) return@setOnClickListener
             val newTime = (mediaPlayer.time - 15_000L).coerceAtLeast(0L)
             mediaPlayer.time = newTime
             saveCurrentPositionNow()
@@ -628,6 +883,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         binding.btnForward.setOnClickListener {
+            if (!isPlayerReady()) return@setOnClickListener
             val length = mediaPlayer.length
             val newTime = (mediaPlayer.time + 15_000L).coerceAtMost(if (length > 0) length else Long.MAX_VALUE)
             mediaPlayer.time = newTime
@@ -664,6 +920,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         binding.btnAspectRatio.setOnClickListener {
+            if (!isPlayerReady()) return@setOnClickListener
             currentScaleIndex = (currentScaleIndex + 1) % scaleTypes.size
             mediaPlayer.videoScale = scaleTypes[currentScaleIndex]
             showToastIndicator(getScaleLabel(currentScaleIndex))
@@ -688,7 +945,7 @@ class PlayerActivity : AppCompatActivity() {
 
         binding.seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser && mediaPlayer.length > 0) {
+                if (fromUser && isPlayerReady() && mediaPlayer.length > 0) {
                     val targetTime = (progress / 1000.0 * mediaPlayer.length).toLong()
                     binding.tvCurrentTime.text = formatTime(targetTime)
                     updateDraggableSubtitleText(targetTime)
@@ -702,7 +959,7 @@ class PlayerActivity : AppCompatActivity() {
 
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
                 val progress = seekBar?.progress ?: 0
-                if (mediaPlayer.length > 0) {
+                if (isPlayerReady() && mediaPlayer.length > 0) {
                     mediaPlayer.time = (progress / 1000.0 * mediaPlayer.length).toLong()
                     saveCurrentPositionNow()
                 }
@@ -730,7 +987,7 @@ class PlayerActivity : AppCompatActivity() {
             }
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                if (isLocked) return true
+                if (isLocked || !isPlayerReady()) return true
                 val screenWidth = binding.playerRoot.width
                 val length = mediaPlayer.length
                 when {
@@ -754,7 +1011,7 @@ class PlayerActivity : AppCompatActivity() {
             }
 
             override fun onLongPress(e: MotionEvent) {
-                if (isLocked || isDraggingSubtitle || isPinchingSubtitle) return
+                if (isLocked || isDraggingSubtitle || isPinchingSubtitle || !isPlayerReady()) return
                 if (mediaPlayer.isPlaying) {
                     isHoldSpeedActive = true
                     speedBeforeHold = currentSpeed
@@ -769,7 +1026,7 @@ class PlayerActivity : AppCompatActivity() {
                 distanceX: Float,
                 distanceY: Float
             ): Boolean {
-                if (isLocked || isDraggingSubtitle || isPinchingSubtitle || isHoldSpeedActive || e1 == null) return false
+                if (isLocked || isDraggingSubtitle || isPinchingSubtitle || isHoldSpeedActive || e1 == null || !isPlayerReady()) return false
 
                 val screenWidth = binding.playerRoot.width.toFloat().coerceAtLeast(1f)
                 val screenHeight = binding.playerRoot.height.toFloat().coerceAtLeast(1f)
@@ -801,7 +1058,7 @@ class PlayerActivity : AppCompatActivity() {
                 val curVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                 gestureVolumeAccumulator = if (maxVol > 0) curVol.toFloat() / maxVol.toFloat() else 0.5f
             } else if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
-                if (isHoldSpeedActive) {
+                if (isHoldSpeedActive && isPlayerReady()) {
                     isHoldSpeedActive = false
                     mediaPlayer.rate = speedBeforeHold
                     showToastIndicator(getString(R.string.toast_speed_normal, speedBeforeHold.toString()))
@@ -834,6 +1091,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showSubtitlesDialog() {
+        if (!isPlayerReady()) return
         val spuTracks = mediaPlayer.spuTracks ?: emptyArray()
         val items = mutableListOf<String>()
         val trackIds = mutableListOf<Int>()
@@ -889,21 +1147,18 @@ class PlayerActivity : AppCompatActivity() {
                     -995 -> {
                         externalSubtitleCues = emptyList()
                         binding.tvDraggableSubtitle.visibility = View.GONE
-                        mediaPlayer.spuTrack = -1
+                        if (isPlayerReady()) mediaPlayer.spuTrack = -1
                     }
                     else -> {
                         externalSubtitleCues = emptyList()
                         binding.tvDraggableSubtitle.visibility = View.GONE
-                        mediaPlayer.spuTrack = selectedId
+                        if (isPlayerReady()) mediaPlayer.spuTrack = selectedId
                     }
                 }
             }
             .show()
     }
 
-    /**
-     * MX Player-style custom title input that still searches and downloads 100% automatically in the background (no website!).
-     */
     private fun showCustomTitleAutoSearchDialog() {
         val defaultClean = currentVideoTitle
             .substringBeforeLast(".")
@@ -932,11 +1187,6 @@ class PlayerActivity : AppCompatActivity() {
             .show()
     }
 
-    /**
-     * Requirement 2: 100% Background Automatic Multi-Source Subtitle Search & Auto-Download (Zero Browser!).
-     * Searches OpenSubtitles-v3, OpenSubtitles-REST, Podnapisi, YIFY, SubDL, and Addic7ed in parallel,
-     * downloads and extracts the best match automatically in the background, and activates it on the video!
-     */
     private fun runAutomaticMultiSourceSubtitleSearch(customQuery: String? = null) {
         val uri = currentVideoUri ?: return
         binding.playerLoadingBar.visibility = View.VISIBLE
@@ -949,6 +1199,7 @@ class PlayerActivity : AppCompatActivity() {
                 rawTitle = currentVideoTitle,
                 customSearchQuery = customQuery
             )
+            if (isFinishing || isDestroyed) return@launch
             binding.playerLoadingBar.visibility = View.GONE
 
             when (outcome) {
@@ -972,7 +1223,6 @@ class PlayerActivity : AppCompatActivity() {
                         SubtitleSearchOutcome.ErrorType.NOT_FOUND -> R.string.sub_err_not_found
                     }
                     showToastIndicator(getString(msgRes))
-                    // If automatic filename didn't match (e.g. file is named VID_001.mp4), let user type the movie name for automatic search!
                     AlertDialog.Builder(this@PlayerActivity)
                         .setTitle(getString(R.string.subtitles))
                         .setMessage(getString(msgRes))
@@ -1007,6 +1257,7 @@ class PlayerActivity : AppCompatActivity() {
                 binding.playerLoadingBar.visibility = View.VISIBLE
                 lifecycleScope.launch {
                     val pair = SubtitleSearchEngine.downloadAndCacheSubtitle(this@PlayerActivity, chosen)
+                    if (isFinishing || isDestroyed) return@launch
                     binding.playerLoadingBar.visibility = View.GONE
                     if (pair != null && pair.second.isNotEmpty()) {
                         currentVideoUri?.let { vUri ->
@@ -1099,7 +1350,6 @@ class PlayerActivity : AppCompatActivity() {
                 if (currentOutline > 0f) 2f else 0f,
                 Color.argb(shadowAlpha, 0, 0, 0)
             )
-            // Apply live to the actual subtitle on the video behind the dialog!
             applyThemeAndSubtitleStyle()
             if (binding.tvDraggableSubtitle.visibility != View.VISIBLE) {
                 binding.tvDraggableSubtitle.visibility = View.VISIBLE
@@ -1232,136 +1482,6 @@ class PlayerActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showInAppSubtitleDownloaderDialog() {
-        val cleanQuery = SubtitleSearchEngine.buildSearchRequest(
-            this,
-            currentVideoUri ?: Uri.EMPTY,
-            currentVideoTitle,
-            PlaybackStore.getPreferredSubtitleLanguages(this)
-        ).cleanQuery
-
-        val rootLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#0F172A"))
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        }
-
-        val searchRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(16, 12, 16, 12)
-        }
-
-        val etQuery = EditText(this).apply {
-            setText(cleanQuery)
-            setTextColor(Color.WHITE)
-            setHintTextColor(Color.GRAY)
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        }
-
-        val btnSearchSubdl = Button(this).apply { text = "SubDL" }
-        val btnSearchOpenSub = Button(this).apply { text = "OpenSub" }
-
-        searchRow.addView(etQuery)
-        searchRow.addView(btnSearchSubdl)
-        searchRow.addView(btnSearchOpenSub)
-
-        val progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            isIndeterminate = true
-            visibility = View.GONE
-        }
-
-        val webView = WebView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                (resources.displayMetrics.heightPixels * 0.65).toInt()
-            )
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.userAgentString = "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
-        }
-
-        rootLayout.addView(searchRow)
-        rootLayout.addView(progressBar)
-        rootLayout.addView(webView)
-
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(getString(R.string.sub_menu_web_search))
-            .setView(rootLayout)
-            .setNeutralButton(getString(R.string.sub_menu_load_local)) { _, _ ->
-                subtitlePickerLauncher.launch(arrayOf("*/*"))
-            }
-            .setNegativeButton(getString(R.string.close), null)
-            .create()
-
-        webView.webChromeClient = WebChromeClient()
-        webView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                val url = request?.url?.toString() ?: return false
-                if (url.endsWith(".srt", ignoreCase = true) || url.endsWith(".vtt", ignoreCase = true) || url.endsWith(".ass", ignoreCase = true) || url.endsWith(".zip", ignoreCase = true) || url.contains("dl.subdl.com") || url.contains("/subtitleserve/")) {
-                    downloadAndApplySubtitleUrl(url, dialog)
-                    return true
-                }
-                return false
-            }
-        }
-
-        webView.setDownloadListener(DownloadListener { url, _, _, _, _ ->
-            if (!url.isNullOrBlank()) {
-                downloadAndApplySubtitleUrl(url, dialog)
-            }
-        })
-
-        btnSearchSubdl.setOnClickListener {
-            val q = Uri.encode(etQuery.text.toString().trim())
-            progressBar.visibility = View.VISIBLE
-            webView.loadUrl("https://subdl.com/search?query=$q")
-        }
-
-        btnSearchOpenSub.setOnClickListener {
-            val q = Uri.encode(etQuery.text.toString().trim())
-            val firstLang = PlaybackStore.getPreferredSubtitleLanguages(this).firstOrNull() ?: "ar"
-            val iso3 = if (firstLang == "ar") "ara" else "eng"
-            progressBar.visibility = View.VISIBLE
-            webView.loadUrl("https://www.opensubtitles.org/$firstLang/search2/sublanguageid-$iso3/moviename-$q")
-        }
-
-        dialog.show()
-        val initialQ = Uri.encode(cleanQuery)
-        webView.loadUrl("https://subdl.com/search?query=$initialQ")
-    }
-
-    private fun downloadAndApplySubtitleUrl(downloadUrl: String, dialog: AlertDialog) {
-        binding.playerLoadingBar.visibility = View.VISIBLE
-        lifecycleScope.launch {
-            val dummyItem = SubtitleResultItem(
-                id = "web_${downloadUrl.hashCode()}",
-                title = currentVideoTitle,
-                providerName = "Web",
-                languageCode = PlaybackStore.getPreferredSubtitleLanguages(this@PlayerActivity).firstOrNull() ?: "ar",
-                downloadUrl = downloadUrl,
-                formatExt = "srt",
-                matchQuality = MatchQuality.EXACT_TITLE,
-                rating = 10.0,
-                downloadCount = 100
-            )
-            val pair = SubtitleSearchEngine.downloadAndCacheSubtitle(this@PlayerActivity, dummyItem)
-            binding.playerLoadingBar.visibility = View.GONE
-            if (pair != null && pair.second.isNotEmpty()) {
-                currentVideoUri?.let { vUri ->
-                    PlaybackStore.saveVideoSubtitleCachePath(this@PlayerActivity, vUri, pair.first.absolutePath)
-                }
-                applyLoadedSubtitleCues(pair.second)
-                showToastIndicator(getString(R.string.sub_loaded_count_format, pair.second.size))
-                dialog.dismiss()
-            } else {
-                showToastIndicator(getString(R.string.sub_err_corrupted))
-            }
-        }
-    }
-
     private fun showMoreProOptionsDialog() {
         val proOptions = arrayOf(
             getString(R.string.pro_sync_earlier),
@@ -1440,6 +1560,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showAudioTracksDialog() {
+        if (!isPlayerReady()) return
         val audioTracks = mediaPlayer.audioTracks ?: emptyArray()
         if (audioTracks.isEmpty()) {
             showToastIndicator(getString(R.string.toast_no_extra_audio))
@@ -1449,19 +1570,24 @@ class PlayerActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.audio_tracks))
             .setItems(names) { _, which ->
-                mediaPlayer.audioTrack = audioTracks[which].id
+                if (isPlayerReady()) {
+                    mediaPlayer.audioTrack = audioTracks[which].id
+                }
             }
             .show()
     }
 
     private fun showSpeedDialog() {
+        if (!isPlayerReady()) return
         val speeds = floatArrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
         val labels = speeds.map { "${it}x" }.toTypedArray()
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.playback_speed))
             .setItems(labels) { _, which ->
                 currentSpeed = speeds[which]
-                mediaPlayer.rate = currentSpeed
+                if (isPlayerReady()) {
+                    mediaPlayer.rate = currentSpeed
+                }
                 binding.btnSpeed.text = "${currentSpeed}x"
             }
             .show()
@@ -1558,11 +1684,9 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    private var viewsAttached = true
-
     override fun onStart() {
         super.onStart()
-        if (!viewsAttached) {
+        if (isPlayerReady() && !viewsAttached) {
             mediaPlayer.attachViews(binding.vlcVideoLayout, null, true, false)
             viewsAttached = true
             mediaPlayer.videoScale = scaleTypes[currentScaleIndex]
@@ -1574,12 +1698,14 @@ class PlayerActivity : AppCompatActivity() {
         hideSystemBars()
         applyThemeAndSubtitleStyle()
         binding.vlcVideoLayout.post {
-            if (!viewsAttached) {
-                mediaPlayer.attachViews(binding.vlcVideoLayout, null, true, false)
-                viewsAttached = true
+            if (isPlayerReady()) {
+                if (!viewsAttached) {
+                    mediaPlayer.attachViews(binding.vlcVideoLayout, null, true, false)
+                    viewsAttached = true
+                }
+                mediaPlayer.updateViewpoint(0f, 0f, 0f, 0f, false)
+                mediaPlayer.videoScale = scaleTypes[currentScaleIndex]
             }
-            mediaPlayer.updateViewpoint(0f, 0f, 0f, 0f, false)
-            mediaPlayer.videoScale = scaleTypes[currentScaleIndex]
         }
     }
 
@@ -1587,8 +1713,9 @@ class PlayerActivity : AppCompatActivity() {
         super.onPause()
         saveCurrentPositionNow()
         val inPip = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) isInPictureInPictureMode else false
-        if (!inPip && mediaPlayer.isPlaying) {
+        if (!inPip && isPlayerReady() && mediaPlayer.isPlaying) {
             mediaPlayer.pause()
+            abandonAudioFocusSafely()
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
@@ -1597,7 +1724,7 @@ class PlayerActivity : AppCompatActivity() {
         super.onStop()
         saveCurrentPositionNow()
         val inPip = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) isInPictureInPictureMode else false
-        if (!inPip && viewsAttached) {
+        if (!inPip && isPlayerReady() && viewsAttached) {
             mediaPlayer.detachViews()
             viewsAttached = false
         }
@@ -1607,12 +1734,17 @@ class PlayerActivity : AppCompatActivity() {
         saveCurrentPositionNow()
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
-        if (viewsAttached) {
-            mediaPlayer.detachViews()
-            viewsAttached = false
+        abandonAudioFocusSafely()
+        if (isPlayerReady()) {
+            try {
+                if (viewsAttached) {
+                    mediaPlayer.detachViews()
+                    viewsAttached = false
+                }
+                mediaPlayer.release()
+                libVLC.release()
+            } catch (_: Exception) {}
         }
-        mediaPlayer.release()
-        libVLC.release()
         try {
             activePfd?.close()
         } catch (_: Exception) {}
