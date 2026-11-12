@@ -19,8 +19,8 @@ android {
         applicationId = "com.pureplayer.video"
         minSdk = 24
         targetSdk = 34
-        versionCode = 30
-        versionName = "30.0.0-IPTVAndNavigation"
+        versionCode = 31
+        versionName = "31.0.0-FinalEdition"
 
         resourceConfigurations += listOf("en", "ar")
 

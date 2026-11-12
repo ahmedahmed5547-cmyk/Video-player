@@ -288,4 +288,13 @@
     <string name="iptv_err_invalid_url">يرجى إدخال رابط يبدأ بـ http:// أو https://</string>
     <string name="iptv_err_missing_fields">يرجى إدخال رابط السيرفر واسم المستخدم وكلمة المرور</string>
     <string name="iptv_err_no_episodes">لم يتم العثور على حلقات لهذا المسلسل</string>
+    <string name="last_in_folder_badge">👁 آخر مشغّل</string>
+    <string name="resume_dont_ask_again_checkbox">عدم العرض مرة أخرى (تذكر اختياري دائماً)</string>
+    <string name="resume_pref_saved_toast">✅ تم حفظ اختيارك! يمكنك تغييره في أي وقت من الإعدادات.</string>
+    <string name="setting_resume_behavior_title">خيار استئناف الفيديو أو البدء من الأول</string>
+    <string name="resume_mode_ask_always">السؤال في كل مرة (إظهار نافذة الاستئناف أو البدء من الأول)</string>
+    <string name="resume_mode_always_resume">الاستئناف تلقائياً دائماً من حيث توقفت دون سؤال</string>
+    <string name="resume_mode_always_restart">البدء من الأول (00:00) تلقائياً دائماً دون سؤال</string>
+    <string name="settings_cat_developer">👨‍💻 مطور التطبيق ومعلومات الإصدار</string>
+    <string name="developer_credit_subtitle">مطور التطبيق • النسخة النهائية الاحترافية (v%1$d)</string>
 </resources>

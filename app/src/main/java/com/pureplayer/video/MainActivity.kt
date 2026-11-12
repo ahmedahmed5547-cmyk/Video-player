@@ -203,6 +203,7 @@ class MainActivity : AppCompatActivity() {
     private var isVaultSessionUnlocked = false
     private var isShowingFolderVideos = false
     private var currentOpenedFolder: VideoFolder? = null
+    private var currentOpenedFolderName: String? = null
     private var isSearchActive = false
     private var pendingDeleteVideo: VideoItem? = null
     private var loadMediaJob: Job? = null
@@ -287,6 +288,20 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState != null) {
+            currentMainTab = savedInstanceState.getInt("STATE_MAIN_TAB", 0)
+            isInVaultTab = (currentMainTab == 1)
+            isInIptvTab = (currentMainTab == 2)
+            isVaultSessionUnlocked = savedInstanceState.getBoolean("STATE_VAULT_UNLOCKED", false)
+            isShowingFolderVideos = savedInstanceState.getBoolean("STATE_SHOWING_FOLDER", false)
+            currentOpenedFolderName = savedInstanceState.getString("STATE_OPENED_FOLDER_NAME", null)
+            iptvNavLevel = savedInstanceState.getInt("STATE_IPTV_LEVEL", 0)
+            activeIptvCategoryId = savedInstanceState.getString("STATE_IPTV_CAT_ID", null)
+            activeIptvCategoryName = savedInstanceState.getString("STATE_IPTV_CAT_NAME", "") ?: ""
+            savedInstanceState.getString("STATE_IPTV_CONTENT_TYPE", null)?.let { cName ->
+                activeIptvContentType = runCatching { IptvContentType.valueOf(cName) }.getOrNull()
+            }
+        }
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -297,11 +312,32 @@ class MainActivity : AppCompatActivity() {
         checkPermissionAndLoad()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt("STATE_MAIN_TAB", currentMainTab)
+        outState.putBoolean("STATE_VAULT_UNLOCKED", isVaultSessionUnlocked)
+        outState.putBoolean("STATE_SHOWING_FOLDER", isShowingFolderVideos)
+        outState.putString("STATE_OPENED_FOLDER_NAME", currentOpenedFolder?.name ?: currentOpenedFolderName)
+        outState.putInt("STATE_IPTV_LEVEL", iptvNavLevel)
+        outState.putString("STATE_IPTV_CAT_ID", activeIptvCategoryId)
+        outState.putString("STATE_IPTV_CAT_NAME", activeIptvCategoryName)
+        outState.putString("STATE_IPTV_CONTENT_TYPE", activeIptvContentType?.name)
+    }
+
     override fun onResume() {
         super.onResume()
         applyUserTheme()
-        if (hasVideoAccessPermission()) {
-            loadVideoFoldersOnly()
+        if (currentMainTab == 2) {
+            // In IPTV tab: keep exact category/season/episode list & scroll position intact!
+            adapter.notifyDataSetChanged()
+        } else if (hasVideoAccessPermission()) {
+            if (allDiscoveredVideos.isEmpty()) {
+                loadVideoFoldersOnly()
+            } else {
+                // Keep exact opened folder and RecyclerView scroll position intact when returning from PlayerActivity,
+                // while refreshing the dimmed "last played in folder" state and stopped-at timestamp!
+                adapter.notifyDataSetChanged()
+            }
         }
         updateResumeLastFab()
     }
@@ -797,6 +833,7 @@ class MainActivity : AppCompatActivity() {
     private fun openFolderNow(folder: VideoFolder) {
         isShowingFolderVideos = true
         currentOpenedFolder = folder
+        currentOpenedFolderName = folder.name
         binding.tvToolbarTitle.text = "${folder.name} (${folder.videos.size})"
         binding.btnBackFolder.visibility = View.VISIBLE
         adapter.submitVideos(folder.videos)
@@ -1881,31 +1918,240 @@ class MainActivity : AppCompatActivity() {
     private fun handleVideoSelection(uri: Uri, title: String) {
         val savedPositionMs = PlaybackStore.getSavedPosition(this, uri)
         if (savedPositionMs > 3_000L) {
-            val formattedTime = PlaybackStore.formatTime(savedPositionMs)
-            val items = listOf(
-                PremiumMenuItem(
-                    iconEmoji = "▶️",
-                    title = getString(R.string.resume_from_format, formattedTime),
-                    subtitle = title,
-                    isAccentHighlighted = true,
-                    onClick = { launchPlayer(uri, title, startPositionMs = savedPositionMs) }
-                ),
-                PremiumMenuItem(
-                    iconEmoji = "🔄",
-                    title = getString(R.string.start_from_beginning),
-                    subtitle = "00:00",
-                    onClick = { launchPlayer(uri, title, startPositionMs = 0L) }
-                )
-            )
-            showPremiumMenuDialog(
-                headerIcon = "⏱️",
-                title = getString(R.string.resume_dialog_title),
-                subtitle = formattedTime,
-                items = items
-            )
+            when (PlaybackStore.getResumeAskMode(this)) {
+                1 -> {
+                    // Always Resume automatically
+                    launchPlayer(uri, title, startPositionMs = savedPositionMs)
+                }
+                2 -> {
+                    // Always Start from Beginning automatically
+                    launchPlayer(uri, title, startPositionMs = 0L)
+                }
+                else -> {
+                    showResumeWithDontAskAgainDialog(uri, title, savedPositionMs)
+                }
+            }
         } else {
             launchPlayer(uri, title, startPositionMs = 0L)
         }
+    }
+
+    /**
+     * Premium Resume / Start-From-Beginning Dialog with a "Don't show again (Remember my choice)" CheckBox!
+     */
+    private fun showResumeWithDontAskAgainDialog(uri: Uri, title: String, savedPositionMs: Long) {
+        val accent = PlaybackStore.getAccentColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+        val formattedTime = PlaybackStore.formatTime(savedPositionMs)
+
+        val cardContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(16), dp(20), dp(20))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(28).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(95, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+
+        val topPill = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(44), dp(4)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(14)
+            }
+            background = GradientDrawable().apply {
+                cornerRadius = dp(4).toFloat()
+                setColor(accent)
+            }
+        }
+        cardContainer.addView(topPill)
+
+        val tvHeader = TextView(this).apply {
+            text = "⏱️  " + getString(R.string.resume_dialog_title)
+            setTextColor(Color.WHITE)
+            textSize = 17.5f
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        val tvSub = TextView(this).apply {
+            text = title
+            setTextColor(accent)
+            textSize = 12.5f
+            maxLines = 2
+            setPadding(0, dp(4), 0, dp(12))
+        }
+        cardContainer.addView(tvHeader)
+        cardContainer.addView(tvSub)
+
+        val cbDontAskAgain = CheckBox(this).apply {
+            text = getString(R.string.resume_dont_ask_again_checkbox)
+            setTextColor(Color.parseColor("#E2E8F0"))
+            textSize = 13.5f
+            buttonTintList = ColorStateList.valueOf(accent)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+        }
+
+        val dialog = AlertDialog.Builder(this).setView(cardContainer).create()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        fun buildChoiceCard(emoji: String, mainText: String, subText: String, highlight: Boolean, onPick: () -> Unit): View {
+            return LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(13), dp(14), dp(13))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dp(10)
+                }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dp(16).toFloat()
+                    setColor(bg)
+                    setStroke(
+                        dp(1),
+                        if (highlight) Color.argb(140, Color.red(accent), Color.green(accent), Color.blue(accent))
+                        else Color.parseColor("#22FFFFFF")
+                    )
+                }
+
+                val badge = TextView(this@MainActivity).apply {
+                    text = emoji
+                    textSize = 18f
+                    gravity = Gravity.CENTER
+                    layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(12) }
+                    background = GradientDrawable().apply {
+                        cornerRadius = dp(12).toFloat()
+                        setColor(Color.argb(34, Color.red(accent), Color.green(accent), Color.blue(accent)))
+                    }
+                }
+                val col = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                }
+                val t1 = TextView(this@MainActivity).apply {
+                    text = mainText
+                    setTextColor(Color.WHITE)
+                    textSize = 15f
+                    setTypeface(typeface, Typeface.BOLD)
+                }
+                val t2 = TextView(this@MainActivity).apply {
+                    text = subText
+                    setTextColor(if (highlight) accent else Color.parseColor("#94A3B8"))
+                    textSize = 12f
+                    setPadding(0, dp(2), 0, 0)
+                }
+                col.addView(t1)
+                col.addView(t2)
+                addView(badge)
+                addView(col)
+                setOnClickListener {
+                    dialog.dismiss()
+                    onPick()
+                }
+            }
+        }
+
+        // Option 1: Resume from saved position
+        cardContainer.addView(
+            buildChoiceCard(
+                emoji = "▶️",
+                mainText = getString(R.string.resume_from_format, formattedTime),
+                subText = getString(R.string.resume_mode_always_resume),
+                highlight = true
+            ) {
+                if (cbDontAskAgain.isChecked) {
+                    PlaybackStore.setResumeAskMode(this, 1)
+                    Toast.makeText(this, getString(R.string.resume_pref_saved_toast), Toast.LENGTH_SHORT).show()
+                }
+                launchPlayer(uri, title, startPositionMs = savedPositionMs)
+            }
+        )
+
+        // Option 2: Start from Beginning (00:00)
+        cardContainer.addView(
+            buildChoiceCard(
+                emoji = "🔄",
+                mainText = getString(R.string.start_from_beginning),
+                subText = "00:00",
+                highlight = false
+            ) {
+                if (cbDontAskAgain.isChecked) {
+                    PlaybackStore.setResumeAskMode(this, 2)
+                    Toast.makeText(this, getString(R.string.resume_pref_saved_toast), Toast.LENGTH_SHORT).show()
+                }
+                launchPlayer(uri, title, startPositionMs = 0L)
+            }
+        )
+
+        // Checkbox row: "Don't show again (Remember my choice)"
+        val cbContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(2), dp(8), dp(8))
+            addView(cbDontAskAgain)
+        }
+        cardContainer.addView(cbContainer)
+
+        val btnClose = TextView(this).apply {
+            text = getString(R.string.cancel)
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#CBD5E1"))
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, dp(11), 0, dp(11))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(Color.parseColor("#18FFFFFF"))
+            }
+            setOnClickListener { dialog.dismiss() }
+        }
+        cardContainer.addView(btnClose)
+        dialog.show()
+    }
+
+    private fun showResumeBehaviorSettingsDialog() {
+        val currentMode = PlaybackStore.getResumeAskMode(this)
+        val items = listOf(
+            PremiumMenuItem(
+                iconEmoji = "❓",
+                title = getString(R.string.resume_mode_ask_always),
+                subtitle = if (currentMode == 0) "✅ " + getString(R.string.active_mode_badge) else null,
+                isAccentHighlighted = (currentMode == 0),
+                onClick = {
+                    PlaybackStore.setResumeAskMode(this, 0)
+                    popSettingsBackStack()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "▶️",
+                title = getString(R.string.resume_mode_always_resume),
+                subtitle = if (currentMode == 1) "✅ " + getString(R.string.active_mode_badge) else null,
+                isAccentHighlighted = (currentMode == 1),
+                onClick = {
+                    PlaybackStore.setResumeAskMode(this, 1)
+                    popSettingsBackStack()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🔄",
+                title = getString(R.string.resume_mode_always_restart),
+                subtitle = if (currentMode == 2) "✅ " + getString(R.string.active_mode_badge) else null,
+                isAccentHighlighted = (currentMode == 2),
+                onClick = {
+                    PlaybackStore.setResumeAskMode(this, 2)
+                    popSettingsBackStack()
+                }
+            )
+        )
+        showPremiumMenuDialog(
+            headerIcon = "⏯️",
+            title = getString(R.string.setting_resume_behavior_title),
+            subtitle = null,
+            items = items
+        )
     }
 
     private fun attachFluidTouchAnimation(vararg views: View) {
@@ -2560,6 +2806,19 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this, getString(R.string.sub_position_reset_toast), Toast.LENGTH_SHORT).show()
                     }
                 ),
+                PremiumMenuItem(
+                    iconEmoji = "⏯️",
+                    title = getString(R.string.setting_resume_behavior_title),
+                    subtitle = when (PlaybackStore.getResumeAskMode(this)) {
+                        1 -> getString(R.string.resume_mode_always_resume)
+                        2 -> getString(R.string.resume_mode_always_restart)
+                        else -> getString(R.string.resume_mode_ask_always)
+                    },
+                    onClick = {
+                        pushSettingsBackStack { showProSettingsDialog(false) }
+                        showResumeBehaviorSettingsDialog()
+                    }
+                ),
                 // Category 4: Updates & GitHub Auto-Download
                 PremiumMenuItem(
                     iconEmoji = "🔄",
@@ -2570,6 +2829,18 @@ class MainActivity : AppCompatActivity() {
                     onClick = {
                         pushSettingsBackStack { showProSettingsDialog(false) }
                         openGitHubUpdaterFlow()
+                    }
+                ),
+                // Category 5: Developer Signature at the very end of Settings
+                PremiumMenuItem(
+                    iconEmoji = "👨‍💻",
+                    title = "Ahmed M Moumen",
+                    subtitle = getString(R.string.developer_credit_subtitle, BuildConfig.VERSION_CODE),
+                    isAccentHighlighted = true,
+                    sectionHeader = getString(R.string.settings_cat_developer),
+                    onClick = {
+                        Toast.makeText(this, "Developed by Ahmed M Moumen ✨", Toast.LENGTH_SHORT).show()
+                        showProSettingsDialog(false)
                     }
                 )
             )
@@ -2860,6 +3131,7 @@ class MainActivity : AppCompatActivity() {
     private fun showFoldersList() {
         isShowingFolderVideos = false
         currentOpenedFolder = null
+        currentOpenedFolderName = null
         adapter.isVaultMode = isInVaultTab
 
         if (isInVaultTab) {
@@ -2943,11 +3215,14 @@ class MainActivity : AppCompatActivity() {
             binding.recyclerView.visibility = View.VISIBLE
             if (isSearchActive) {
                 filterVideosByQuery(binding.etSearchVideos.text.toString())
-            } else if (isShowingFolderVideos && currentOpenedFolder != null) {
-                val updated = activeFoldersList.find { it.name == currentOpenedFolder?.name }
+            } else if (isShowingFolderVideos && (currentOpenedFolder != null || !currentOpenedFolderName.isNullOrEmpty())) {
+                val targetName = currentOpenedFolder?.name ?: currentOpenedFolderName
+                val updated = activeFoldersList.find { it.name == targetName }
                 if (updated != null) {
                     currentOpenedFolder = updated
+                    currentOpenedFolderName = updated.name
                     binding.tvToolbarTitle.text = "${updated.name} (${updated.videos.size})"
+                    binding.btnBackFolder.visibility = View.VISIBLE
                     adapter.submitVideos(updated.videos)
                 } else {
                     showFoldersList()
@@ -3465,6 +3740,12 @@ class MainActivity : AppCompatActivity() {
         httpReferrer: String = ""
     ) {
         PlaybackStore.markVideoOpened(this, uri)
+        val matchedFolder = allDiscoveredVideos.find { it.uri == uri }?.folderName
+            ?: currentOpenedFolder?.name
+            ?: currentOpenedFolderName
+        if (!matchedFolder.isNullOrBlank()) {
+            PlaybackStore.setLastPlayedVideoInFolder(this, matchedFolder, uri)
+        }
         val intent = Intent(this, PlayerActivity::class.java).apply {
             data = uri
             putExtra("VIDEO_TITLE", title)
@@ -4351,14 +4632,22 @@ class MainActivity : AppCompatActivity() {
             https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
             #EXTINF:-1 tvg-name="Apple BipBop Live" group-title="Live Channels / قنوات مباشرة",Apple Advanced HLS Live
             https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8
+            #EXTINF:-1 tvg-name="Tears of Steel HLS Live" group-title="Live Documentary / وثائقي مباشر",Tears of Steel Live HLS
+            https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8
             #EXTINF:-1 tvg-name="Sintel Cinema Movie" group-title="Movies / أفلام سينمائية",Sintel Open Movie (1080p VOD)
             https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4
             #EXTINF:-1 tvg-name="Tears of Steel Movie" group-title="Movies / أفلام سينمائية",Tears of Steel Sci-Fi (VOD)
             https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4
+            #EXTINF:-1 tvg-name="Elephants Dream Movie" group-title="Movies / أفلام أنيميشن",Elephants Dream HD (VOD)
+            https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4
             #EXTINF:-1 tvg-name="Blender Adventures S01E01" group-title="Series / مسلسلات",Blender Adventures S01E01
             https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4
             #EXTINF:-1 tvg-name="Blender Adventures S01E02" group-title="Series / مسلسلات",Blender Adventures S01E02
             https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4
+            #EXTINF:-1 tvg-name="Blender Adventures S02E01" group-title="Series / مسلسلات",Blender Adventures S02E01
+            https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4
+            #EXTINF:-1 tvg-name="Blender Adventures S02E02" group-title="Series / مسلسلات",Blender Adventures S02E02
+            https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4
         """.trimIndent()
 
         lifecycleScope.launch {

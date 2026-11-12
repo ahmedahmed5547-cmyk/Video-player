@@ -288,4 +288,13 @@ Long-press any folder in Video Folders to lock &amp; move it here, or tap below 
     <string name="iptv_err_invalid_url">Please enter a valid http:// or https:// URL</string>
     <string name="iptv_err_missing_fields">Please fill in Server URL, Username, and Password</string>
     <string name="iptv_err_no_episodes">No episodes found for this series</string>
+    <string name="last_in_folder_badge">👁 LAST PLAYED</string>
+    <string name="resume_dont_ask_again_checkbox">Don\'t show again (Remember my choice)</string>
+    <string name="resume_pref_saved_toast">✅ Saved preference! You can change this anytime in Settings.</string>
+    <string name="setting_resume_behavior_title">Video Resume Behavior</string>
+    <string name="resume_mode_ask_always">Ask every time (Show Resume or Start from Beginning)</string>
+    <string name="resume_mode_always_resume">Always Resume automatically from where I stopped</string>
+    <string name="resume_mode_always_restart">Always Start from Beginning (00:00) automatically</string>
+    <string name="settings_cat_developer">👨‍💻 DEVELOPER &amp; CREDITS</string>
+    <string name="developer_credit_subtitle">Developer • Pure Video Player Final Edition (v%1$d)</string>
 </resources>

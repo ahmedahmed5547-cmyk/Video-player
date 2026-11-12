@@ -118,8 +118,10 @@ object PlaybackStore {
     private const val KEY_MEDIA_LAYOUT_GRID = "media_layout_is_grid"
     private const val KEY_SORT_ORDER_MODE = "media_sort_order_mode"
     private const val KEY_OPENED_VIDEO_URIS = "opened_video_uris_set"
-    private const val KEY_KNOWN_VIDEO_IDS = "known_video_ids_set"
+        private const val KEY_KNOWN_VIDEO_IDS = "known_video_ids_set"
     private const val KEY_NEW_VIDEO_IDS = "newly_discovered_video_ids_set"
+    private const val PREFIX_FOLDER_LAST_URI = "folder_last_played_uri_"
+    private const val KEY_RESUME_ASK_MODE = "video_resume_ask_mode_v1" 
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -392,6 +394,30 @@ object PlaybackStore {
     fun hasVideoBeenOpened(context: Context, uri: Uri): Boolean {
         val opened = prefs(context).getStringSet(KEY_OPENED_VIDEO_URIS, emptySet()) ?: emptySet()
         return opened.contains(uri.toString())
+    }
+
+    fun setLastPlayedVideoInFolder(context: Context, folderName: String, uri: Uri) {
+        if (folderName.isBlank()) return
+        prefs(context).edit()
+            .putString(PREFIX_FOLDER_LAST_URI + folderName, uri.toString())
+            .apply()
+    }
+
+    fun getLastPlayedVideoInFolder(context: Context, folderName: String): String? {
+        if (folderName.isBlank()) return null
+        return prefs(context).getString(PREFIX_FOLDER_LAST_URI + folderName, null)
+    }
+
+    /**
+     * 0 = Ask every time (default)
+     * 1 = Always Resume from where stopped automatically
+     * 2 = Always Start from Beginning (00:00) automatically
+     */
+    fun getResumeAskMode(context: Context): Int =
+        prefs(context).getInt(KEY_RESUME_ASK_MODE, 0).coerceIn(0, 2)
+
+    fun setResumeAskMode(context: Context, mode: Int) {
+        prefs(context).edit().putInt(KEY_RESUME_ASK_MODE, mode.coerceIn(0, 2)).apply()
     }
 
     fun syncDiscoveredVideosForNewBadge(context: Context, currentVideoIds: Set<Long>) {

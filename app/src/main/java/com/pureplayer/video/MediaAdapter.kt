@@ -228,6 +228,8 @@ class MediaAdapter(
             val accentColor = PlaybackStore.getAccentColor(ctx)
             val surfaceColor = PlaybackStore.getSurfaceColor(ctx)
             binding.root.setCardBackgroundColor(surfaceColor)
+            binding.itemContentLayout.alpha = 1.0f
+            binding.tvTitle.setTextColor(Color.WHITE)
 
             // Configure List vs Grid layout dynamically
             if (isGridMode) {
@@ -305,9 +307,27 @@ class MediaAdapter(
                     binding.tvDurationBadge.text = durationStr
                     binding.tvDurationBadge.visibility = View.VISIBLE
 
-                    binding.tvNewBadge.text = "NEW"
+                    val isLastPlayedInFolder = (PlaybackStore.getLastPlayedVideoInFolder(ctx, item.folderName) == item.uri.toString())
                     val isNew = PlaybackStore.isVideoNewBadgeVisible(ctx, item)
-                    binding.tvNewBadge.visibility = if (isNew) View.VISIBLE else View.GONE
+
+                    if (isLastPlayedInFolder) {
+                        // Dimmed / muted appearance for the last played video in this specific folder!
+                        binding.itemContentLayout.alpha = 0.48f
+                        binding.tvTitle.setTextColor(Color.parseColor("#94A3B8"))
+                        binding.root.setCardBackgroundColor(Color.parseColor("#0D1320"))
+                        binding.root.strokeColor = Color.argb(115, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
+                        binding.tvNewBadge.background = GradientDrawable().apply {
+                            cornerRadius = dp(ctx, 6).toFloat()
+                            setColor(Color.parseColor("#D9334155"))
+                        }
+                        binding.tvNewBadge.text = ctx.getString(R.string.last_in_folder_badge)
+                        binding.tvNewBadge.visibility = View.VISIBLE
+                    } else if (isNew) {
+                        binding.tvNewBadge.text = "NEW"
+                        binding.tvNewBadge.visibility = View.VISIBLE
+                    } else {
+                        binding.tvNewBadge.visibility = View.GONE
+                    }
 
                     val sizeMb = String.format(Locale.US, "%.1f MB", item.size / (1024.0 * 1024.0))
                     val resShort = if (item.width > 0 && item.height > 0) "  •  ${item.getResolutionLabel().substringBefore(" ")}" else ""
