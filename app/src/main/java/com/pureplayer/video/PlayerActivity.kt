@@ -1901,7 +1901,7 @@ class PlayerActivity : AppCompatActivity() {
         )
     }
 
-    private fun playerMenuBackStack.addLast { showMoreProOptionsDialog() }; showHdrModeSelectorDialog() {
+    private fun showHdrModeSelectorDialog() {
         val current = PlaybackStore.getHdrModeIndex(this)
         val hdrModes = listOf(
             Triple("🌟", "HDR10 / HLG Cinema Natural", "Hable Tonemapping"),
