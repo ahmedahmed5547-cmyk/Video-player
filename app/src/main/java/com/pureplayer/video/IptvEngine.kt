@@ -25,6 +25,12 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.util.Locale
@@ -557,31 +563,194 @@ object M3uPlaylistParser {
  */
 object XtreamCodesClient {
 
+    private val invisibleCharsRegex = Regex("[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF\u00A0\r\n\t]")
+
+    private val userAgents = listOf(
+        "IPTVSmartersPlayer",
+        "okhttp/4.9.3",
+        "VLC/3.0.20 LibVLC/3.0.20",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    )
+
+    /**
+     * Strips invisible Unicode RTL/LTR/Zero-Width characters (often injected when copying from WhatsApp/Telegram)
+     * as well as leading/trailing spaces.
+     */
+    fun sanitizeCredentialOrUrl(raw: String): String {
+        return raw.replace(invisibleCharsRegex, "").trim()
+    }
+
+    /**
+     * Accepts any server input format:
+     * - "mar10.sbs"
+     * - "mar10.sbs:8080"
+     * - "http://mar10.sbs"
+     * - "https://mar10.sbs/c/"
+     * - "http://mar10.sbs:8080/get.php?username=..."
+     * and returns a primary normalized base URL.
+     */
     fun normalizeServerBaseUrl(rawUrl: String): String {
-        var clean = rawUrl.trim()
+        var clean = sanitizeCredentialOrUrl(rawUrl)
+        // Remove common trailing paths if user pasted a full portal or M3U link
+        clean = clean
+            .substringBefore("/player_api.php")
+            .substringBefore("/panel_api.php")
+            .substringBefore("/get.php")
+            .substringBefore("?")
+            .trimEnd('/')
+        if (clean.endsWith("/c", ignoreCase = true)) {
+            clean = clean.dropLast(2).trimEnd('/')
+        }
         if (!clean.startsWith("http://", ignoreCase = true) && !clean.startsWith("https://", ignoreCase = true)) {
             clean = "http://$clean"
         }
-        clean = clean.substringBefore("/player_api.php").substringBefore("/get.php").trimEnd('/')
         return clean
     }
 
-    private fun httpGetString(urlStr: String, timeoutMs: Int = 15_000): String {
-        val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-            connectTimeout = timeoutMs
-            readTimeout = timeoutMs
-            instanceFollowRedirects = true
-            setRequestProperty("User-Agent", "IPTVSmartersPro/3.1 (Android; Mobile)")
-            setRequestProperty("Accept", "application/json, */*")
+    /**
+     * Builds an ordered list of candidate base URLs to try automatically when a user enters
+     * a bare domain like "mar10.sbs" or when http/https or port needs automatic discovery.
+     */
+    fun buildCandidateBaseUrls(rawUrl: String): List<String> {
+        val rawClean = sanitizeCredentialOrUrl(rawUrl)
+            .substringBefore("/player_api.php")
+            .substringBefore("/panel_api.php")
+            .substringBefore("/get.php")
+            .substringBefore("?")
+            .trimEnd('/')
+            .let { if (it.endsWith("/c", ignoreCase = true)) it.dropLast(2).trimEnd('/') else it }
+
+        val hasExplicitHttp = rawClean.startsWith("http://", ignoreCase = true)
+        val hasExplicitHttps = rawClean.startsWith("https://", ignoreCase = true)
+        val hostAndPort = rawClean
+            .removePrefix("http://")
+            .removePrefix("HTTP://")
+            .removePrefix("https://")
+            .removePrefix("HTTPS://")
+            .trimEnd('/')
+
+        val hasExplicitPort = hostAndPort.contains(":")
+        val candidates = LinkedHashSet<String>()
+
+        if (hasExplicitHttps) {
+            candidates.add("https://$hostAndPort")
+            candidates.add("http://$hostAndPort")
+        } else if (hasExplicitHttp) {
+            candidates.add("http://$hostAndPort")
+            candidates.add("https://$hostAndPort")
+        } else {
+            // User entered bare domain like "mar10.sbs" or "mar10.sbs:8080"
+            candidates.add("http://$hostAndPort")
+            candidates.add("https://$hostAndPort")
         }
-        val code = conn.responseCode
-        if (code == 401 || code == 403) {
-            throw IllegalStateException("AUTH_FAILED")
+
+        if (!hasExplicitPort) {
+            candidates.add("http://$hostAndPort:8080")
+            candidates.add("http://$hostAndPort:80")
+            candidates.add("https://$hostAndPort:443")
+            candidates.add("http://$hostAndPort:2095")
+            candidates.add("http://$hostAndPort:25461")
         }
-        if (code !in 200..299) {
-            throw IllegalStateException("HTTP_$code")
+        return candidates.toList()
+    }
+
+    private fun configurePermissiveSsl(conn: HttpURLConnection) {
+        if (conn is HttpsURLConnection) {
+            try {
+                val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
+                    override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                    override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                    override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+                })
+                val sc = SSLContext.getInstance("TLS")
+                sc.init(null, trustAll, SecureRandom())
+                conn.sslSocketFactory = sc.socketFactory
+                conn.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
+            } catch (_: Exception) {}
         }
-        return conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+    }
+
+    /**
+     * Performs HTTP GET or POST while manually following cross-protocol redirects (http <-> https)
+     * and rotating through standard IPTV User-Agents if a firewall/Cloudflare returns 403.
+     * Returns Pair(responseBody, finalResolvedUrl).
+     */
+    fun httpRequestWithRedirects(
+        initialUrl: String,
+        timeoutMs: Int = 15_000,
+        postFormBody: String? = null
+    ): Pair<String, String> {
+        var lastException: Exception? = null
+
+        for (ua in userAgents) {
+            try {
+                var currentUrl = initialUrl
+                var redirectsRemaining = 6
+
+                while (redirectsRemaining >= 0) {
+                    val urlObj = URL(currentUrl)
+                    val conn = (urlObj.openConnection() as HttpURLConnection).apply {
+                        configurePermissiveSsl(this)
+                        connectTimeout = timeoutMs
+                        readTimeout = timeoutMs
+                        instanceFollowRedirects = false
+                        setRequestProperty("User-Agent", ua)
+                        setRequestProperty("Accept", "application/json, text/plain, */*")
+                        setRequestProperty("Connection", "keep-alive")
+                        if (postFormBody != null) {
+                            requestMethod = "POST"
+                            doOutput = true
+                            setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+                        } else {
+                            requestMethod = "GET"
+                        }
+                    }
+
+                    if (postFormBody != null) {
+                        conn.outputStream.use { os ->
+                            os.write(postFormBody.toByteArray(Charsets.UTF_8))
+                        }
+                    }
+
+                    val code = conn.responseCode
+                    if (code in listOf(301, 302, 303, 307, 308)) {
+                        val location = conn.getHeaderField("Location")?.trim()
+                        conn.disconnect()
+                        if (location.isNullOrEmpty()) break
+                        val resolvedUrl = URL(urlObj, location).toString()
+                        // Preserve query string if redirect stripped it on player_api.php
+                        val initialQuery = urlObj.query
+                        currentUrl = if (!initialQuery.isNullOrEmpty() && !resolvedUrl.contains("?") && resolvedUrl.contains("player_api.php")) {
+                            "$resolvedUrl?$initialQuery"
+                        } else {
+                            resolvedUrl
+                        }
+                        redirectsRemaining--
+                        continue
+                    }
+
+                    if (code in 200..299) {
+                        val body = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                        return Pair(body, currentUrl)
+                    }
+
+                    if (code == 403 || code == 401 || code == 503) {
+                        // Try next User-Agent in case Cloudflare/WAF blocked this UA
+                        lastException = IllegalStateException("HTTP_$code")
+                        break
+                    }
+
+                    throw IllegalStateException("HTTP_$code")
+                }
+            } catch (e: Exception) {
+                lastException = e
+            }
+        }
+        throw (lastException ?: IllegalStateException("CONNECTION_FAILED"))
+    }
+
+    private fun httpGetString(urlStr: String, timeoutMs: Int = 18_000): String {
+        return httpRequestWithRedirects(urlStr, timeoutMs).first
     }
 
     fun fetchXtreamSourceContent(
@@ -591,21 +760,100 @@ object XtreamCodesClient {
         username: String,
         passwordPlain: String
     ): Pair<IptvSource, List<IptvStreamItem>> {
-        val baseUrl = normalizeServerBaseUrl(rawServerUrl)
-        val uEnc = URLEncoder.encode(username.trim(), "UTF-8")
-        val pEnc = URLEncoder.encode(passwordPlain.trim(), "UTF-8")
-        val apiBase = "$baseUrl/player_api.php?username=$uEnc&password=$pEnc"
+        val cleanUser = sanitizeCredentialOrUrl(username)
+        val cleanPass = sanitizeCredentialOrUrl(passwordPlain)
 
-        // 1. Verify Authentication & Account Status
-        val authRaw = httpGetString(apiBase, timeoutMs = 14_000)
-        val authJson = JSONObject(authRaw)
-        val userInfo = authJson.optJSONObject("user_info")
-            ?: throw IllegalStateException("INVALID_RESPONSE")
+        // If user pasted a full get.php URL with username & password in the Server URL box, extract them if needed
+        val candidateBases = buildCandidateBaseUrls(rawServerUrl)
+        val uEnc = URLEncoder.encode(cleanUser, "UTF-8")
+        val pEnc = URLEncoder.encode(cleanPass, "UTF-8")
 
-        val authVal = userInfo.opt("auth")?.toString() ?: "0"
-        if (authVal == "0" || authVal.equals("false", ignoreCase = true)) {
-            throw IllegalStateException("AUTH_FAILED")
+        var workingBaseUrl: String? = null
+        var workingApiBase: String? = null
+        var authJson: JSONObject? = null
+        var sawExplicitAuthZero = false
+        var lastErrorMsg = "CONNECTION_FAILED"
+
+        // Try each candidate base URL (http, https, ports) until we get a valid Xtream response!
+        for (candidateBase in candidateBases) {
+            val attempts = listOf(
+                // Attempt 1: Standard GET with URL-encoded credentials
+                Triple("$candidateBase/player_api.php?username=$uEnc&password=$pEnc", null as String?, true),
+                // Attempt 2: GET with raw credentials (for non-standard panels where symbols aren't decoded)
+                Triple("$candidateBase/player_api.php?username=$cleanUser&password=$cleanPass", null as String?, false),
+                // Attempt 3: POST to player_api.php
+                Triple("$candidateBase/player_api.php", "username=$uEnc&password=$pEnc", true)
+            )
+
+            for ((targetUrl, postBody, _) in attempts) {
+                try {
+                    val (rawResp, finalUrl) = httpRequestWithRedirects(targetUrl, timeoutMs = 12_000, postFormBody = postBody)
+                    val trimmed = rawResp.trim()
+                    if (trimmed.startsWith("{")) {
+                        val json = JSONObject(trimmed)
+                        val uInfo = json.optJSONObject("user_info")
+                        if (uInfo != null) {
+                            val authVal = uInfo.opt("auth")?.toString() ?: "0"
+                            if (authVal != "0" && !authVal.equals("false", ignoreCase = true)) {
+                                authJson = json
+                                // Resolve final base URL from redirect or server_info
+                                val redirectedBase = finalUrl.substringBefore("/player_api.php").trimEnd('/')
+                                workingBaseUrl = redirectedBase.ifEmpty { candidateBase }
+                                workingApiBase = "${workingBaseUrl}/player_api.php?username=$uEnc&password=$pEnc"
+                                break
+                            } else {
+                                sawExplicitAuthZero = true
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    lastErrorMsg = e.message ?: "CONNECTION_FAILED"
+                }
+            }
+            if (authJson != null && workingBaseUrl != null) break
         }
+
+        // Fallback: If player_api.php wasn't reachable or returned non-JSON, try standard Xtream get.php M3U endpoint!
+        if (authJson == null) {
+            for (candidateBase in candidateBases.take(2)) {
+                try {
+                    val m3uUrl = "$candidateBase/get.php?username=$uEnc&password=$pEnc&type=m3u_plus&output=ts"
+                    val (m3uBody, _) = httpRequestWithRedirects(m3uUrl, timeoutMs = 16_000)
+                    if (m3uBody.contains("#EXTM3U", ignoreCase = true) || m3uBody.contains("#EXTINF", ignoreCase = true)) {
+                        val parsed = m3uBody.byteInputStream(Charsets.UTF_8).bufferedReader(Charsets.UTF_8).use { reader ->
+                            M3uPlaylistParser.parseFromReader(sourceId, reader)
+                        }
+                        if (parsed.isNotEmpty()) {
+                            val src = IptvSource(
+                                id = sourceId,
+                                name = sourceName,
+                                type = IptvSourceType.XTREAM,
+                                serverOrM3uUrl = candidateBase,
+                                username = cleanUser,
+                                encryptedPassword = IptvCredentialVault.encryptSecret(cleanPass),
+                                lastUpdatedMs = System.currentTimeMillis(),
+                                liveCount = parsed.count { it.contentType == IptvContentType.LIVE_TV },
+                                movieCount = parsed.count { it.contentType == IptvContentType.MOVIES },
+                                seriesCount = parsed.filter { it.contentType == IptvContentType.SERIES }.map { it.seriesName.ifEmpty { it.title } }.distinct().size,
+                                radioCount = parsed.count { it.contentType == IptvContentType.RADIO },
+                                accountStatus = "Active"
+                            )
+                            return Pair(src, parsed)
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            if (sawExplicitAuthZero) {
+                throw IllegalStateException("AUTH_FAILED")
+            } else {
+                throw IllegalStateException(lastErrorMsg)
+            }
+        }
+
+        val baseUrl = workingBaseUrl!!
+        val apiBase = workingApiBase!!
+        val userInfo = authJson!!.optJSONObject("user_info") ?: JSONObject()
 
         val statusStr = userInfo.optString("status", "Active")
         if (statusStr.equals("Expired", ignoreCase = true) ||
@@ -627,7 +875,7 @@ object XtreamCodesClient {
         // 2. Live Categories & Live Streams (including Radio detection)
         val liveCatMap = fetchCategoryMap("$apiBase&action=get_live_categories")
         try {
-            val liveRaw = httpGetString("$apiBase&action=get_live_streams", timeoutMs = 22_000)
+            val liveRaw = httpGetString("$apiBase&action=get_live_streams", timeoutMs = 25_000)
             val arr = parseJsonArrayFlexible(liveRaw)
             for (i in 0 until arr.length()) {
                 val obj = arr.optJSONObject(i) ?: continue
@@ -643,7 +891,7 @@ object XtreamCodesClient {
                     catName.contains("إذاعة")
 
                 val contentType = if (isRadio) IptvContentType.RADIO else IptvContentType.LIVE_TV
-                val streamUrl = "$baseUrl/live/${username.trim()}/${passwordPlain.trim()}/$streamId.ts"
+                val streamUrl = "$baseUrl/live/$cleanUser/$cleanPass/$streamId.ts"
                 val uniqueKey = "${contentType.name}_$streamId"
                 if (seenKeys.add(uniqueKey)) {
                     allItems.add(
@@ -665,7 +913,7 @@ object XtreamCodesClient {
         // 3. VOD (Movies) Categories & Streams
         val vodCatMap = fetchCategoryMap("$apiBase&action=get_vod_categories")
         try {
-            val vodRaw = httpGetString("$apiBase&action=get_vod_streams", timeoutMs = 22_000)
+            val vodRaw = httpGetString("$apiBase&action=get_vod_streams", timeoutMs = 25_000)
             val arr = parseJsonArrayFlexible(vodRaw)
             for (i in 0 until arr.length()) {
                 val obj = arr.optJSONObject(i) ?: continue
@@ -676,7 +924,7 @@ object XtreamCodesClient {
                 val logo = obj.optString("stream_icon", "")
                 val rating = obj.optString("rating", "")
                 val ext = obj.optString("container_extension", "mp4").ifBlank { "mp4" }
-                val streamUrl = "$baseUrl/movie/${username.trim()}/${passwordPlain.trim()}/$streamId.$ext"
+                val streamUrl = "$baseUrl/movie/$cleanUser/$cleanPass/$streamId.$ext"
                 val uniqueKey = "MOVIES_$streamId"
                 if (seenKeys.add(uniqueKey)) {
                     allItems.add(
@@ -700,7 +948,7 @@ object XtreamCodesClient {
         // 4. Series Categories & Series List
         val seriesCatMap = fetchCategoryMap("$apiBase&action=get_series_categories")
         try {
-            val seriesRaw = httpGetString("$apiBase&action=get_series", timeoutMs = 22_000)
+            val seriesRaw = httpGetString("$apiBase&action=get_series", timeoutMs = 25_000)
             val arr = parseJsonArrayFlexible(seriesRaw)
             for (i in 0 until arr.length()) {
                 val obj = arr.optJSONObject(i) ?: continue
@@ -745,8 +993,8 @@ object XtreamCodesClient {
             name = sourceName,
             type = IptvSourceType.XTREAM,
             serverOrM3uUrl = baseUrl,
-            username = username.trim(),
-            encryptedPassword = IptvCredentialVault.encryptSecret(passwordPlain.trim()),
+            username = cleanUser,
+            encryptedPassword = IptvCredentialVault.encryptSecret(cleanPass),
             lastUpdatedMs = System.currentTimeMillis(),
             liveCount = liveCnt,
             movieCount = movieCnt,
@@ -764,14 +1012,14 @@ object XtreamCodesClient {
         seriesItem: IptvStreamItem
     ): IptvSeriesInfoResult {
         val baseUrl = normalizeServerBaseUrl(source.serverOrM3uUrl)
-        val user = source.username.trim()
-        val pass = IptvCredentialVault.decryptSecret(source.encryptedPassword).trim()
+        val user = sanitizeCredentialOrUrl(source.username)
+        val pass = sanitizeCredentialOrUrl(IptvCredentialVault.decryptSecret(source.encryptedPassword))
         val uEnc = URLEncoder.encode(user, "UTF-8")
         val pEnc = URLEncoder.encode(pass, "UTF-8")
         val sEnc = URLEncoder.encode(seriesItem.seriesId, "UTF-8")
 
         val url = "$baseUrl/player_api.php?username=$uEnc&password=$pEnc&action=get_series_info&series_id=$sEnc"
-        val raw = httpGetString(url, timeoutMs = 16_000)
+        val raw = httpGetString(url, timeoutMs = 18_000)
         val root = JSONObject(raw)
 
         val infoObj = root.optJSONObject("info")
@@ -868,7 +1116,7 @@ object XtreamCodesClient {
     private fun fetchCategoryMap(urlStr: String): Map<String, String> {
         val map = HashMap<String, String>()
         try {
-            val raw = httpGetString(urlStr, timeoutMs = 12_000)
+            val raw = httpGetString(urlStr, timeoutMs = 14_000)
             val arr = parseJsonArrayFlexible(raw)
             for (i in 0 until arr.length()) {
                 val obj = arr.optJSONObject(i) ?: continue
@@ -902,12 +1150,6 @@ object XtreamCodesClient {
     }
 }
 
-/**
- * Persistent Repository & Cache Manager for IPTV Sources and Streams.
- * - Preserves existing cached channels/movies/series if a source refresh fails!
- * - Prevents duplicate entries upon reload.
- * - Supports category reclassification overrides for M3U playlists.
- */
 object IptvRepository {
     private const val PREF_IPTV = "pure_player_iptv_store_v1"
     private const val KEY_SOURCES_JSON = "iptv_sources_json_v1"
@@ -1175,23 +1417,31 @@ object IptvRepository {
                     )
                 }
                 IptvSourceType.M3U_URL -> {
-                    val cleanUrl = serverOrM3uUrl.trim()
-                    val conn = (URL(cleanUrl).openConnection() as HttpURLConnection).apply {
-                        connectTimeout = 15_000
-                        readTimeout = 25_000
-                        instanceFollowRedirects = true
-                        setRequestProperty("User-Agent", "IPTVSmartersPro/3.1 (Android)")
+                    val rawClean = XtreamCodesClient.sanitizeCredentialOrUrl(serverOrM3uUrl)
+                    val candidateUrls = if (rawClean.startsWith("http://", ignoreCase = true) || rawClean.startsWith("https://", ignoreCase = true)) {
+                        listOf(rawClean)
+                    } else {
+                        listOf("http://$rawClean", "https://$rawClean")
                     }
-                    if (conn.responseCode !in 200..299) {
-                        throw IllegalStateException("HTTP_${conn.responseCode}")
-                    }
-                    val parsed = conn.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
-                        M3uPlaylistParser.parseFromReader(sourceId, reader, overrides)
+                    var parsed: List<IptvStreamItem> = emptyList()
+                    var resolvedUrl = candidateUrls.first()
+                    for (cand in candidateUrls) {
+                        try {
+                            val (body, finalU) = XtreamCodesClient.httpRequestWithRedirects(cand, timeoutMs = 22_000)
+                            val items = body.byteInputStream(Charsets.UTF_8).bufferedReader(Charsets.UTF_8).use { reader ->
+                                M3uPlaylistParser.parseFromReader(sourceId, reader, overrides)
+                            }
+                            if (items.isNotEmpty()) {
+                                parsed = items
+                                resolvedUrl = finalU
+                                break
+                            }
+                        } catch (_: Exception) {}
                     }
                     if (parsed.isEmpty()) {
                         throw IllegalStateException("EMPTY_PLAYLIST")
                     }
-                    val src = buildM3uSourceSummary(sourceId, name.ifBlank { "M3U Playlist" }, IptvSourceType.M3U_URL, cleanUrl, parsed)
+                    val src = buildM3uSourceSummary(sourceId, name.ifBlank { "M3U Playlist" }, IptvSourceType.M3U_URL, resolvedUrl, parsed)
                     Pair(src, parsed)
                 }
                 IptvSourceType.M3U_FILE -> {

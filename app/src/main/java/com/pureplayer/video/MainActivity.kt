@@ -4199,9 +4199,9 @@ class MainActivity : AppCompatActivity() {
                 setColor(accent)
             }
             setOnClickListener {
-                val urlInput = etUrl.text.toString().trim()
+                val urlInput = XtreamCodesClient.sanitizeCredentialOrUrl(etUrl.text.toString())
                 val nameInput = etName.text.toString().trim().ifEmpty { "M3U Playlist" }
-                if (!urlInput.startsWith("http://", ignoreCase = true) && !urlInput.startsWith("https://", ignoreCase = true)) {
+                if (urlInput.isEmpty() || (!urlInput.contains(".") && !urlInput.startsWith("http", ignoreCase = true))) {
                     Toast.makeText(this@MainActivity, getString(R.string.iptv_err_invalid_url), Toast.LENGTH_SHORT).show()
                 } else {
                     isNavigatingToSubDialog = true
@@ -4259,7 +4259,7 @@ class MainActivity : AppCompatActivity() {
         val etServer = EditText(this).apply {
             setText(existingSource?.serverOrM3uUrl ?: "")
             hint = getString(R.string.iptv_hint_server_url)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             setSingleLine(true)
             setPadding(dp(16), dp(12), dp(16), dp(12))
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -4271,6 +4271,7 @@ class MainActivity : AppCompatActivity() {
         val etUsername = EditText(this).apply {
             setText(existingSource?.username ?: "")
             hint = getString(R.string.iptv_hint_username)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             setSingleLine(true)
             setPadding(dp(16), dp(12), dp(16), dp(12))
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -4283,7 +4284,7 @@ class MainActivity : AppCompatActivity() {
         val etPassword = EditText(this).apply {
             setText(existingPass)
             hint = getString(R.string.iptv_hint_password)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             setSingleLine(true)
             setPadding(dp(16), dp(12), dp(16), dp(12))
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -4292,11 +4293,29 @@ class MainActivity : AppCompatActivity() {
         }
         stylePremiumInputBox(etPassword, bg, accent)
 
+        val cbShowPass = CheckBox(this).apply {
+            text = getString(R.string.iptv_show_password_toggle)
+            setTextColor(Color.parseColor("#CBD5E1"))
+            textSize = 13f
+            buttonTintList = ColorStateList.valueOf(accent)
+            setPadding(dp(6), dp(6), dp(6), dp(2))
+            setOnCheckedChangeListener { _, isChecked ->
+                val sel = etPassword.selectionEnd.coerceAtLeast(0)
+                etPassword.inputType = if (isChecked) {
+                    InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                } else {
+                    InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                }
+                etPassword.setSelection(sel.coerceAtMost(etPassword.text.length))
+            }
+        }
+
         container.addView(tvTitle)
         container.addView(etName)
         container.addView(etServer)
         container.addView(etUsername)
         container.addView(etPassword)
+        container.addView(cbShowPass)
 
         val btnRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -4326,10 +4345,20 @@ class MainActivity : AppCompatActivity() {
                 setColor(accent)
             }
             setOnClickListener {
-                val srv = etServer.text.toString().trim()
-                val usr = etUsername.text.toString().trim()
-                val pwd = etPassword.text.toString().trim()
-                val nameStr = etName.text.toString().trim().ifEmpty { "Xtream IPTV" }
+                var srv = XtreamCodesClient.sanitizeCredentialOrUrl(etServer.text.toString())
+                var usr = XtreamCodesClient.sanitizeCredentialOrUrl(etUsername.text.toString())
+                var pwd = XtreamCodesClient.sanitizeCredentialOrUrl(etPassword.text.toString())
+                // If user pasted a full get.php URL with ?username=...&password=... into Server URL box, auto-extract them!
+                if (srv.contains("username=", ignoreCase = true) && (usr.isEmpty() || pwd.isEmpty())) {
+                    val uMatch = Regex("(?i)[?&]username=([^&]+)").find(srv)?.groupValues?.getOrNull(1)
+                    val pMatch = Regex("(?i)[?&]password=([^&]+)").find(srv)?.groupValues?.getOrNull(1)
+                    if (usr.isEmpty() && !uMatch.isNullOrBlank()) usr = Uri.decode(uMatch)
+                    if (pwd.isEmpty() && !pMatch.isNullOrBlank()) pwd = Uri.decode(pMatch)
+                }
+                val nameStr = etName.text.toString().trim().ifEmpty {
+                    srv.removePrefix("http://").removePrefix("https://").substringBefore("/").substringBefore(":")
+                        .ifEmpty { "Xtream IPTV" }
+                }
                 if (srv.isEmpty() || usr.isEmpty() || pwd.isEmpty()) {
                     Toast.makeText(this@MainActivity, getString(R.string.iptv_err_missing_fields), Toast.LENGTH_SHORT).show()
                 } else {

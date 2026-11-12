@@ -250,7 +250,7 @@ Long-press any folder in Video Folders to lock &amp; move it here, or tap below 
     <string name="iptv_add_demo_source_option">Load Built-in Demo IPTV Source</string>
     <string name="iptv_add_demo_source_sub">Test Live TV, Movies &amp; Series immediately</string>
     <string name="iptv_hint_source_name">Source Name (e.g. My IPTV)</string>
-    <string name="iptv_hint_server_url">Server URL (e.g. http://server.com:8080)</string>
+    <string name="iptv_hint_server_url">Server Domain or URL (e.g. mar10.sbs or mar10.sbs:8080)</string>
     <string name="iptv_hint_username">Username</string>
     <string name="iptv_hint_password">Password</string>
     <string name="iptv_loading_data">Connecting to server &amp; loading IPTV content...</string>
@@ -285,7 +285,7 @@ Long-press any folder in Video Folders to lock &amp; move it here, or tap below 
     <string name="iptv_err_empty_playlist">⚠️ No playable streams found in this playlist</string>
     <string name="iptv_err_file_read">❌ Could not read the selected M3U file</string>
     <string name="iptv_err_connection">❌ Connection failed. Please verify the Server URL and your internet connection</string>
-    <string name="iptv_err_invalid_url">Please enter a valid http:// or https:// URL</string>
+    <string name="iptv_err_invalid_url">Please enter a valid domain or M3U link (e.g. mar10.sbs/playlist.m3u8)</string>
     <string name="iptv_err_missing_fields">Please fill in Server URL, Username, and Password</string>
     <string name="iptv_err_no_episodes">No episodes found for this series</string>
     <string name="last_in_folder_badge">👁 LAST PLAYED</string>
@@ -297,4 +297,5 @@ Long-press any folder in Video Folders to lock &amp; move it here, or tap below 
     <string name="resume_mode_always_restart">Always Start from Beginning (00:00) automatically</string>
     <string name="settings_cat_developer">👨‍💻 DEVELOPER &amp; CREDITS</string>
     <string name="developer_credit_subtitle">Developer • Pure Video Player Final Edition (v%1$d)</string>
+    <string name="iptv_show_password_toggle">Show Password to verify characters</string>
 </resources>

@@ -250,7 +250,7 @@
     <string name="iptv_add_demo_source_option">إضافة مصدر IPTV تجريبي للاختبار الفوري</string>
     <string name="iptv_add_demo_source_sub">يحتوي على بث مباشر وأفلام ومسلسلات تجريبية جاهزة للتشغيل</string>
     <string name="iptv_hint_source_name">اسم المصدر (اختياري - مثال: اشتراكي)</string>
-    <string name="iptv_hint_server_url">رابط السيرفر (Server URL - مثال: http://server.com:8080)</string>
+    <string name="iptv_hint_server_url">رابط أو دومين السيرفر (مثال: mar10.sbs أو mar10.sbs:8080 بدون الحاجة لـ http)</string>
     <string name="iptv_hint_username">اسم المستخدم (Username)</string>
     <string name="iptv_hint_password">كلمة المرور (Password)</string>
     <string name="iptv_loading_data">جاري الاتصال بالسيرفر وجلب وتصنيف المحتوى...</string>
@@ -285,7 +285,7 @@
     <string name="iptv_err_empty_playlist">⚠️ لم يتم العثور على قنوات أو محتوى صالح داخل هذا المصدر</string>
     <string name="iptv_err_file_read">❌ تعذر قراءة ملف M3U المختار من الذاكرة</string>
     <string name="iptv_err_connection">❌ تعذر الاتصال بالسيرفر، تأكد من صحة الرابط واتصال الإنترنت</string>
-    <string name="iptv_err_invalid_url">يرجى إدخال رابط يبدأ بـ http:// أو https://</string>
+    <string name="iptv_err_invalid_url">يرجى إدخال رابط أو دومين صحيح (مثال: mar10.sbs/...)</string>
     <string name="iptv_err_missing_fields">يرجى إدخال رابط السيرفر واسم المستخدم وكلمة المرور</string>
     <string name="iptv_err_no_episodes">لم يتم العثور على حلقات لهذا المسلسل</string>
     <string name="last_in_folder_badge">👁 آخر مشغّل</string>
@@ -297,4 +297,5 @@
     <string name="resume_mode_always_restart">البدء من الأول (00:00) تلقائياً دائماً دون سؤال</string>
     <string name="settings_cat_developer">👨‍💻 مطور التطبيق ومعلومات الإصدار</string>
     <string name="developer_credit_subtitle">مطور التطبيق • النسخة النهائية الاحترافية (v%1$d)</string>
+    <string name="iptv_show_password_toggle">إظهار كلمة المرور للتأكد من صحتها</string>
 </resources>
