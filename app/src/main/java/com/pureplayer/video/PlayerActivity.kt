@@ -81,6 +81,14 @@ class PlayerActivity : AppCompatActivity() {
     private var hasAppliedInitialSeek = false
     private var externalUserAgent: String? = null
     private var externalHttpReferer: String? = null
+    private var hasRetriedM3u8Fallback = false
+    private val playerMenuBackStack = ArrayDeque<() -> Unit>()
+
+    private fun popPlayerMenuBackStack(): Boolean {
+        val prev = playerMenuBackStack.removeLastOrNull() ?: return false
+        prev.invoke()
+        return true
+    }
 
     private var externalSubtitleCues = listOf<SubtitleCue>()
     private var subtitleSyncOffsetMs = 0L
@@ -247,6 +255,16 @@ class PlayerActivity : AppCompatActivity() {
                 }
                 MediaPlayer.Event.Paused -> {
                     binding.btnPlayPause.setImageResource(R.drawable.ic_play_modern)
+                }
+                MediaPlayer.Event.EncounteredError -> {
+                    binding.playerLoadingBar.visibility = View.GONE
+                    val curStr = currentVideoUri?.toString() ?: ""
+                    if (!hasRetriedM3u8Fallback && curStr.endsWith(".ts", ignoreCase = true) && curStr.startsWith("http", ignoreCase = true)) {
+                        hasRetriedM3u8Fallback = true
+                        val altUri = Uri.parse(curStr.dropLast(3) + ".m3u8")
+                        currentVideoUri = altUri
+                        startVideoPlaybackSafely(altUri)
+                    }
                 }
             }
         }
@@ -488,9 +506,16 @@ class PlayerActivity : AppCompatActivity() {
                 cornerRadius = dp(13).toFloat()
                 setColor(Color.parseColor("#18FFFFFF"))
             }
-            setOnClickListener { dialog.dismiss() }
+            setOnClickListener {
+                dialog.dismiss()
+                popPlayerMenuBackStack()
+            }
         }
         cardContainer.addView(btnClose)
+
+        dialog.setOnCancelListener {
+            popPlayerMenuBackStack()
+        }
 
         dialog.show()
     }
@@ -1189,6 +1214,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         binding.btnSubtitles.setOnClickListener {
+            playerMenuBackStack.clear()
             showSubtitlesDialog()
         }
 
@@ -1197,6 +1223,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         binding.btnMorePro.setOnClickListener {
+            playerMenuBackStack.clear()
             showMoreProOptionsDialog()
         }
 
@@ -1365,7 +1392,7 @@ class PlayerActivity : AppCompatActivity() {
                 iconEmoji = "🔍",
                 title = getString(R.string.sub_menu_web_search),
                 subtitle = preferredLangsStr,
-                onClick = { showCustomTitleAutoSearchDialog() }
+                onClick = { playerMenuBackStack.addLast { showSubtitlesDialog() }; showCustomTitleAutoSearchDialog() }
             ),
             PremiumMenuItem(
                 iconEmoji = "📂",
@@ -1377,13 +1404,13 @@ class PlayerActivity : AppCompatActivity() {
                 iconEmoji = "🎨",
                 title = getString(R.string.sub_menu_style),
                 subtitle = "${subSize}sp • ${getString(R.string.style_bg_opacity_label, subBgOpacity)}",
-                onClick = { showSubtitleLiveStyleDialog() }
+                onClick = { playerMenuBackStack.addLast { showSubtitlesDialog() }; showSubtitleLiveStyleDialog() }
             ),
             PremiumMenuItem(
                 iconEmoji = "🌐",
                 title = getString(R.string.sub_menu_languages, preferredLangsStr),
                 subtitle = getString(R.string.sub_lang_dialog_title),
-                onClick = { showPlayerSubtitleLanguagePicker() }
+                onClick = { playerMenuBackStack.addLast { showSubtitlesDialog() }; showPlayerSubtitleLanguagePicker() }
             ),
             PremiumMenuItem(
                 iconEmoji = "🎯",
@@ -1497,8 +1524,12 @@ class PlayerActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#94A3B8"))
             textSize = 14f
             setPadding(dp(16), dp(10), dp(16), dp(10))
-            setOnClickListener { dialog.dismiss() }
+            setOnClickListener {
+                dialog.dismiss()
+                popPlayerMenuBackStack()
+            }
         }
+        dialog.setOnCancelListener { popPlayerMenuBackStack() }
 
         val btnSearch = TextView(this).apply {
             text = getString(R.string.subtitles)
@@ -1649,7 +1680,8 @@ class PlayerActivity : AppCompatActivity() {
                     getString(R.string.sub_lang_priority_saved, finalOrder.joinToString(" → ") { it.uppercase() })
                 )
             }
-            .setNegativeButton(getString(R.string.cancel), null)
+            .setNegativeButton(getString(R.string.cancel)) { _, _ -> popPlayerMenuBackStack() }
+            .setOnCancelListener { popPlayerMenuBackStack() }
             .show()
     }
 
@@ -1822,7 +1854,8 @@ class PlayerActivity : AppCompatActivity() {
             .setNeutralButton(getString(R.string.reset)) { _, _ ->
                 resetSubtitlePositionNow()
             }
-            .setNegativeButton(getString(R.string.close), null)
+            .setNegativeButton(getString(R.string.close)) { _, _ -> popPlayerMenuBackStack() }
+            .setOnCancelListener { popPlayerMenuBackStack() }
             .show()
     }
 
@@ -1843,7 +1876,7 @@ class PlayerActivity : AppCompatActivity() {
                 resetSubtitlePositionNow()
             },
             PremiumMenuItem("🌈", getString(R.string.pro_hdr_mode), "HDR10 / HLG Tonemapping") {
-                showHdrModeSelectorDialog()
+                playerMenuBackStack.addLast { showMoreProOptionsDialog() }; showHdrModeSelectorDialog()
             },
             PremiumMenuItem("🌙", getString(R.string.pro_sleep_30), "30 Minutes") {
                 handler.removeCallbacks(sleepTimerRunnable)
@@ -1868,7 +1901,7 @@ class PlayerActivity : AppCompatActivity() {
         )
     }
 
-    private fun showHdrModeSelectorDialog() {
+    private fun playerMenuBackStack.addLast { showMoreProOptionsDialog() }; showHdrModeSelectorDialog() {
         val current = PlaybackStore.getHdrModeIndex(this)
         val hdrModes = listOf(
             Triple("🌟", "HDR10 / HLG Cinema Natural", "Hable Tonemapping"),

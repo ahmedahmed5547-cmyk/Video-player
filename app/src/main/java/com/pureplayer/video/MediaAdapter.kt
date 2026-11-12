@@ -30,6 +30,18 @@ import kotlinx.coroutines.withContext
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+data class IptvAddCardItem(
+    val title: String,
+    val subtitle: String
+)
+
+data class IptvSectionCardItem(
+    val contentType: IptvContentType,
+    val title: String,
+    val subtitle: String,
+    val count: Int
+)
+
 object VideoThumbnailLoader {
     private val maxMemory = (Runtime.getRuntime().maxMemory() / 1024).toInt()
     private val cacheSize = (maxMemory / 8).coerceAtLeast(4096)
@@ -122,7 +134,9 @@ class MediaAdapter(
     private val onFolderClick: (VideoFolder) -> Unit,
     private val onVideoClick: (VideoItem) -> Unit,
     private val onVideoLongClick: (VideoItem) -> Unit = {},
-    private val onFolderLongClick: (VideoFolder) -> Unit = {}
+    private val onFolderLongClick: (VideoFolder) -> Unit = {},
+    private val onIptvItemClick: (Any) -> Unit = {},
+    private val onIptvItemLongClick: (Any) -> Unit = {}
 ) : RecyclerView.Adapter<MediaAdapter.MediaViewHolder>() {
 
     private val items = mutableListOf<Any>()
@@ -142,6 +156,13 @@ class MediaAdapter(
     fun submitVideos(videos: List<VideoItem>) {
         items.clear()
         items.addAll(videos)
+        lastAnimatedPosition = -1
+        notifyDataSetChanged()
+    }
+
+    fun submitIptvList(iptvElements: List<Any>) {
+        items.clear()
+        items.addAll(iptvElements)
         lastAnimatedPosition = -1
         notifyDataSetChanged()
     }
@@ -259,6 +280,7 @@ class MediaAdapter(
             when (item) {
                 is VideoFolder -> {
                     binding.tvDurationBadge.visibility = View.GONE
+                    binding.tvNewBadge.text = "NEW"
                     val hasNewInFolder = item.videos.any { PlaybackStore.isVideoNewBadgeVisible(ctx, it) }
                     binding.tvNewBadge.visibility = if (hasNewInFolder) View.VISIBLE else View.GONE
 
@@ -283,6 +305,7 @@ class MediaAdapter(
                     binding.tvDurationBadge.text = durationStr
                     binding.tvDurationBadge.visibility = View.VISIBLE
 
+                    binding.tvNewBadge.text = "NEW"
                     val isNew = PlaybackStore.isVideoNewBadgeVisible(ctx, item)
                     binding.tvNewBadge.visibility = if (isNew) View.VISIBLE else View.GONE
 
@@ -300,6 +323,168 @@ class MediaAdapter(
                     binding.root.setOnClickListener { onVideoClick(item) }
                     binding.root.setOnLongClickListener {
                         onVideoLongClick(item)
+                        true
+                    }
+                }
+                is IptvAddCardItem -> {
+                    binding.root.strokeColor = accentColor
+                    binding.tvDurationBadge.visibility = View.GONE
+                    binding.tvNewBadge.text = "＋"
+                    binding.tvNewBadge.visibility = View.VISIBLE
+                    binding.ivIcon.tag = null
+                    binding.ivIcon.alpha = 1f
+                    binding.ivIcon.scaleType = ImageView.ScaleType.CENTER_INSIDE
+                    binding.ivIcon.setPadding(18, 18, 18, 18)
+                    binding.ivIcon.imageTintList = ColorStateList.valueOf(accentColor)
+                    binding.ivIcon.setImageResource(R.drawable.ic_plus_circle)
+
+                    binding.tvTitle.text = item.title
+                    binding.tvSubtitle.text = item.subtitle
+                    binding.root.setOnClickListener { onIptvItemClick(item) }
+                    binding.root.setOnLongClickListener {
+                        onIptvItemClick(item)
+                        true
+                    }
+                }
+                is IptvSource -> {
+                    binding.tvNewBadge.text = if (item.type == IptvSourceType.XTREAM) "XTREAM" else "M3U"
+                    binding.tvNewBadge.visibility = View.VISIBLE
+                    binding.tvDurationBadge.text = "${item.totalItemsCount()}"
+                    binding.tvDurationBadge.visibility = View.VISIBLE
+
+                    binding.ivIcon.tag = null
+                    binding.ivIcon.alpha = 1f
+                    binding.ivIcon.scaleType = ImageView.ScaleType.CENTER_INSIDE
+                    binding.ivIcon.setPadding(20, 20, 20, 20)
+                    binding.ivIcon.imageTintList = ColorStateList.valueOf(accentColor)
+                    binding.ivIcon.setImageResource(R.drawable.ic_iptv_tv)
+
+                    binding.tvTitle.text = item.name
+                    val summaryParts = mutableListOf<String>()
+                    if (item.liveCount > 0) summaryParts.add("📺 ${item.liveCount}")
+                    if (item.movieCount > 0) summaryParts.add("🎬 ${item.movieCount}")
+                    if (item.seriesCount > 0) summaryParts.add("🎞️ ${item.seriesCount}")
+                    if (item.radioCount > 0) summaryParts.add("📻 ${item.radioCount}")
+                    binding.tvSubtitle.text = summaryParts.joinToString("  •  ").ifEmpty { item.accountStatus }
+
+                    binding.root.setOnClickListener { onIptvItemClick(item) }
+                    binding.root.setOnLongClickListener {
+                        onIptvItemLongClick(item)
+                        true
+                    }
+                }
+                is IptvSectionCardItem -> {
+                    binding.tvNewBadge.visibility = View.GONE
+                    binding.tvDurationBadge.text = "${item.count}"
+                    binding.tvDurationBadge.visibility = View.VISIBLE
+
+                    binding.ivIcon.tag = null
+                    binding.ivIcon.alpha = 1f
+                    binding.ivIcon.scaleType = ImageView.ScaleType.CENTER_INSIDE
+                    binding.ivIcon.setPadding(20, 20, 20, 20)
+                    binding.ivIcon.imageTintList = ColorStateList.valueOf(accentColor)
+                    val iconRes = when (item.contentType) {
+                        IptvContentType.LIVE_TV -> R.drawable.ic_iptv_tv
+                        IptvContentType.MOVIES -> R.drawable.ic_play_modern
+                        IptvContentType.SERIES -> R.drawable.ic_folder_cinema
+                        IptvContentType.RADIO -> R.drawable.ic_audio_track_modern
+                    }
+                    binding.ivIcon.setImageResource(iconRes)
+
+                    binding.tvTitle.text = item.title
+                    binding.tvSubtitle.text = item.subtitle
+                    binding.root.setOnClickListener { onIptvItemClick(item) }
+                    binding.root.setOnLongClickListener {
+                        onIptvItemLongClick(item)
+                        true
+                    }
+                }
+                is IptvCategory -> {
+                    binding.tvNewBadge.visibility = View.GONE
+                    binding.tvDurationBadge.text = "${item.itemCount}"
+                    binding.tvDurationBadge.visibility = View.VISIBLE
+
+                    binding.ivIcon.tag = null
+                    binding.ivIcon.alpha = 1f
+                    binding.ivIcon.scaleType = ImageView.ScaleType.CENTER_INSIDE
+                    binding.ivIcon.setPadding(20, 20, 20, 20)
+                    binding.ivIcon.imageTintList = ColorStateList.valueOf(accentColor)
+                    binding.ivIcon.setImageResource(R.drawable.ic_folder_cinema)
+
+                    binding.tvTitle.text = item.name
+                    binding.tvSubtitle.text = ctx.getString(R.string.iptv_category_count_format, item.itemCount)
+                    binding.root.setOnClickListener { onIptvItemClick(item) }
+                    binding.root.setOnLongClickListener {
+                        onIptvItemLongClick(item)
+                        true
+                    }
+                }
+                is IptvStreamItem -> {
+                    binding.tvTitle.text = item.title
+                    val typeLabel = when (item.contentType) {
+                        IptvContentType.LIVE_TV -> "LIVE"
+                        IptvContentType.MOVIES -> "VOD"
+                        IptvContentType.SERIES -> "SERIES"
+                        IptvContentType.RADIO -> "RADIO"
+                    }
+                    binding.tvNewBadge.text = typeLabel
+                    binding.tvNewBadge.visibility = View.VISIBLE
+
+                    if (item.rating.isNotBlank() && item.rating != "0") {
+                        binding.tvDurationBadge.text = "⭐ ${item.rating}"
+                        binding.tvDurationBadge.visibility = View.VISIBLE
+                    } else {
+                        binding.tvDurationBadge.visibility = View.GONE
+                    }
+
+                    binding.tvSubtitle.text = item.categoryName
+                    val fallbackIcon = when (item.contentType) {
+                        IptvContentType.LIVE_TV -> R.drawable.ic_iptv_tv
+                        IptvContentType.RADIO -> R.drawable.ic_audio_track_modern
+                        IptvContentType.SERIES -> R.drawable.ic_folder_cinema
+                        IptvContentType.MOVIES -> R.drawable.ic_play_modern
+                    }
+                    IptvImageLoader.loadLogoOrPoster(ctx, item.logoUrl, binding.ivIcon, fallbackIcon, accentColor)
+
+                    binding.root.setOnClickListener { onIptvItemClick(item) }
+                    binding.root.setOnLongClickListener {
+                        onIptvItemLongClick(item)
+                        true
+                    }
+                }
+                is IptvSeasonGroup -> {
+                    binding.tvNewBadge.visibility = View.GONE
+                    binding.tvDurationBadge.text = "${item.episodes.size}"
+                    binding.tvDurationBadge.visibility = View.VISIBLE
+
+                    binding.ivIcon.tag = null
+                    binding.ivIcon.alpha = 1f
+                    binding.ivIcon.scaleType = ImageView.ScaleType.CENTER_INSIDE
+                    binding.ivIcon.setPadding(20, 20, 20, 20)
+                    binding.ivIcon.imageTintList = ColorStateList.valueOf(accentColor)
+                    binding.ivIcon.setImageResource(R.drawable.ic_folder_cinema)
+
+                    binding.tvTitle.text = item.name
+                    binding.tvSubtitle.text = ctx.getString(R.string.iptv_episodes_count_format, item.episodes.size)
+                    binding.root.setOnClickListener { onIptvItemClick(item) }
+                    binding.root.setOnLongClickListener(null)
+                }
+                is IptvEpisodeItem -> {
+                    binding.tvNewBadge.text = "S${item.seasonNumber}E${item.episodeNumber}"
+                    binding.tvNewBadge.visibility = View.VISIBLE
+                    if (item.durationLabel.isNotBlank()) {
+                        binding.tvDurationBadge.text = item.durationLabel
+                        binding.tvDurationBadge.visibility = View.VISIBLE
+                    } else {
+                        binding.tvDurationBadge.visibility = View.GONE
+                    }
+
+                    IptvImageLoader.loadLogoOrPoster(ctx, item.logoUrl, binding.ivIcon, R.drawable.ic_play_modern, accentColor)
+                    binding.tvTitle.text = item.title
+                    binding.tvSubtitle.text = if (item.plot.isNotBlank()) item.plot else "S${item.seasonNumber} • E${item.episodeNumber}"
+                    binding.root.setOnClickListener { onIptvItemClick(item) }
+                    binding.root.setOnLongClickListener {
+                        onIptvItemLongClick(item)
                         true
                     }
                 }

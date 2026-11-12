@@ -57,8 +57,18 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.pureplayer.video.databinding.ActivityMainBinding
+import android.widget.PopupMenu
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -186,13 +196,34 @@ class MainActivity : AppCompatActivity() {
     private var vaultFoldersOnly = listOf<VideoFolder>()
     private var vaultVideosFlat = listOf<VideoItem>()
 
+    // 0 = Video Folders, 1 = Private Vault, 2 = IPTV
+    private var currentMainTab = 0
     private var isInVaultTab = false
+    private var isInIptvTab = false
     private var isVaultSessionUnlocked = false
     private var isShowingFolderVideos = false
     private var currentOpenedFolder: VideoFolder? = null
     private var isSearchActive = false
     private var pendingDeleteVideo: VideoItem? = null
     private var loadMediaJob: Job? = null
+    private var iptvSyncJob: Job? = null
+
+    // Settings & Sub-Settings Back-Stack (ensures Back from any sub-setting returns to parent Settings menu)
+    private val settingsBackStack = ArrayDeque<() -> Unit>()
+    private var isNavigatingToSubDialog = false
+
+    // Instant Debounced Search StateFlow (280ms debounce + distinctUntilChanged + flatMapLatest)
+    private val searchQueryFlow = MutableStateFlow("")
+
+    // IPTV Navigation Hierarchy State (preserved when switching tabs)
+    // 0 = Sources List, 1 = Source Dashboard (Live/Movies/Series/Radio), 2 = Categories, 3 = Streams/Series List, 4 = Series Seasons, 5 = Season Episodes
+    private var iptvNavLevel = 0
+    private var activeIptvSource: IptvSource? = null
+    private var activeIptvContentType: IptvContentType? = null
+    private var activeIptvCategoryId: String? = null
+    private var activeIptvCategoryName: String = ""
+    private var activeIptvSeriesInfo: IptvSeriesInfoResult? = null
+    private var activeIptvSeasonGroup: IptvSeasonGroup? = null
 
     // Supports Android 14+ "Allow Limited Access" (READ_MEDIA_VISUAL_USER_SELECTED) as well as Full Access!
     private val multiPermissionLauncher = registerForActivityResult(
@@ -219,6 +250,29 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var pendingM3uFileSourceName: String = ""
+    private val m3uFilePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let {
+            try {
+                contentResolver.takePersistableUriPermission(
+                    it,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
+            val defaultName = pendingM3uFileSourceName.ifBlank {
+                it.lastPathSegment?.substringAfterLast("/")?.substringBeforeLast(".") ?: "M3U Playlist"
+            }
+            syncIptvSourceWithProgress(
+                existingSourceId = null,
+                name = defaultName,
+                type = IptvSourceType.M3U_FILE,
+                serverOrM3uUrl = it.toString()
+            )
+        }
+    }
+
     private val deleteRequestLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
@@ -238,6 +292,7 @@ class MainActivity : AppCompatActivity() {
 
         setupRecyclerView()
         setupListeners()
+        setupInstantDebouncedSearchFlow()
         applyUserTheme()
         checkPermissionAndLoad()
     }
@@ -289,6 +344,30 @@ class MainActivity : AppCompatActivity() {
      * Premium UI Engine: Builds a sleek, floating, theme-harmonious card popup dialog
      * with a glowing top pill, bold header, subtitle badge, and tactile option cards!
      */
+    private fun pushSettingsBackStack(reopenParent: () -> Unit) {
+        settingsBackStack.addLast(reopenParent)
+    }
+
+    private fun popSettingsBackStack(): Boolean {
+        val parent = settingsBackStack.removeLastOrNull() ?: return false
+        parent.invoke()
+        return true
+    }
+
+    private fun bindSubDialogBackNavigation(dialog: AlertDialog, btnCancelView: View? = null) {
+        btnCancelView?.setOnClickListener {
+            isNavigatingToSubDialog = true
+            dialog.dismiss()
+            isNavigatingToSubDialog = false
+            popSettingsBackStack()
+        }
+        dialog.setOnCancelListener {
+            if (!isNavigatingToSubDialog) {
+                popSettingsBackStack()
+            }
+        }
+    }
+
     private fun showPremiumMenuDialog(
         headerIcon: String,
         title: String,
@@ -491,16 +570,19 @@ class MainActivity : AppCompatActivity() {
             }
 
             rowCard.setOnClickListener {
+                isNavigatingToSubDialog = true
                 dialog.dismiss()
+                isNavigatingToSubDialog = false
                 item.onClick()
             }
 
             cardContainer.addView(rowCard)
         }
 
-        // Sleek Close Button at bottom
+        // Sleek Back / Close Button at bottom (returns to parent Settings menu if in sub-setting!)
+        val hasParentInStack = settingsBackStack.isNotEmpty()
         val btnClose = TextView(this).apply {
-            text = getString(R.string.close)
+            text = if (hasParentInStack) getString(R.string.back_to_previous_menu) else getString(R.string.close)
             gravity = Gravity.CENTER
             setTextColor(Color.parseColor("#CBD5E1"))
             textSize = 14.5f
@@ -516,9 +598,20 @@ class MainActivity : AppCompatActivity() {
                 cornerRadius = dp(14).toFloat()
                 setColor(Color.parseColor("#18FFFFFF"))
             }
-            setOnClickListener { dialog.dismiss() }
+            setOnClickListener {
+                isNavigatingToSubDialog = true
+                dialog.dismiss()
+                isNavigatingToSubDialog = false
+                popSettingsBackStack()
+            }
         }
         cardContainer.addView(btnClose)
+
+        dialog.setOnCancelListener {
+            if (!isNavigatingToSubDialog) {
+                popSettingsBackStack()
+            }
+        }
 
         dialog.show()
     }
@@ -534,20 +627,18 @@ class MainActivity : AppCompatActivity() {
         binding.searchBarContainer.setBackgroundColor(surface)
         window.statusBarColor = surface
         window.navigationBarColor = surface
-        binding.btnSettings.imageTintList = ColorStateList.valueOf(accent)
-        binding.btnSortAndLayout.imageTintList = ColorStateList.valueOf(accent)
+        binding.btnTopMenu.imageTintList = ColorStateList.valueOf(accent)
         binding.btnToggleSearch.imageTintList = ColorStateList.valueOf(accent)
-        binding.btnOpenFile.imageTintList = ColorStateList.valueOf(Color.WHITE)
         binding.btnBackFolder.imageTintList = ColorStateList.valueOf(accent)
+        binding.ivAddIptvPlus.imageTintList = ColorStateList.valueOf(accent)
+        binding.iptvProgressBar.indeterminateTintList = ColorStateList.valueOf(accent)
         binding.fabResumeLast.backgroundTintList = ColorStateList.valueOf(accent)
         binding.fabResumeLast.imageTintList = ColorStateList.valueOf(Color.parseColor("#090D16"))
 
         val topActionButtons = listOf(
             binding.btnBackFolder,
             binding.btnToggleSearch,
-            binding.btnSortAndLayout,
-            binding.btnOpenFile,
-            binding.btnSettings
+            binding.btnTopMenu
         )
         for (btn in topActionButtons) {
             btn.background = GradientDrawable().apply {
@@ -556,6 +647,19 @@ class MainActivity : AppCompatActivity() {
                 setColor(Color.parseColor("#18FFFFFF"))
                 setStroke(dp(1), Color.argb(48, Color.red(accent), Color.green(accent), Color.blue(accent)))
             }
+        }
+
+        binding.btnAddIptvSourceBar.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(10).toFloat()
+            setColor(Color.argb(36, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            setStroke(dp(1), Color.argb(120, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+        binding.iptvLoadingOverlay.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(20).toFloat()
+            setColor(surface)
+            setStroke(dp(1), Color.argb(110, Color.red(accent), Color.green(accent), Color.blue(accent)))
         }
 
         val searchBoxBg = GradientDrawable().apply {
@@ -610,38 +714,43 @@ class MainActivity : AppCompatActivity() {
         val accent = PlaybackStore.getAccentColor(this)
         val bg = PlaybackStore.getBackgroundColor(this)
         val lockedCount = PlaybackStore.getLockedFolders(this).size
+        val inactiveColor = Color.parseColor("#94A3B8")
 
-        val activeBg = GradientDrawable().apply {
+        fun createTabBg(active: Boolean) = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = dp(16).toFloat()
-            setColor(Color.argb(42, Color.red(accent), Color.green(accent), Color.blue(accent)))
-            setStroke(dp(1), Color.argb(145, Color.red(accent), Color.green(accent), Color.blue(accent)))
-        }
-        val inactiveBg = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = dp(16).toFloat()
-            setColor(bg)
-            setStroke(dp(1), Color.parseColor("#18FFFFFF"))
-        }
-
-        binding.tvTabVideos.text = getString(R.string.tab_video_folders)
-        binding.tvTabVault.text = if (lockedCount > 0 && isInVaultTab && isVaultSessionUnlocked) {
-            "${getString(R.string.tab_vault)} ($lockedCount)"
-        } else {
-            getString(R.string.tab_vault)
+            cornerRadius = dp(14).toFloat()
+            if (active) {
+                setColor(Color.argb(42, Color.red(accent), Color.green(accent), Color.blue(accent)))
+                setStroke(dp(1), Color.argb(145, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            } else {
+                setColor(bg)
+                setStroke(dp(1), Color.parseColor("#18FFFFFF"))
+            }
         }
 
-        if (!isInVaultTab) {
-            binding.tabVideos.background = activeBg
-            binding.tvTabVideos.setTextColor(Color.WHITE)
-            binding.tabVault.background = inactiveBg
-            binding.tvTabVault.setTextColor(Color.parseColor("#94A3B8"))
+        binding.tvTabVideos.text = getString(R.string.tab_video_folders_compact)
+        binding.tvTabVault.text = if (lockedCount > 0 && currentMainTab == 1 && isVaultSessionUnlocked) {
+            "${getString(R.string.tab_vault_compact)} ($lockedCount)"
         } else {
-            binding.tabVault.background = activeBg
-            binding.tvTabVault.setTextColor(Color.WHITE)
-            binding.tabVideos.background = inactiveBg
-            binding.tvTabVideos.setTextColor(Color.parseColor("#94A3B8"))
+            getString(R.string.tab_vault_compact)
         }
+        binding.tvTabIptv.text = getString(R.string.tab_iptv_compact)
+
+        val isVideos = (currentMainTab == 0)
+        val isVault = (currentMainTab == 1)
+        val isIptv = (currentMainTab == 2)
+
+        binding.tabVideos.background = createTabBg(isVideos)
+        binding.tvTabVideos.setTextColor(if (isVideos) Color.WHITE else inactiveColor)
+        binding.ivTabVideos.imageTintList = ColorStateList.valueOf(if (isVideos) accent else inactiveColor)
+
+        binding.tabVault.background = createTabBg(isVault)
+        binding.tvTabVault.setTextColor(if (isVault) Color.WHITE else inactiveColor)
+        binding.ivTabVault.imageTintList = ColorStateList.valueOf(if (isVault) accent else inactiveColor)
+
+        binding.tabIptv.background = createTabBg(isIptv)
+        binding.tvTabIptv.setTextColor(if (isIptv) Color.WHITE else inactiveColor)
+        binding.ivTabIptv.imageTintList = ColorStateList.valueOf(if (isIptv) accent else inactiveColor)
     }
 
     private fun updateRecyclerLayoutManager() {
@@ -663,7 +772,6 @@ class MainActivity : AppCompatActivity() {
     private fun setupRecyclerView() {
         adapter = MediaAdapter(
             onFolderClick = { folder ->
-                // In Vault tab, the user already authenticated once upon entering the Vault!
                 openFolderNow(folder)
             },
             onVideoClick = { video ->
@@ -674,6 +782,12 @@ class MainActivity : AppCompatActivity() {
             },
             onFolderLongClick = { folder ->
                 showFolderLockMenu(folder)
+            },
+            onIptvItemClick = { item ->
+                handleIptvItemClick(item)
+            },
+            onIptvItemLongClick = { item ->
+                handleIptvItemLongClick(item)
             }
         )
         updateRecyclerLayoutManager()
@@ -943,8 +1057,8 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#94A3B8"))
             textSize = 14f
             setPadding(dp(14), dp(10), dp(14), dp(10))
-            setOnClickListener { dialog.dismiss() }
         }
+        bindSubDialogBackNavigation(dialog, btnCancel)
 
         val btnUnlock = TextView(this).apply {
             text = getString(R.string.privacy_unlock_btn)
@@ -1031,8 +1145,8 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#94A3B8"))
             textSize = 14f
             setPadding(dp(16), dp(10), dp(16), dp(10))
-            setOnClickListener { dialog.dismiss() }
         }
+        bindSubDialogBackNavigation(dialog, btnCancel)
 
         val btnSave = TextView(this).apply {
             text = getString(R.string.save)
@@ -1128,8 +1242,8 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#94A3B8"))
             textSize = 14f
             setPadding(dp(16), dp(10), dp(16), dp(10))
-            setOnClickListener { dialog.dismiss() }
         }
+        bindSubDialogBackNavigation(dialog, btnCancel)
 
         val btnSave = TextView(this).apply {
             text = getString(R.string.save)
@@ -1231,8 +1345,8 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#94A3B8"))
             textSize = 14f
             setPadding(dp(16), dp(10), dp(16), dp(10))
-            setOnClickListener { dialog.dismiss() }
         }
+        bindSubDialogBackNavigation(dialog, btnCancel)
 
         val btnDelete = TextView(this).apply {
             text = getString(R.string.privacy_remove_pin_action)
@@ -1278,7 +1392,7 @@ class MainActivity : AppCompatActivity() {
                 title = getString(R.string.privacy_select_locked_folders, lockedCount),
                 subtitle = getString(R.string.privacy_locked_folders_dialog_title),
                 isAccentHighlighted = true,
-                onClick = { showLockedFoldersMultiPickerDialog() }
+                onClick = { pushSettingsBackStack { showPrivacyDashboardDialog() }; showLockedFoldersMultiPickerDialog() }
             ),
             PremiumMenuItem(
                 iconEmoji = "👆",
@@ -1289,20 +1403,21 @@ class MainActivity : AppCompatActivity() {
                     PlaybackStore.setBiometricEnabled(this, nextState)
                     val stateStr = if (nextState) getString(R.string.privacy_bio_on) else getString(R.string.privacy_bio_off)
                     Toast.makeText(this, stateStr, Toast.LENGTH_SHORT).show()
+                    showPrivacyDashboardDialog()
                 }
             ),
             PremiumMenuItem(
                 iconEmoji = "🔑",
                 title = getString(R.string.privacy_change_pin_option),
                 subtitle = getString(R.string.privacy_change_pin_sub),
-                onClick = { showChangePasswordWithCurrentVerifyDialog() }
+                onClick = { pushSettingsBackStack { showPrivacyDashboardDialog() }; showChangePasswordWithCurrentVerifyDialog() }
             ),
             PremiumMenuItem(
                 iconEmoji = "🗑️",
                 title = getString(R.string.privacy_remove_pin_option),
                 subtitle = getString(R.string.privacy_remove_pin_sub),
                 isDanger = true,
-                onClick = { showRemovePasswordVerifyDialog() }
+                onClick = { pushSettingsBackStack { showPrivacyDashboardDialog() }; showRemovePasswordVerifyDialog() }
             )
         )
 
@@ -1468,8 +1583,8 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#94A3B8"))
             textSize = 14f
             setPadding(dp(14), dp(10), dp(14), dp(10))
-            setOnClickListener { dialog.dismiss() }
         }
+        bindSubDialogBackNavigation(dialog, btnCancel)
 
         val btnSave = TextView(this).apply {
             text = getString(R.string.save)
@@ -1533,6 +1648,7 @@ class MainActivity : AppCompatActivity() {
                     isShowingFolderVideos = false
                     currentOpenedFolder = null
                     applyFolderVisibilityAndRefreshUI()
+                    popSettingsBackStack()
                 }
             ),
             PremiumMenuItem(
@@ -1541,6 +1657,7 @@ class MainActivity : AppCompatActivity() {
                 subtitle = if (currentMode == 1) "✅ " + getString(R.string.active_mode_badge) else getString(R.string.folder_picker_dialog_title),
                 isAccentHighlighted = (currentMode == 1),
                 onClick = {
+                    pushSettingsBackStack { showFolderVisibilityModeDialog() }
                     showAllowedFoldersMultiPickerDialog()
                 }
             ),
@@ -1554,6 +1671,7 @@ class MainActivity : AppCompatActivity() {
                     isShowingFolderVideos = false
                     currentOpenedFolder = null
                     applyFolderVisibilityAndRefreshUI()
+                    popSettingsBackStack()
                 }
             )
         )
@@ -1620,6 +1738,7 @@ class MainActivity : AppCompatActivity() {
                     isShowingFolderVideos = false
                     currentOpenedFolder = null
                     applyFolderVisibilityAndRefreshUI()
+                    popSettingsBackStack()
                 }
             }
         )
@@ -1805,30 +1924,73 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showTopHamburgerPopupMenu(anchor: View) {
+        val popup = PopupMenu(this, anchor, Gravity.END)
+        popup.menu.add(0, 1, 0, "⚙️  " + getString(R.string.top_menu_settings)).apply {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                contentDescription = getString(R.string.top_menu_settings)
+            }
+        }
+        popup.menu.add(0, 2, 1, "🔃  " + getString(R.string.top_menu_sort)).apply {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                contentDescription = getString(R.string.top_menu_sort)
+            }
+        }
+        popup.menu.add(0, 3, 2, "📂  " + getString(R.string.top_menu_open_files)).apply {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                contentDescription = getString(R.string.top_menu_open_files)
+            }
+        }
+        popup.setOnMenuItemClickListener { menuItem ->
+            when (menuItem.itemId) {
+                1 -> {
+                    showProSettingsDialog(clearStack = true)
+                    true
+                }
+                2 -> {
+                    settingsBackStack.clear()
+                    showSortAndLayoutDialog()
+                    true
+                }
+                3 -> {
+                    openDocumentLauncher.launch(arrayOf("video/*", "application/x-matroska"))
+                    true
+                }
+                else -> false
+            }
+        }
+        popup.show()
+    }
+
     private fun setupListeners() {
         attachFluidTouchAnimation(
             binding.btnBackFolder,
             binding.btnToggleSearch,
-            binding.btnSortAndLayout,
-            binding.btnOpenFile,
-            binding.btnSettings,
+            binding.btnTopMenu,
+            binding.btnAddIptvSourceBar,
             binding.tabVideos,
             binding.tabVault,
+            binding.tabIptv,
             binding.fabResumeLast
         )
 
         // Long-Pressing on "Video Folders / مجلدات الفيديو" title in the top bar opens the Premium Folder Visibility Selector!
         binding.tvToolbarTitle.isLongClickable = true
         binding.tvToolbarTitle.setOnLongClickListener {
-            showFolderVisibilityModeDialog()
+            if (currentMainTab == 2) {
+                showAddIptvSourceDialog()
+            } else {
+                settingsBackStack.clear()
+                showFolderVisibilityModeDialog()
+            }
             true
         }
 
         binding.btnBackFolder.setOnClickListener {
-            if (isSearchActive) {
-                closeSearchBar()
-            } else {
-                showFoldersList()
+            when {
+                isSearchActive -> closeSearchBar()
+                currentMainTab == 2 -> navigateBackInIptvHierarchy()
+                else -> showFoldersList()
             }
         }
 
@@ -1838,6 +2000,14 @@ class MainActivity : AppCompatActivity() {
             } else {
                 openSearchBar()
             }
+        }
+
+        binding.btnTopMenu.setOnClickListener { view ->
+            showTopHamburgerPopupMenu(view)
+        }
+
+        binding.btnAddIptvSourceBar.setOnClickListener {
+            showAddIptvSourceDialog()
         }
 
         binding.btnClearSearch.setOnClickListener {
@@ -1851,7 +2021,8 @@ class MainActivity : AppCompatActivity() {
         binding.etSearchVideos.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                filterVideosByQuery(s?.toString() ?: "")
+                val q = s?.toString() ?: ""
+                searchQueryFlow.value = q
             }
             override fun afterTextChanged(s: Editable?) {}
         })
@@ -1861,79 +2032,137 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnSortAndLayout.setOnClickListener {
+            settingsBackStack.clear()
             showSortAndLayoutDialog()
         }
 
         binding.btnSettings.setOnClickListener {
-            showProSettingsDialog()
+            showProSettingsDialog(clearStack = true)
         }
 
         binding.tabVideos.setOnClickListener {
-            if (isInVaultTab) {
+            if (currentMainTab != 0) {
+                currentMainTab = 0
                 isInVaultTab = false
-                isShowingFolderVideos = false
-                currentOpenedFolder = null
+                isInIptvTab = false
                 if (isSearchActive) closeSearchBar()
                 updateBottomTabsVisualState()
                 applyFolderVisibilityAndRefreshUI()
+                updateResumeLastFab()
             } else if (isShowingFolderVideos) {
                 showFoldersList()
             }
         }
 
         binding.tabVault.setOnClickListener {
-            if (isInVaultTab && isVaultSessionUnlocked) {
+            if (currentMainTab == 1 && isVaultSessionUnlocked) {
                 if (isShowingFolderVideos) {
                     showFoldersList()
                 }
                 return@setOnClickListener
             }
             if (!PlaybackStore.hasPrivacyPin(this)) {
+                settingsBackStack.clear()
                 showFirstTimeSetupPinDialog {
                     isVaultSessionUnlocked = true
+                    currentMainTab = 1
                     isInVaultTab = true
+                    isInIptvTab = false
                     isShowingFolderVideos = false
                     currentOpenedFolder = null
                     if (isSearchActive) closeSearchBar()
                     updateBottomTabsVisualState()
                     applyFolderVisibilityAndRefreshUI()
+                    updateResumeLastFab()
                 }
+            } else if (isVaultSessionUnlocked) {
+                currentMainTab = 1
+                isInVaultTab = true
+                isInIptvTab = false
+                if (isSearchActive) closeSearchBar()
+                updateBottomTabsVisualState()
+                applyFolderVisibilityAndRefreshUI()
+                updateResumeLastFab()
             } else {
+                settingsBackStack.clear()
                 authenticatePrivacyAccess(getString(R.string.vault_auth_subtitle)) {
                     isVaultSessionUnlocked = true
+                    currentMainTab = 1
                     isInVaultTab = true
+                    isInIptvTab = false
                     isShowingFolderVideos = false
                     currentOpenedFolder = null
                     if (isSearchActive) closeSearchBar()
                     updateBottomTabsVisualState()
                     applyFolderVisibilityAndRefreshUI()
+                    updateResumeLastFab()
                 }
+            }
+        }
+
+        binding.tabIptv.setOnClickListener {
+            if (currentMainTab != 2) {
+                currentMainTab = 2
+                isInVaultTab = false
+                isInIptvTab = true
+                if (isSearchActive) closeSearchBar()
+                updateBottomTabsVisualState()
+                renderIptvCurrentLevel()
+                updateResumeLastFab()
+            } else if (iptvNavLevel > 0) {
+                iptvNavLevel = 0
+                renderIptvCurrentLevel()
             }
         }
 
         binding.btnGrantPermission.setOnClickListener {
-            if (isInVaultTab && isVaultSessionUnlocked) {
-                showLockedFoldersMultiPickerDialog()
-            } else {
-                requestStoragePermission()
+            when {
+                currentMainTab == 2 -> showAddIptvSourceDialog()
+                currentMainTab == 1 && isVaultSessionUnlocked -> {
+                    settingsBackStack.clear()
+                    showLockedFoldersMultiPickerDialog()
+                }
+                else -> requestStoragePermission()
             }
         }
 
         binding.swipeRefresh.setOnRefreshListener {
-            checkPermissionAndLoad()
+            if (currentMainTab == 2) {
+                binding.swipeRefresh.isRefreshing = false
+                val src = activeIptvSource ?: IptvRepository.getSources(this).firstOrNull()
+                if (src != null) {
+                    refreshExistingIptvSource(src)
+                } else {
+                    renderIptvCurrentLevel()
+                }
+            } else {
+                checkPermissionAndLoad()
+            }
         }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 when {
                     isSearchActive -> closeSearchBar()
-                    isShowingFolderVideos -> showFoldersList()
-                    isInVaultTab -> {
+                    currentMainTab == 2 && iptvNavLevel > 0 -> navigateBackInIptvHierarchy()
+                    currentMainTab == 2 -> {
+                        currentMainTab = 0
                         isInVaultTab = false
+                        isInIptvTab = false
+                        updateBottomTabsVisualState()
+                        applyFolderVisibilityAndRefreshUI()
+                        updateResumeLastFab()
+                    }
+                    isShowingFolderVideos -> showFoldersList()
+                    currentMainTab == 1 -> {
+                        currentMainTab = 0
+                        isInVaultTab = false
+                        isInIptvTab = false
                         isShowingFolderVideos = false
                         currentOpenedFolder = null
                         updateBottomTabsVisualState()
                         applyFolderVisibilityAndRefreshUI()
+                        updateResumeLastFab()
                     }
                     else -> {
                         isEnabled = false
@@ -1944,8 +2173,74 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
+    private fun setupInstantDebouncedSearchFlow() {
+        lifecycleScope.launch {
+            searchQueryFlow
+                .debounce(280L)
+                .distinctUntilChanged()
+                .flatMapLatest { rawQuery ->
+                    flow {
+                        if (!isSearchActive) {
+                            emit(Pair(rawQuery, emptyList<Any>()))
+                            return@flow
+                        }
+                        val normQuery = IptvSearchNormalizer.normalize(rawQuery)
+                        if (currentMainTab == 2) {
+                            val src = activeIptvSource ?: IptvRepository.getSources(this@MainActivity).firstOrNull()
+                            if (src == null) {
+                                emit(Pair(rawQuery, emptyList<Any>()))
+                            } else {
+                                val allStreams = IptvRepository.loadCachedStreams(this@MainActivity, src.id)
+                                val matched = if (normQuery.isEmpty()) {
+                                    allStreams.take(300)
+                                } else {
+                                    allStreams.filter { item ->
+                                        item.normalizedTitle.contains(normQuery) || item.normalizedCategory.contains(normQuery)
+                                    }.sortedBy { it.contentType.ordinal }.take(400)
+                                }
+                                emit(Pair(rawQuery, matched))
+                            }
+                        } else {
+                            val sourcePool = when {
+                                isShowingFolderVideos && currentOpenedFolder != null -> currentOpenedFolder!!.videos
+                                currentMainTab == 1 && isVaultSessionUnlocked -> vaultVideosFlat
+                                else -> publicVideosFlat
+                            }
+                            val matched = if (normQuery.isEmpty()) {
+                                sourcePool
+                            } else {
+                                sourcePool.filter { v ->
+                                    IptvSearchNormalizer.matches(v.title, v.folderName, normQuery)
+                                }
+                            }
+                            emit(Pair(rawQuery, matched))
+                        }
+                    }.flowOn(Dispatchers.Default)
+                }
+                .collectLatest { (rawQuery, results) ->
+                    if (!isSearchActive) return@collectLatest
+                    if (results.isEmpty() && rawQuery.isNotBlank()) {
+                        binding.recyclerView.visibility = View.GONE
+                        binding.emptyLayout.visibility = View.VISIBLE
+                        binding.tvEmptyMessage.text = getString(R.string.search_no_results)
+                        binding.btnGrantPermission.visibility = View.GONE
+                    } else {
+                        binding.emptyLayout.visibility = View.GONE
+                        binding.recyclerView.visibility = View.VISIBLE
+                        adapter.submitIptvList(results)
+                    }
+                }
+        }
+    }
+
     private fun openSearchBar() {
         isSearchActive = true
+        binding.etSearchVideos.hint = if (currentMainTab == 2) {
+            getString(R.string.iptv_search_hint)
+        } else {
+            getString(R.string.search_videos_hint)
+        }
         binding.searchBarContainer.alpha = 0f
         binding.searchBarContainer.visibility = View.VISIBLE
         binding.searchBarContainer.animate().alpha(1f).setDuration(180L).start()
@@ -1958,10 +2253,13 @@ class MainActivity : AppCompatActivity() {
     private fun closeSearchBar() {
         isSearchActive = false
         binding.etSearchVideos.setText("")
+        searchQueryFlow.value = ""
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         imm?.hideSoftInputFromWindow(binding.etSearchVideos.windowToken, 0)
         binding.searchBarContainer.visibility = View.GONE
-        if (isShowingFolderVideos && currentOpenedFolder != null) {
+        if (currentMainTab == 2) {
+            renderIptvCurrentLevel()
+        } else if (isShowingFolderVideos && currentOpenedFolder != null) {
             binding.tvToolbarTitle.text = "${currentOpenedFolder!!.name} (${currentOpenedFolder!!.videos.size})"
             binding.btnBackFolder.visibility = View.VISIBLE
             adapter.submitVideos(currentOpenedFolder!!.videos)
@@ -1971,24 +2269,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun filterVideosByQuery(rawQuery: String) {
-        val query = rawQuery.trim()
         if (!isSearchActive) return
-
-        val sourcePool = when {
-            isShowingFolderVideos && currentOpenedFolder != null -> currentOpenedFolder!!.videos
-            isInVaultTab && isVaultSessionUnlocked -> vaultVideosFlat
-            else -> publicVideosFlat
-        }
-
-        if (query.isEmpty()) {
-            adapter.submitVideos(sourcePool)
-            return
-        }
-
-        val filtered = sourcePool.filter {
-            it.title.contains(query, ignoreCase = true) || it.folderName.contains(query, ignoreCase = true)
-        }
-        adapter.submitVideos(filtered)
+        searchQueryFlow.value = rawQuery
     }
 
     /**
@@ -2010,6 +2292,7 @@ class MainActivity : AppCompatActivity() {
                     PlaybackStore.setGridLayoutEnabled(this, false)
                     updateRecyclerLayoutManager()
                     applyFolderVisibilityAndRefreshUI()
+                    popSettingsBackStack()
                 }
             ),
             PremiumMenuItem(
@@ -2021,6 +2304,7 @@ class MainActivity : AppCompatActivity() {
                     PlaybackStore.setGridLayoutEnabled(this, true)
                     updateRecyclerLayoutManager()
                     applyFolderVisibilityAndRefreshUI()
+                    popSettingsBackStack()
                 }
             ),
             // Section 2: Sort By
@@ -2033,6 +2317,7 @@ class MainActivity : AppCompatActivity() {
                 onClick = {
                     PlaybackStore.setSortOrderMode(this, 0)
                     applyFolderVisibilityAndRefreshUI()
+                    popSettingsBackStack()
                 }
             ),
             PremiumMenuItem(
@@ -2043,6 +2328,7 @@ class MainActivity : AppCompatActivity() {
                 onClick = {
                     PlaybackStore.setSortOrderMode(this, 1)
                     applyFolderVisibilityAndRefreshUI()
+                    popSettingsBackStack()
                 }
             ),
             PremiumMenuItem(
@@ -2053,6 +2339,7 @@ class MainActivity : AppCompatActivity() {
                 onClick = {
                     PlaybackStore.setSortOrderMode(this, 2)
                     applyFolderVisibilityAndRefreshUI()
+                    popSettingsBackStack()
                 }
             ),
             PremiumMenuItem(
@@ -2063,6 +2350,7 @@ class MainActivity : AppCompatActivity() {
                 onClick = {
                     PlaybackStore.setSortOrderMode(this, 3)
                     applyFolderVisibilityAndRefreshUI()
+                    popSettingsBackStack()
                 }
             ),
             PremiumMenuItem(
@@ -2073,6 +2361,7 @@ class MainActivity : AppCompatActivity() {
                 onClick = {
                     PlaybackStore.setSortOrderMode(this, 4)
                     applyFolderVisibilityAndRefreshUI()
+                    popSettingsBackStack()
                 }
             ),
             PremiumMenuItem(
@@ -2083,6 +2372,7 @@ class MainActivity : AppCompatActivity() {
                 onClick = {
                     PlaybackStore.setSortOrderMode(this, 5)
                     applyFolderVisibilityAndRefreshUI()
+                    popSettingsBackStack()
                 }
             ),
             PremiumMenuItem(
@@ -2093,6 +2383,7 @@ class MainActivity : AppCompatActivity() {
                 onClick = {
                     PlaybackStore.setSortOrderMode(this, 6)
                     applyFolderVisibilityAndRefreshUI()
+                    popSettingsBackStack()
                 }
             )
         )
@@ -2138,7 +2429,10 @@ class MainActivity : AppCompatActivity() {
     /**
      * Premium Settings Menu: Styled with sleek cards, emoji badges, and live status subtitles!
      */
-    private fun showProSettingsDialog() {
+    private fun showProSettingsDialog(clearStack: Boolean = false) {
+        if (clearStack) {
+            settingsBackStack.clear()
+        }
         val hasPin = PlaybackStore.hasPrivacyPin(this)
         val lockedCount = PlaybackStore.getLockedFolders(this).size
         val privacySub = if (hasPin) {
@@ -2185,13 +2479,13 @@ class MainActivity : AppCompatActivity() {
                 subtitle = privacySub,
                 isAccentHighlighted = true,
                 sectionHeader = getString(R.string.settings_cat_privacy_folders),
-                onClick = { openPrivacyControlSection() }
+                onClick = { pushSettingsBackStack { showProSettingsDialog(false) }; openPrivacyControlSection() }
             ),
             PremiumMenuItem(
                 iconEmoji = "📂",
                 title = getString(R.string.setting_folder_visibility),
                 subtitle = filterSub,
-                onClick = { showFolderVisibilityModeDialog() }
+                onClick = { pushSettingsBackStack { showProSettingsDialog(false) }; showFolderVisibilityModeDialog() }
             )
         )
 
@@ -2218,25 +2512,25 @@ class MainActivity : AppCompatActivity() {
                     subtitle = layoutSub,
                     isAccentHighlighted = true,
                     sectionHeader = getString(R.string.settings_cat_appearance_display),
-                    onClick = { showSortAndLayoutDialog() }
+                    onClick = { pushSettingsBackStack { showProSettingsDialog(false) }; showSortAndLayoutDialog() }
                 ),
                 PremiumMenuItem(
                     iconEmoji = "🎨",
                     title = getString(R.string.setting_app_theme),
                     subtitle = currentThemeName,
-                    onClick = { showThemeSelectorDialog() }
+                    onClick = { pushSettingsBackStack { showProSettingsDialog(false) }; showThemeSelectorDialog() }
                 ),
                 PremiumMenuItem(
                     iconEmoji = "🌐",
                     title = getString(R.string.setting_app_language),
                     subtitle = langSub,
-                    onClick = { showAppLanguageDialog() }
+                    onClick = { pushSettingsBackStack { showProSettingsDialog(false) }; showAppLanguageDialog() }
                 ),
                 PremiumMenuItem(
                     iconEmoji = "🔄",
                     title = getString(R.string.setting_default_orientation),
                     subtitle = orientSub,
-                    onClick = { showDefaultOrientationDialog() }
+                    onClick = { pushSettingsBackStack { showProSettingsDialog(false) }; showDefaultOrientationDialog() }
                 )
             )
         )
@@ -2249,13 +2543,13 @@ class MainActivity : AppCompatActivity() {
                     title = getString(R.string.setting_subtitle_style),
                     subtitle = "${subSize}sp • ${getString(R.string.style_bg_opacity_label, subBgOpacity)}",
                     sectionHeader = getString(R.string.settings_cat_subtitles),
-                    onClick = { showSubtitleStyleDialog() }
+                    onClick = { pushSettingsBackStack { showProSettingsDialog(false) }; showSubtitleStyleDialog() }
                 ),
                 PremiumMenuItem(
                     iconEmoji = "💬",
                     title = getString(R.string.setting_subtitle_languages),
                     subtitle = subLangs,
-                    onClick = { showSubtitleLanguagePriorityDialog() }
+                    onClick = { pushSettingsBackStack { showProSettingsDialog(false) }; showSubtitleLanguagePriorityDialog() }
                 ),
                 PremiumMenuItem(
                     iconEmoji = "🎯",
@@ -2274,6 +2568,7 @@ class MainActivity : AppCompatActivity() {
                     isAccentHighlighted = true,
                     sectionHeader = getString(R.string.settings_cat_updates),
                     onClick = {
+                        pushSettingsBackStack { showProSettingsDialog(false) }
                         openGitHubUpdaterFlow()
                     }
                 )
@@ -2292,13 +2587,13 @@ class MainActivity : AppCompatActivity() {
         val currentTag = PlaybackStore.getAppLanguageTag(this)
         val items = listOf(
             PremiumMenuItem("📱", getString(R.string.lang_system_default), null, currentTag == "") {
-                PlaybackStore.setAppLanguageTag(this, "")
+                PlaybackStore.setAppLanguageTag(this, ""); popSettingsBackStack()
             },
             PremiumMenuItem("🇸🇦", getString(R.string.lang_arabic), "العربية", currentTag == "ar") {
-                PlaybackStore.setAppLanguageTag(this, "ar")
+                PlaybackStore.setAppLanguageTag(this, "ar"); popSettingsBackStack()
             },
             PremiumMenuItem("🇺🇸", getString(R.string.lang_english), "English", currentTag == "en") {
-                PlaybackStore.setAppLanguageTag(this, "en")
+                PlaybackStore.setAppLanguageTag(this, "en"); popSettingsBackStack()
             }
         )
         showPremiumMenuDialog("🌐", getString(R.string.setting_app_language), null, items)
@@ -2339,8 +2634,10 @@ class MainActivity : AppCompatActivity() {
                     getString(R.string.sub_lang_priority_saved, finalOrder.joinToString(" → ") { it.uppercase() }),
                     Toast.LENGTH_SHORT
                 ).show()
+                popSettingsBackStack()
             }
-            .setNegativeButton(getString(R.string.cancel), null)
+            .setNegativeButton(getString(R.string.cancel)) { _, _ -> popSettingsBackStack() }
+            .setOnCancelListener { popSettingsBackStack() }
             .show()
     }
 
@@ -2362,6 +2659,7 @@ class MainActivity : AppCompatActivity() {
                 onClick = {
                     PlaybackStore.setThemeIndex(this, idx)
                     applyUserTheme()
+                    popSettingsBackStack()
                 }
             )
         }
@@ -2536,8 +2834,10 @@ class MainActivity : AppCompatActivity() {
                 PlaybackStore.setSubTextOpacityPct(this, currentTextOpacity)
                 PlaybackStore.setSubOutlinePx(this, currentOutline)
                 PlaybackStore.setSubColorIndex(this, selectedColorIdx)
+                popSettingsBackStack()
             }
-            .setNegativeButton(getString(R.string.cancel), null)
+            .setNegativeButton(getString(R.string.cancel)) { _, _ -> popSettingsBackStack() }
+            .setOnCancelListener { popSettingsBackStack() }
             .show()
     }
 
@@ -2545,13 +2845,13 @@ class MainActivity : AppCompatActivity() {
         val current = PlaybackStore.getDefaultOrientationIndex(this)
         val items = listOf(
             PremiumMenuItem("🔄", getString(R.string.orientation_auto), null, current == 0) {
-                PlaybackStore.setDefaultOrientationIndex(this, 0)
+                PlaybackStore.setDefaultOrientationIndex(this, 0); popSettingsBackStack()
             },
             PremiumMenuItem("↔️", getString(R.string.orientation_landscape), null, current == 1) {
-                PlaybackStore.setDefaultOrientationIndex(this, 1)
+                PlaybackStore.setDefaultOrientationIndex(this, 1); popSettingsBackStack()
             },
             PremiumMenuItem("↕️", getString(R.string.orientation_portrait), null, current == 2) {
-                PlaybackStore.setDefaultOrientationIndex(this, 2)
+                PlaybackStore.setDefaultOrientationIndex(this, 2); popSettingsBackStack()
             }
         )
         showPremiumMenuDialog("🔄", getString(R.string.setting_default_orientation), null, items)
@@ -2583,6 +2883,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyFolderVisibilityAndRefreshUI() {
+        if (currentMainTab == 2) {
+            updateRecyclerLayoutManager()
+            updateBottomTabsVisualState()
+            renderIptvCurrentLevel()
+            return
+        }
+        binding.iptvHeaderBar.visibility = View.GONE
         val mode = PlaybackStore.getFolderFilterMode(this)
         val allowedSet = PlaybackStore.getAllowedFolders(this)
         val lockedSet = PlaybackStore.getLockedFolders(this)
@@ -2868,8 +3175,8 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#94A3B8"))
             textSize = 14f
             setPadding(dp(16), dp(10), dp(16), dp(10))
-            setOnClickListener { dialog.dismiss() }
         }
+        bindSubDialogBackNavigation(dialog, btnCancel)
 
         val btnSave = TextView(this).apply {
             text = getString(R.string.save)
@@ -3150,15 +3457,922 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun launchPlayer(uri: Uri, title: String, startPositionMs: Long) {
+    private fun launchPlayer(
+        uri: Uri,
+        title: String,
+        startPositionMs: Long,
+        httpUserAgent: String = "",
+        httpReferrer: String = ""
+    ) {
         PlaybackStore.markVideoOpened(this, uri)
         val intent = Intent(this, PlayerActivity::class.java).apply {
             data = uri
             putExtra("VIDEO_TITLE", title)
             putExtra("START_POSITION_MS", startPositionMs)
+            if (httpUserAgent.isNotBlank()) putExtra("user-agent", httpUserAgent)
+            if (httpReferrer.isNotBlank()) putExtra("referer", httpReferrer)
         }
         startActivity(intent)
         @Suppress("DEPRECATION")
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+    }
+
+    // =========================================================================
+    // FULL IPTV SMARTERS PRO-STYLE UI & SOURCE MANAGEMENT
+    // =========================================================================
+
+    private fun renderIptvCurrentLevel() {
+        if (currentMainTab != 2) return
+        binding.iptvHeaderBar.visibility = View.VISIBLE
+        binding.fabResumeLast.visibility = View.GONE
+        adapter.isVaultMode = false
+
+        val sources = IptvRepository.getSources(this)
+        if (activeIptvSource != null) {
+            activeIptvSource = sources.find { it.id == activeIptvSource?.id }
+        }
+        if (activeIptvSource == null && sources.isNotEmpty()) {
+            val savedActiveId = IptvRepository.getActiveSourceId(this)
+            activeIptvSource = sources.find { it.id == savedActiveId } ?: sources.first()
+        }
+
+        if (sources.isEmpty()) {
+            iptvNavLevel = 0
+            binding.tvToolbarTitle.text = getString(R.string.iptv_toolbar_title)
+            binding.btnBackFolder.visibility = View.GONE
+            binding.tvIptvStatusSubtitle.text = getString(R.string.iptv_sources_subtitle)
+            // Show the Xtream / Sources header card with the (+) Add Source card directly below it!
+            binding.emptyLayout.visibility = View.GONE
+            binding.recyclerView.visibility = View.VISIBLE
+            val initialCards = listOf<Any>(
+                IptvAddCardItem(
+                    title = "➕  " + getString(R.string.iptv_add_source_title),
+                    subtitle = getString(R.string.iptv_add_source_subtitle)
+                )
+            )
+            adapter.submitIptvList(initialCards)
+            return
+        }
+
+        binding.emptyLayout.visibility = View.GONE
+        binding.recyclerView.visibility = View.VISIBLE
+
+        when (iptvNavLevel) {
+            0 -> {
+                // Level 0: Xtream & M3U Sources List + prominent (+) Add New Source card right below
+                binding.tvToolbarTitle.text = "${getString(R.string.iptv_toolbar_title)} (${sources.size})"
+                binding.btnBackFolder.visibility = View.GONE
+                binding.tvIptvStatusSubtitle.text = getString(R.string.iptv_sources_manage_hint)
+                val list = mutableListOf<Any>()
+                list.addAll(sources)
+                list.add(
+                    IptvAddCardItem(
+                        title = "➕  " + getString(R.string.iptv_add_source_title),
+                        subtitle = getString(R.string.iptv_add_source_subtitle)
+                    )
+                )
+                adapter.submitIptvList(list)
+            }
+            1 -> {
+                // Level 1: IPTV Smarters Pro Dashboard for Active Source (Shows ONLY non-empty sections!)
+                val src = activeIptvSource ?: run {
+                    iptvNavLevel = 0
+                    renderIptvCurrentLevel()
+                    return
+                }
+                binding.tvToolbarTitle.text = src.name
+                binding.btnBackFolder.visibility = View.VISIBLE
+                binding.tvIptvStatusSubtitle.text = "${src.type.name} • ${src.totalItemsCount()} ${getString(R.string.iptv_items_unit)}"
+
+                val allItems = IptvRepository.loadCachedStreams(this, src.id)
+                val liveCnt = allItems.count { it.contentType == IptvContentType.LIVE_TV }
+                val movieCnt = allItems.count { it.contentType == IptvContentType.MOVIES }
+                val seriesCnt = allItems.count { it.contentType == IptvContentType.SERIES }
+                val radioCnt = allItems.count { it.contentType == IptvContentType.RADIO }
+
+                val sectionCards = mutableListOf<Any>()
+                if (liveCnt > 0) {
+                    sectionCards.add(
+                        IptvSectionCardItem(
+                            contentType = IptvContentType.LIVE_TV,
+                            title = "📺  " + getString(R.string.iptv_sec_live_tv),
+                            subtitle = getString(R.string.iptv_sec_live_sub, liveCnt),
+                            count = liveCnt
+                        )
+                    )
+                }
+                if (movieCnt > 0) {
+                    sectionCards.add(
+                        IptvSectionCardItem(
+                            contentType = IptvContentType.MOVIES,
+                            title = "🎬  " + getString(R.string.iptv_sec_movies),
+                            subtitle = getString(R.string.iptv_sec_movies_sub, movieCnt),
+                            count = movieCnt
+                        )
+                    )
+                }
+                if (seriesCnt > 0) {
+                    sectionCards.add(
+                        IptvSectionCardItem(
+                            contentType = IptvContentType.SERIES,
+                            title = "🎞️  " + getString(R.string.iptv_sec_series),
+                            subtitle = getString(R.string.iptv_sec_series_sub, seriesCnt),
+                            count = seriesCnt
+                        )
+                    )
+                }
+                if (radioCnt > 0) {
+                    sectionCards.add(
+                        IptvSectionCardItem(
+                            contentType = IptvContentType.RADIO,
+                            title = "📻  " + getString(R.string.iptv_sec_radio),
+                            subtitle = getString(R.string.iptv_sec_radio_sub, radioCnt),
+                            count = radioCnt
+                        )
+                    )
+                }
+                // Always include the (+) card below so user can add another source or switch sources easily
+                sectionCards.add(
+                    IptvAddCardItem(
+                        title = "➕  " + getString(R.string.iptv_add_source_title),
+                        subtitle = getString(R.string.iptv_add_source_subtitle)
+                    )
+                )
+                adapter.submitIptvList(sectionCards)
+            }
+            2 -> {
+                // Level 2: Categories inside selected ContentType (only non-empty categories)
+                val src = activeIptvSource ?: return
+                val cType = activeIptvContentType ?: return
+                val secName = getSectionDisplayName(cType)
+                binding.tvToolbarTitle.text = "${src.name} • $secName"
+                binding.btnBackFolder.visibility = View.VISIBLE
+                binding.tvIptvStatusSubtitle.text = getString(R.string.iptv_long_press_reclassify_hint)
+
+                val sectionStreams = IptvRepository.loadCachedStreams(this, src.id)
+                    .filter { it.contentType == cType }
+
+                val categories = mutableListOf<Any>()
+                if (sectionStreams.isNotEmpty()) {
+                    categories.add(
+                        IptvCategory(
+                            id = "__ALL__",
+                            name = "🌐  " + getString(R.string.iptv_all_channels_category),
+                            contentType = cType,
+                            itemCount = sectionStreams.size
+                        )
+                    )
+                }
+                val grouped = sectionStreams.groupBy { it.categoryName }
+                    .filter { (_, list) -> list.isNotEmpty() }
+                    .map { (catName, list) ->
+                        IptvCategory(
+                            id = list.first().categoryId,
+                            name = catName,
+                            contentType = cType,
+                            itemCount = list.size
+                        )
+                    }
+                categories.addAll(grouped)
+                adapter.submitIptvList(categories)
+            }
+            3 -> {
+                // Level 3: Streams / Movies / Series inside selected Category
+                val src = activeIptvSource ?: return
+                val cType = activeIptvContentType ?: return
+                binding.tvToolbarTitle.text = activeIptvCategoryName
+                binding.btnBackFolder.visibility = View.VISIBLE
+
+                val rawStreams = IptvRepository.loadCachedStreams(this, src.id)
+                    .filter { it.contentType == cType }
+                    .let { list ->
+                        if (activeIptvCategoryId == "__ALL__" || activeIptvCategoryId.isNullOrEmpty()) {
+                            list
+                        } else {
+                            list.filter { it.categoryName == activeIptvCategoryName || it.categoryId == activeIptvCategoryId }
+                        }
+                    }
+
+                // If M3U Series, group episodes by seriesName so each Series appears once as a Series card
+                val displayStreams = if (cType == IptvContentType.SERIES && src.type != IptvSourceType.XTREAM) {
+                    rawStreams.groupBy { it.seriesName.ifBlank { it.title } }
+                        .map { (sName, eps) ->
+                            val first = eps.first()
+                            first.copy(
+                                title = sName,
+                                categoryName = "${first.categoryName} • ${eps.size} ${getString(R.string.iptv_episodes_unit)}"
+                            )
+                        }
+                } else {
+                    rawStreams
+                }
+
+                binding.tvIptvStatusSubtitle.text = "${displayStreams.size} ${getString(R.string.iptv_items_unit)}"
+                adapter.submitIptvList(displayStreams)
+            }
+            4 -> {
+                // Level 4: Series Seasons
+                val sInfo = activeIptvSeriesInfo ?: return
+                binding.tvToolbarTitle.text = sInfo.seriesTitle
+                binding.btnBackFolder.visibility = View.VISIBLE
+                binding.tvIptvStatusSubtitle.text = sInfo.plot.ifBlank { "${sInfo.seasons.size} Seasons" }
+                adapter.submitIptvList(sInfo.seasons)
+            }
+            5 -> {
+                // Level 5: Season Episodes
+                val sInfo = activeIptvSeriesInfo ?: return
+                val season = activeIptvSeasonGroup ?: return
+                binding.tvToolbarTitle.text = "${sInfo.seriesTitle} • ${season.name}"
+                binding.btnBackFolder.visibility = View.VISIBLE
+                binding.tvIptvStatusSubtitle.text = getString(R.string.iptv_episodes_count_format, season.episodes.size)
+                adapter.submitIptvList(season.episodes)
+            }
+        }
+    }
+
+    private fun navigateBackInIptvHierarchy() {
+        when (iptvNavLevel) {
+            5 -> iptvNavLevel = 4
+            4 -> iptvNavLevel = 3
+            3 -> iptvNavLevel = 2
+            2 -> iptvNavLevel = 1
+            else -> iptvNavLevel = 0
+        }
+        renderIptvCurrentLevel()
+    }
+
+    private fun getSectionDisplayName(type: IptvContentType): String {
+        return when (type) {
+            IptvContentType.LIVE_TV -> getString(R.string.iptv_sec_live_tv)
+            IptvContentType.MOVIES -> getString(R.string.iptv_sec_movies)
+            IptvContentType.SERIES -> getString(R.string.iptv_sec_series)
+            IptvContentType.RADIO -> getString(R.string.iptv_sec_radio)
+        }
+    }
+
+    private fun handleIptvItemClick(item: Any) {
+        when (item) {
+            is IptvAddCardItem -> showAddIptvSourceDialog()
+            is IptvSource -> {
+                activeIptvSource = item
+                IptvRepository.setActiveSourceId(this, item.id)
+                iptvNavLevel = 1
+                renderIptvCurrentLevel()
+            }
+            is IptvSectionCardItem -> {
+                activeIptvContentType = item.contentType
+                iptvNavLevel = 2
+                renderIptvCurrentLevel()
+            }
+            is IptvCategory -> {
+                activeIptvCategoryId = item.id
+                activeIptvCategoryName = item.name.removePrefix("🌐  ")
+                iptvNavLevel = 3
+                renderIptvCurrentLevel()
+            }
+            is IptvStreamItem -> {
+                when (item.contentType) {
+                    IptvContentType.LIVE_TV, IptvContentType.RADIO -> {
+                        launchPlayer(
+                            uri = Uri.parse(item.streamUrl),
+                            title = item.title,
+                            startPositionMs = 0L,
+                            httpUserAgent = item.httpUserAgent,
+                            httpReferrer = item.httpReferrer
+                        )
+                    }
+                    IptvContentType.MOVIES -> {
+                        showIptvMovieDetailsDialog(item)
+                    }
+                    IptvContentType.SERIES -> {
+                        openIptvSeriesSeasons(item)
+                    }
+                }
+            }
+            is IptvSeasonGroup -> {
+                activeIptvSeasonGroup = item
+                iptvNavLevel = 5
+                renderIptvCurrentLevel()
+            }
+            is IptvEpisodeItem -> {
+                val savedPos = PlaybackStore.getSavedPosition(this, Uri.parse(item.streamUrl))
+                launchPlayer(
+                    uri = Uri.parse(item.streamUrl),
+                    title = item.title,
+                    startPositionMs = if (savedPos > 3000L) savedPos else 0L,
+                    httpUserAgent = item.httpUserAgent,
+                    httpReferrer = item.httpReferrer
+                )
+            }
+        }
+    }
+
+    private fun handleIptvItemLongClick(item: Any) {
+        when (item) {
+            is IptvSource -> showIptvSourceManagementMenu(item)
+            is IptvCategory -> {
+                if (item.id != "__ALL__") {
+                    showReclassifyCategoryDialog(item.name)
+                }
+            }
+            is IptvStreamItem -> {
+                showReclassifyCategoryDialog(item.categoryName)
+            }
+        }
+    }
+
+    /**
+     * Triggered when tapping (+) below Xtream section or in IPTV header bar:
+     * Option 1: M3U / M3U8 (URL or Local File)
+     * Option 2: Xtream Codes API (Username, Password, Server URL)
+     * Option 3: Quick Demo Test Playlist (for instant verification)
+     */
+    private fun showAddIptvSourceDialog() {
+        settingsBackStack.clear()
+        val items = listOf(
+            PremiumMenuItem(
+                iconEmoji = "🔗",
+                title = getString(R.string.iptv_add_m3u_url_option),
+                subtitle = getString(R.string.iptv_add_m3u_url_sub),
+                isAccentHighlighted = true,
+                sectionHeader = getString(R.string.iptv_add_opt1_header),
+                onClick = {
+                    pushSettingsBackStack { showAddIptvSourceDialog() }
+                    showAddOrEditM3uUrlDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "📂",
+                title = getString(R.string.iptv_add_m3u_file_option),
+                subtitle = getString(R.string.iptv_add_m3u_file_sub),
+                onClick = {
+                    pendingM3uFileSourceName = ""
+                    m3uFilePickerLauncher.launch(arrayOf("*/*"))
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "📡",
+                title = getString(R.string.iptv_add_xtream_option),
+                subtitle = getString(R.string.iptv_add_xtream_sub),
+                isAccentHighlighted = true,
+                sectionHeader = getString(R.string.iptv_add_opt2_header),
+                onClick = {
+                    pushSettingsBackStack { showAddIptvSourceDialog() }
+                    showAddOrEditXtreamDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🧪",
+                title = getString(R.string.iptv_add_demo_source_option),
+                subtitle = getString(R.string.iptv_add_demo_source_sub),
+                onClick = {
+                    addBuiltInDemoIptvSource()
+                }
+            )
+        )
+
+        showPremiumMenuDialog(
+            headerIcon = "➕",
+            title = getString(R.string.iptv_add_source_title),
+            subtitle = getString(R.string.iptv_add_source_subtitle),
+            items = items
+        )
+    }
+
+    private fun showAddOrEditM3uUrlDialog(existingSource: IptvSource? = null) {
+        val accent = PlaybackStore.getAccentColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(20), dp(22), dp(20))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(26).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(105, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+
+        val tvTitle = TextView(this).apply {
+            text = "🔗  " + getString(R.string.iptv_add_m3u_url_option)
+            setTextColor(Color.WHITE)
+            textSize = 17f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, 0, 0, dp(12))
+        }
+
+        val etName = EditText(this).apply {
+            setText(existingSource?.name ?: "")
+            hint = getString(R.string.iptv_hint_source_name)
+            setSingleLine(true)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+        }
+        stylePremiumInputBox(etName, bg, accent)
+
+        val etUrl = EditText(this).apply {
+            setText(existingSource?.serverOrM3uUrl ?: "")
+            hint = "https://example.com/playlist.m3u8"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(10)
+            }
+        }
+        stylePremiumInputBox(etUrl, bg, accent)
+
+        container.addView(tvTitle)
+        container.addView(etName)
+        container.addView(etUrl)
+
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, dp(16), 0, 0)
+        }
+
+        val dialog = AlertDialog.Builder(this).setView(container).create()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        val btnCancel = TextView(this).apply {
+            text = getString(R.string.cancel)
+            setTextColor(Color.parseColor("#94A3B8"))
+            textSize = 14f
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+        }
+        bindSubDialogBackNavigation(dialog, btnCancel)
+
+        val btnSave = TextView(this).apply {
+            text = getString(R.string.save)
+            setTextColor(Color.parseColor("#090D16"))
+            textSize = 14.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(22), dp(10), dp(22), dp(10))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(accent)
+            }
+            setOnClickListener {
+                val urlInput = etUrl.text.toString().trim()
+                val nameInput = etName.text.toString().trim().ifEmpty { "M3U Playlist" }
+                if (!urlInput.startsWith("http://", ignoreCase = true) && !urlInput.startsWith("https://", ignoreCase = true)) {
+                    Toast.makeText(this@MainActivity, getString(R.string.iptv_err_invalid_url), Toast.LENGTH_SHORT).show()
+                } else {
+                    isNavigatingToSubDialog = true
+                    dialog.dismiss()
+                    isNavigatingToSubDialog = false
+                    settingsBackStack.clear()
+                    syncIptvSourceWithProgress(
+                        existingSourceId = existingSource?.id,
+                        name = nameInput,
+                        type = IptvSourceType.M3U_URL,
+                        serverOrM3uUrl = urlInput
+                    )
+                }
+            }
+        }
+
+        btnRow.addView(btnCancel)
+        btnRow.addView(btnSave)
+        container.addView(btnRow)
+        dialog.show()
+    }
+
+    private fun showAddOrEditXtreamDialog(existingSource: IptvSource? = null) {
+        val accent = PlaybackStore.getAccentColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(20), dp(22), dp(20))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(26).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(105, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+
+        val tvTitle = TextView(this).apply {
+            text = "📡  " + getString(R.string.iptv_add_xtream_option)
+            setTextColor(Color.WHITE)
+            textSize = 17f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, 0, 0, dp(12))
+        }
+
+        val etName = EditText(this).apply {
+            setText(existingSource?.name ?: "")
+            hint = getString(R.string.iptv_hint_source_name)
+            setSingleLine(true)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+        }
+        stylePremiumInputBox(etName, bg, accent)
+
+        val etServer = EditText(this).apply {
+            setText(existingSource?.serverOrM3uUrl ?: "")
+            hint = getString(R.string.iptv_hint_server_url)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(10)
+            }
+        }
+        stylePremiumInputBox(etServer, bg, accent)
+
+        val etUsername = EditText(this).apply {
+            setText(existingSource?.username ?: "")
+            hint = getString(R.string.iptv_hint_username)
+            setSingleLine(true)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(10)
+            }
+        }
+        stylePremiumInputBox(etUsername, bg, accent)
+
+        val existingPass = if (existingSource != null) IptvCredentialVault.decryptSecret(existingSource.encryptedPassword) else ""
+        val etPassword = EditText(this).apply {
+            setText(existingPass)
+            hint = getString(R.string.iptv_hint_password)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(10)
+            }
+        }
+        stylePremiumInputBox(etPassword, bg, accent)
+
+        container.addView(tvTitle)
+        container.addView(etName)
+        container.addView(etServer)
+        container.addView(etUsername)
+        container.addView(etPassword)
+
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, dp(16), 0, 0)
+        }
+
+        val dialog = AlertDialog.Builder(this).setView(container).create()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        val btnCancel = TextView(this).apply {
+            text = getString(R.string.cancel)
+            setTextColor(Color.parseColor("#94A3B8"))
+            textSize = 14f
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+        }
+        bindSubDialogBackNavigation(dialog, btnCancel)
+
+        val btnSave = TextView(this).apply {
+            text = getString(R.string.save)
+            setTextColor(Color.parseColor("#090D16"))
+            textSize = 14.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(22), dp(10), dp(22), dp(10))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(accent)
+            }
+            setOnClickListener {
+                val srv = etServer.text.toString().trim()
+                val usr = etUsername.text.toString().trim()
+                val pwd = etPassword.text.toString().trim()
+                val nameStr = etName.text.toString().trim().ifEmpty { "Xtream IPTV" }
+                if (srv.isEmpty() || usr.isEmpty() || pwd.isEmpty()) {
+                    Toast.makeText(this@MainActivity, getString(R.string.iptv_err_missing_fields), Toast.LENGTH_SHORT).show()
+                } else {
+                    isNavigatingToSubDialog = true
+                    dialog.dismiss()
+                    isNavigatingToSubDialog = false
+                    settingsBackStack.clear()
+                    syncIptvSourceWithProgress(
+                        existingSourceId = existingSource?.id,
+                        name = nameStr,
+                        type = IptvSourceType.XTREAM,
+                        serverOrM3uUrl = srv,
+                        username = usr,
+                        passwordPlain = pwd
+                    )
+                }
+            }
+        }
+
+        btnRow.addView(btnCancel)
+        btnRow.addView(btnSave)
+        container.addView(btnRow)
+        dialog.show()
+    }
+
+    private fun syncIptvSourceWithProgress(
+        existingSourceId: String?,
+        name: String,
+        type: IptvSourceType,
+        serverOrM3uUrl: String,
+        username: String = "",
+        passwordPlain: String = ""
+    ) {
+        iptvSyncJob?.cancel()
+        binding.iptvLoadingOverlay.visibility = View.VISIBLE
+        binding.tvIptvLoadingStatus.text = getString(R.string.iptv_loading_data)
+
+        iptvSyncJob = lifecycleScope.launch {
+            val res = IptvRepository.syncAndSaveSource(
+                context = this@MainActivity,
+                existingSourceId = existingSourceId,
+                name = name,
+                type = type,
+                serverOrM3uUrl = serverOrM3uUrl,
+                username = username,
+                passwordPlain = passwordPlain
+            )
+            binding.iptvLoadingOverlay.visibility = View.GONE
+            when (res) {
+                is IptvSyncResult.Success -> {
+                    activeIptvSource = res.source
+                    iptvNavLevel = 1
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.iptv_sync_success_toast, res.source.name, res.totalLoaded),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    renderIptvCurrentLevel()
+                }
+                is IptvSyncResult.Error -> {
+                    Toast.makeText(this@MainActivity, res.userMessage, Toast.LENGTH_LONG).show()
+                    renderIptvCurrentLevel()
+                }
+            }
+        }
+    }
+
+    private fun refreshExistingIptvSource(source: IptvSource) {
+        val decryptedPass = IptvCredentialVault.decryptSecret(source.encryptedPassword)
+        syncIptvSourceWithProgress(
+            existingSourceId = source.id,
+            name = source.name,
+            type = source.type,
+            serverOrM3uUrl = source.serverOrM3uUrl,
+            username = source.username,
+            passwordPlain = decryptedPass
+        )
+    }
+
+    private fun showIptvSourceManagementMenu(source: IptvSource) {
+        settingsBackStack.clear()
+        val items = mutableListOf(
+            PremiumMenuItem(
+                iconEmoji = "📺",
+                title = getString(R.string.iptv_source_open_action),
+                subtitle = "${source.totalItemsCount()} ${getString(R.string.iptv_items_unit)}",
+                isAccentHighlighted = true,
+                onClick = {
+                    activeIptvSource = source
+                    IptvRepository.setActiveSourceId(this, source.id)
+                    iptvNavLevel = 1
+                    renderIptvCurrentLevel()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🔄",
+                title = getString(R.string.iptv_source_refresh_action),
+                subtitle = getString(R.string.iptv_source_refresh_sub),
+                onClick = {
+                    refreshExistingIptvSource(source)
+                }
+            )
+        )
+
+        if (source.type == IptvSourceType.XTREAM || source.type == IptvSourceType.M3U_URL) {
+            items.add(
+                PremiumMenuItem(
+                    iconEmoji = "✏️",
+                    title = getString(R.string.iptv_source_edit_action),
+                    subtitle = source.serverOrM3uUrl,
+                    onClick = {
+                        pushSettingsBackStack { showIptvSourceManagementMenu(source) }
+                        if (source.type == IptvSourceType.XTREAM) {
+                            showAddOrEditXtreamDialog(source)
+                        } else {
+                            showAddOrEditM3uUrlDialog(source)
+                        }
+                    }
+                )
+            )
+        }
+
+        items.add(
+            PremiumMenuItem(
+                iconEmoji = "🗑️",
+                title = getString(R.string.iptv_source_delete_action),
+                subtitle = getString(R.string.delete_action),
+                isDanger = true,
+                onClick = {
+                    IptvRepository.deleteSource(this, source.id)
+                    if (activeIptvSource?.id == source.id) {
+                        activeIptvSource = IptvRepository.getSources(this).firstOrNull()
+                        iptvNavLevel = 0
+                    }
+                    Toast.makeText(this, getString(R.string.iptv_source_deleted_toast, source.name), Toast.LENGTH_SHORT).show()
+                    renderIptvCurrentLevel()
+                }
+            )
+        )
+
+        showPremiumMenuDialog(
+            headerIcon = "📡",
+            title = source.name,
+            subtitle = "${source.type.name} • ${source.accountStatus}",
+            items = items
+        )
+    }
+
+    private fun showIptvMovieDetailsDialog(movie: IptvStreamItem) {
+        settingsBackStack.clear()
+        val metaParts = mutableListOf<String>()
+        if (movie.categoryName.isNotBlank()) metaParts.add(movie.categoryName)
+        if (movie.rating.isNotBlank() && movie.rating != "0") metaParts.add("⭐ ${movie.rating}")
+        if (movie.releaseDate.isNotBlank()) metaParts.add(movie.releaseDate)
+        val subLine = metaParts.joinToString(" • ").ifEmpty { "VOD Movie" }
+
+        val items = mutableListOf(
+            PremiumMenuItem(
+                iconEmoji = "▶️",
+                title = getString(R.string.iptv_play_movie_now),
+                subtitle = subLine,
+                isAccentHighlighted = true,
+                onClick = {
+                    val savedPos = PlaybackStore.getSavedPosition(this, Uri.parse(movie.streamUrl))
+                    launchPlayer(
+                        uri = Uri.parse(movie.streamUrl),
+                        title = movie.title,
+                        startPositionMs = if (savedPos > 3000L) savedPos else 0L,
+                        httpUserAgent = movie.httpUserAgent,
+                        httpReferrer = movie.httpReferrer
+                    )
+                }
+            )
+        )
+        if (movie.plot.isNotBlank()) {
+            items.add(
+                PremiumMenuItem(
+                    iconEmoji = "📝",
+                    title = getString(R.string.iptv_movie_story_label),
+                    subtitle = movie.plot,
+                    onClick = {}
+                )
+            )
+        }
+        items.add(
+            PremiumMenuItem(
+                iconEmoji = "🗂️",
+                title = getString(R.string.iptv_reclassify_category_title),
+                subtitle = movie.categoryName,
+                onClick = {
+                    pushSettingsBackStack { showIptvMovieDetailsDialog(movie) }
+                    showReclassifyCategoryDialog(movie.categoryName)
+                }
+            )
+        )
+
+        showPremiumMenuDialog(
+            headerIcon = "🎬",
+            title = movie.title,
+            subtitle = subLine,
+            items = items
+        )
+    }
+
+    private fun openIptvSeriesSeasons(seriesItem: IptvStreamItem) {
+        val src = activeIptvSource ?: return
+        if (src.type == IptvSourceType.XTREAM && seriesItem.seriesId.isNotBlank()) {
+            binding.iptvLoadingOverlay.visibility = View.VISIBLE
+            binding.tvIptvLoadingStatus.text = getString(R.string.iptv_loading_series_episodes)
+            lifecycleScope.launch {
+                val res = withContext(Dispatchers.IO) {
+                    runCatching { XtreamCodesClient.fetchSeriesSeasonsAndEpisodes(src, seriesItem) }.getOrNull()
+                }
+                binding.iptvLoadingOverlay.visibility = View.GONE
+                if (res != null && res.seasons.isNotEmpty()) {
+                    activeIptvSeriesInfo = res
+                    iptvNavLevel = 4
+                    renderIptvCurrentLevel()
+                } else {
+                    Toast.makeText(this@MainActivity, getString(R.string.iptv_err_no_episodes), Toast.LENGTH_SHORT).show()
+                }
+            }
+        } else {
+            // M3U Series: group cached episodes matching seriesName by seasonNumber
+            val sName = seriesItem.seriesName.ifBlank { seriesItem.title }
+            val allEps = IptvRepository.loadCachedStreams(this, src.id)
+                .filter { it.contentType == IptvContentType.SERIES && (it.seriesName.equals(sName, ignoreCase = true) || it.title.startsWith(sName, ignoreCase = true)) }
+            val seasons = allEps.groupBy { it.seasonNumber.coerceAtLeast(1) }
+                .entries
+                .sortedBy { it.key }
+                .map { (sNum, epList) ->
+                    IptvSeasonGroup(
+                        seasonNumber = sNum,
+                        name = "Season $sNum / الموسم $sNum",
+                        episodes = epList.sortedBy { it.episodeNumber }.mapIndexed { idx, ep ->
+                            IptvEpisodeItem(
+                                id = ep.id,
+                                title = ep.title,
+                                seasonNumber = sNum,
+                                episodeNumber = if (ep.episodeNumber > 0) ep.episodeNumber else idx + 1,
+                                streamUrl = ep.streamUrl,
+                                logoUrl = ep.logoUrl,
+                                httpUserAgent = ep.httpUserAgent,
+                                httpReferrer = ep.httpReferrer
+                            )
+                        }
+                    )
+                }
+            if (seasons.isNotEmpty()) {
+                activeIptvSeriesInfo = IptvSeriesInfoResult(
+                    seriesTitle = sName,
+                    coverUrl = seriesItem.logoUrl,
+                    plot = seriesItem.plot,
+                    rating = seriesItem.rating,
+                    releaseDate = seriesItem.releaseDate,
+                    seasons = seasons
+                )
+                iptvNavLevel = 4
+                renderIptvCurrentLevel()
+            } else {
+                Toast.makeText(this, getString(R.string.iptv_err_no_episodes), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun showReclassifyCategoryDialog(categoryName: String) {
+        val src = activeIptvSource ?: return
+        val options = listOf(
+            Triple("📺", getString(R.string.iptv_sec_live_tv), IptvContentType.LIVE_TV),
+            Triple("🎬", getString(R.string.iptv_sec_movies), IptvContentType.MOVIES),
+            Triple("🎞️", getString(R.string.iptv_sec_series), IptvContentType.SERIES),
+            Triple("📻", getString(R.string.iptv_sec_radio), IptvContentType.RADIO)
+        )
+        val items = options.map { (emoji, label, targetType) ->
+            PremiumMenuItem(
+                iconEmoji = emoji,
+                title = label,
+                subtitle = categoryName,
+                isAccentHighlighted = (activeIptvContentType == targetType),
+                onClick = {
+                    IptvRepository.setCategoryOverride(this, src.id, categoryName, targetType)
+                    activeIptvSource = IptvRepository.getSources(this).find { it.id == src.id }
+                    Toast.makeText(this, "✅ $categoryName → $label", Toast.LENGTH_SHORT).show()
+                    renderIptvCurrentLevel()
+                }
+            )
+        }
+        showPremiumMenuDialog(
+            headerIcon = "🗂️",
+            title = getString(R.string.iptv_reclassify_category_title),
+            subtitle = categoryName,
+            items = items
+        )
+    }
+
+    private fun addBuiltInDemoIptvSource() {
+        val sampleM3u = """
+            #EXTM3U
+            #EXTINF:-1 tvg-name="Big Buck Bunny Live" group-title="Live Channels / قنوات مباشرة",Big Buck Bunny HD (Live Stream)
+            https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+            #EXTINF:-1 tvg-name="Apple BipBop Live" group-title="Live Channels / قنوات مباشرة",Apple Advanced HLS Live
+            https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8
+            #EXTINF:-1 tvg-name="Sintel Cinema Movie" group-title="Movies / أفلام سينمائية",Sintel Open Movie (1080p VOD)
+            https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4
+            #EXTINF:-1 tvg-name="Tears of Steel Movie" group-title="Movies / أفلام سينمائية",Tears of Steel Sci-Fi (VOD)
+            https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4
+            #EXTINF:-1 tvg-name="Blender Adventures S01E01" group-title="Series / مسلسلات",Blender Adventures S01E01
+            https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4
+            #EXTINF:-1 tvg-name="Blender Adventures S01E02" group-title="Series / مسلسلات",Blender Adventures S01E02
+            https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4
+        """.trimIndent()
+
+        lifecycleScope.launch {
+            val demoFile = withContext(Dispatchers.IO) {
+                val f = File(filesDir, "demo_iptv_showcase.m3u8")
+                f.writeText(sampleM3u, Charsets.UTF_8)
+                f
+            }
+            syncIptvSourceWithProgress(
+                existingSourceId = "demo_builtin_source",
+                name = "Pure IPTV Demo (قنوات وأفلام ومسلسلات تجريبية)",
+                type = IptvSourceType.M3U_FILE,
+                serverOrM3uUrl = Uri.fromFile(demoFile).toString()
+            )
+        }
     }
 }
