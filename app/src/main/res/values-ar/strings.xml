@@ -209,7 +209,7 @@
     <string name="vault_unlocked_badge">🛡️ داخل الخزنة • %1$d فيديو</string>
     <string name="folder_moved_to_vault_toast">🛡️ تم إخفاء المجلد "%1$s" ونقله إلى الخزنة (Vault)</string>
     <string name="folder_restored_from_vault_toast">🔓 تم إرجاع المجلد "%1$s" إلى مجلدات الفيديو</string>
-    <string name="sort_and_layout_title">طريقة العرض والترتيب (Layout & Sort)</string>
+    <string name="sort_and_layout_title">طريقة العرض والترتيب (Layout &amp; Sort)</string>
     <string name="section_media_layout">📐 طريقة عرض الفيديوهات والمجلدات (Media Layout)</string>
     <string name="layout_mode_list">📋 عرض قائمة تفصيلية (List View)</string>
     <string name="layout_mode_list_sub">بطاقات أفقية كلاسيكية مع كامل التفاصيل</string>
