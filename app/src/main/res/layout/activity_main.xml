@@ -26,7 +26,7 @@
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/back"
-            android:src="@android:drawable/ic_menu_revert"
+            android:src="@drawable/ic_arrow_back_modern"
             android:tint="#FFFFFF"
             android:visibility="gone" />
 
@@ -49,7 +49,7 @@
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/search_videos_hint"
-            android:src="@android:drawable/ic_menu_search"
+            android:src="@drawable/ic_search_modern"
             android:tint="#38BDF8" />
 
         <ImageButton
@@ -58,7 +58,7 @@
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/sort_and_layout_title"
-            android:src="@android:drawable/ic_menu_sort_by_size"
+            android:src="@drawable/ic_layout_sort_modern"
             android:tint="#38BDF8" />
 
         <ImageButton
@@ -67,7 +67,7 @@
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/open_external_file"
-            android:src="@android:drawable/ic_menu_upload"
+            android:src="@drawable/ic_folder_open_modern"
             android:tint="#FFFFFF" />
 
         <ImageButton
@@ -76,7 +76,7 @@
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/settings_header"
-            android:src="@android:drawable/ic_menu_preferences"
+            android:src="@drawable/ic_settings_gear"
             android:tint="#38BDF8" />
     </LinearLayout>
 
@@ -118,7 +118,7 @@
             android:layout_marginStart="6dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/close"
-            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:src="@drawable/ic_close_modern"
             android:tint="#FFFFFF" />
     </LinearLayout>
 
@@ -172,18 +172,21 @@
             android:text="@string/grant_permission" />
     </LinearLayout>
 
-    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabResumeLast"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_margin="18dp"
-        android:text="@string/resume_last"
-        android:textColor="#090D16"
-        android:textStyle="bold"
+        android:layout_marginEnd="18dp"
+        android:layout_marginBottom="16dp"
+        android:contentDescription="@string/resume_last"
+        android:src="@drawable/ic_play_modern"
         android:visibility="gone"
         app:backgroundTint="#38BDF8"
-        app:icon="@android:drawable/ic_media_play"
-        app:iconTint="#090D16"
+        app:borderWidth="0dp"
+        app:elevation="8dp"
+        app:fabCustomSize="50dp"
+        app:maxImageSize="24dp"
+        app:tint="#090D16"
         app:layout_constraintBottom_toTopOf="@id/bottomNavBar"
         app:layout_constraintEnd_toEndOf="parent" />
 

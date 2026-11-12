@@ -8,7 +8,7 @@
     android:layout_marginEnd="8dp"
     android:layout_marginBottom="6dp"
     app:cardBackgroundColor="#131C2E"
-    app:cardCornerRadius="16dp"
+    app:cardCornerRadius="18dp"
     app:cardElevation="3dp"
     app:strokeColor="#1E293B"
     app:strokeWidth="1dp">
@@ -32,7 +32,7 @@
                 android:layout_height="match_parent"
                 android:background="#0B111E"
                 android:scaleType="centerCrop"
-                android:src="@android:drawable/ic_media_play" />
+                android:src="@drawable/ic_play_modern" />
 
             <!-- Subtle "NEW" Badge for newly added unwatched videos -->
             <TextView

@@ -61,7 +61,7 @@ object VideoThumbnailLoader {
         imageView.scaleType = ImageView.ScaleType.CENTER_INSIDE
         imageView.setPadding(24, 24, 24, 24)
         imageView.imageTintList = ColorStateList.valueOf(accentColor)
-        imageView.setImageResource(android.R.drawable.ic_media_play)
+        imageView.setImageResource(R.drawable.ic_play_modern)
 
         return scope.launch {
             val bmp = fetchBitmap(context, video)
@@ -238,10 +238,22 @@ class MediaAdapter(
                 }
             }
 
-            // Style NEW badge pill
+            // Smooth rounded thumbnail container & card border
+            binding.root.strokeColor = Color.argb(42, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
+            binding.thumbContainer.background = GradientDrawable().apply {
+                cornerRadius = dp(ctx, 13).toFloat()
+                setColor(Color.parseColor("#0B111E"))
+            }
+            binding.thumbContainer.clipToOutline = true
+
+            // Style NEW badge pill & Duration badge pill
             binding.tvNewBadge.background = GradientDrawable().apply {
                 cornerRadius = dp(ctx, 6).toFloat()
                 setColor(Color.parseColor("#E610B981"))
+            }
+            binding.tvDurationBadge.background = GradientDrawable().apply {
+                cornerRadius = dp(ctx, 6).toFloat()
+                setColor(Color.parseColor("#CC050811"))
             }
 
             when (item) {
@@ -255,7 +267,7 @@ class MediaAdapter(
                     binding.ivIcon.scaleType = ImageView.ScaleType.CENTER_INSIDE
                     binding.ivIcon.setPadding(20, 20, 20, 20)
                     binding.ivIcon.imageTintList = ColorStateList.valueOf(accentColor)
-                    binding.ivIcon.setImageResource(android.R.drawable.ic_menu_agenda)
+                    binding.ivIcon.setImageResource(R.drawable.ic_folder_cinema)
 
                     binding.tvTitle.text = if (isVaultMode) "🛡️ ${item.name}" else item.name
                     binding.tvSubtitle.text = ctx.getString(R.string.videos_count_format, item.videos.size)

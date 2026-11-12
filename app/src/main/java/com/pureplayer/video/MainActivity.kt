@@ -537,7 +537,26 @@ class MainActivity : AppCompatActivity() {
         binding.btnSettings.imageTintList = ColorStateList.valueOf(accent)
         binding.btnSortAndLayout.imageTintList = ColorStateList.valueOf(accent)
         binding.btnToggleSearch.imageTintList = ColorStateList.valueOf(accent)
+        binding.btnOpenFile.imageTintList = ColorStateList.valueOf(Color.WHITE)
+        binding.btnBackFolder.imageTintList = ColorStateList.valueOf(accent)
         binding.fabResumeLast.backgroundTintList = ColorStateList.valueOf(accent)
+        binding.fabResumeLast.imageTintList = ColorStateList.valueOf(Color.parseColor("#090D16"))
+
+        val topActionButtons = listOf(
+            binding.btnBackFolder,
+            binding.btnToggleSearch,
+            binding.btnSortAndLayout,
+            binding.btnOpenFile,
+            binding.btnSettings
+        )
+        for (btn in topActionButtons) {
+            btn.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(12).toFloat()
+                setColor(Color.parseColor("#18FFFFFF"))
+                setStroke(dp(1), Color.argb(48, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
 
         val searchBoxBg = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
@@ -561,21 +580,26 @@ class MainActivity : AppCompatActivity() {
             }
 
             val timeFormatted = PlaybackStore.formatTime(positionMs)
-            binding.fabResumeLast.text = getString(R.string.resume_fab_format, timeFormatted)
+            val resumeHint = "$title • ${getString(R.string.resume_fab_format, timeFormatted)}"
+            binding.fabResumeLast.contentDescription = resumeHint
             if (binding.fabResumeLast.visibility != View.VISIBLE) {
-                binding.fabResumeLast.scaleX = 0.7f
-                binding.fabResumeLast.scaleY = 0.7f
+                binding.fabResumeLast.scaleX = 0.5f
+                binding.fabResumeLast.scaleY = 0.5f
                 binding.fabResumeLast.alpha = 0f
                 binding.fabResumeLast.visibility = View.VISIBLE
                 binding.fabResumeLast.animate()
                     .scaleX(1f)
                     .scaleY(1f)
                     .alpha(1f)
-                    .setDuration(260L)
+                    .setDuration(280L)
                     .start()
             }
             binding.fabResumeLast.setOnClickListener {
                 launchPlayer(uri, title, startPositionMs = positionMs)
+            }
+            binding.fabResumeLast.setOnLongClickListener {
+                Toast.makeText(this, resumeHint, Toast.LENGTH_SHORT).show()
+                true
             }
         } else {
             binding.fabResumeLast.visibility = View.GONE
@@ -1765,7 +1789,34 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun attachFluidTouchAnimation(vararg views: View) {
+        for (v in views) {
+            v.setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        view.animate().scaleX(0.90f).scaleY(0.90f).setDuration(95L).start()
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        view.animate().scaleX(1f).scaleY(1f).setDuration(165L).start()
+                    }
+                }
+                false
+            }
+        }
+    }
+
     private fun setupListeners() {
+        attachFluidTouchAnimation(
+            binding.btnBackFolder,
+            binding.btnToggleSearch,
+            binding.btnSortAndLayout,
+            binding.btnOpenFile,
+            binding.btnSettings,
+            binding.tabVideos,
+            binding.tabVault,
+            binding.fabResumeLast
+        )
+
         // Long-Pressing on "Video Folders / مجلدات الفيديو" title in the top bar opens the Premium Folder Visibility Selector!
         binding.tvToolbarTitle.isLongClickable = true
         binding.tvToolbarTitle.setOnLongClickListener {

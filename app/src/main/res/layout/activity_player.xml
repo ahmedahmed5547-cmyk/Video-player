@@ -123,7 +123,7 @@
         android:contentDescription="@string/unlock"
         android:elevation="20dp"
         android:padding="12dp"
-        android:src="@android:drawable/ic_lock_idle_lock"
+        android:src="@drawable/ic_lock_modern"
         android:tint="#38BDF8"
         android:visibility="gone" />
 
@@ -154,7 +154,7 @@
                 android:layout_height="40dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/back"
-                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                android:src="@drawable/ic_close_modern"
                 android:tint="#FFFFFF" />
 
             <TextView
@@ -265,7 +265,7 @@
                 android:layout_marginEnd="4dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/pro_pip"
-                android:src="@android:drawable/ic_menu_crop"
+                android:src="@drawable/ic_pip_modern"
                 android:tint="#FFFFFF" />
 
             <ImageButton
@@ -274,7 +274,7 @@
                 android:layout_height="38dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/pro_tools_title"
-                android:src="@android:drawable/ic_menu_manage"
+                android:src="@drawable/ic_settings_gear"
                 android:tint="#FFFFFF" />
         </LinearLayout>
 
@@ -339,7 +339,7 @@
                     android:layout_height="42dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/lock"
-                    android:src="@android:drawable/ic_lock_lock"
+                    android:src="@drawable/ic_lock_modern"
                     android:tint="#FFFFFF" />
 
                 <ImageButton
@@ -359,7 +359,7 @@
                     android:layout_marginStart="10dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/audio_tracks"
-                    android:src="@android:drawable/ic_lock_silent_mode_off"
+                    android:src="@drawable/ic_audio_track_modern"
                     android:tint="#FFFFFF" />
 
                 <ImageButton
@@ -369,7 +369,7 @@
                     android:layout_marginStart="16dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/rewind_15"
-                    android:src="@android:drawable/ic_media_rew"
+                    android:src="@drawable/ic_rewind_10_modern"
                     android:tint="#FFFFFF" />
 
                 <ImageButton
@@ -382,7 +382,7 @@
                     android:contentDescription="@string/play_pause"
                     android:padding="12dp"
                     android:scaleType="fitCenter"
-                    android:src="@android:drawable/ic_media_pause"
+                    android:src="@drawable/ic_pause_modern"
                     android:tint="#38BDF8" />
 
                 <ImageButton
@@ -392,7 +392,7 @@
                     android:layout_marginEnd="16dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/forward_15"
-                    android:src="@android:drawable/ic_media_ff"
+                    android:src="@drawable/ic_forward_10_modern"
                     android:tint="#FFFFFF" />
 
                 <Button
@@ -416,7 +416,7 @@
                     android:layout_marginStart="10dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/aspect_ratio"
-                    android:src="@android:drawable/ic_menu_gallery"
+                    android:src="@drawable/ic_aspect_ratio_modern"
                     android:tint="#FFFFFF" />
             </LinearLayout>
         </LinearLayout>

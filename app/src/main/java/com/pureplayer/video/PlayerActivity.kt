@@ -233,7 +233,7 @@ class PlayerActivity : AppCompatActivity() {
             when (event.type) {
                 MediaPlayer.Event.Playing -> {
                     binding.playerLoadingBar.visibility = View.GONE
-                    binding.btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
+                    binding.btnPlayPause.setImageResource(R.drawable.ic_pause_modern)
                     if (externalSubtitleCues.isNotEmpty()) {
                         mediaPlayer.spuTrack = -1
                     }
@@ -246,7 +246,7 @@ class PlayerActivity : AppCompatActivity() {
                     }
                 }
                 MediaPlayer.Event.Paused -> {
-                    binding.btnPlayPause.setImageResource(android.R.drawable.ic_media_play)
+                    binding.btnPlayPause.setImageResource(R.drawable.ic_play_modern)
                 }
             }
         }
@@ -1085,11 +1085,11 @@ class PlayerActivity : AppCompatActivity() {
                 saveCurrentPositionNow()
                 mediaPlayer.pause()
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                binding.btnPlayPause.setImageResource(android.R.drawable.ic_media_play)
+                binding.btnPlayPause.setImageResource(R.drawable.ic_play_modern)
             } else {
                 mediaPlayer.play()
                 window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                binding.btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
+                binding.btnPlayPause.setImageResource(R.drawable.ic_pause_modern)
             }
             scheduleHideControls()
         }
