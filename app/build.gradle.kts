@@ -19,8 +19,8 @@ android {
         applicationId = "com.pureplayer.video"
         minSdk = 24
         targetSdk = 34
-        versionCode = 33
-        versionName = "33.0.0-UltimateIPTV"
+        versionCode = 34
+        versionName = "34.0.0-IPTVFavoritesAndSwipeFix"
 
         resourceConfigurations += listOf("en", "ar")
 
@@ -56,8 +56,8 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

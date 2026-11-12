@@ -26,6 +26,7 @@
         android:localeConfig="@xml/locales_config"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
+        android:enableOnBackInvokedCallback="false"
         android:theme="@style/Theme.PureVideoPlayer"
         tools:targetApi="34">
 

@@ -136,7 +136,8 @@ class MediaAdapter(
     private val onVideoLongClick: (VideoItem) -> Unit = {},
     private val onFolderLongClick: (VideoFolder) -> Unit = {},
     private val onIptvItemClick: (Any) -> Unit = {},
-    private val onIptvItemLongClick: (Any) -> Unit = {}
+    private val onIptvItemLongClick: (Any) -> Unit = {},
+    private val onIptvFavoriteToggle: (IptvStreamItem, Boolean) -> Unit = { _, _ -> }
 ) : RecyclerView.Adapter<MediaAdapter.MediaViewHolder>() {
 
     private val items = mutableListOf<Any>()
@@ -230,6 +231,7 @@ class MediaAdapter(
             binding.root.setCardBackgroundColor(surfaceColor)
             binding.itemContentLayout.alpha = 1.0f
             binding.tvTitle.setTextColor(Color.WHITE)
+            binding.btnFavoriteHeart.visibility = View.GONE
 
             // Configure List vs Grid layout dynamically
             if (isGridMode) {
@@ -450,6 +452,27 @@ class MediaAdapter(
                     binding.tvNewBadge.text = typeLabel
                     binding.tvNewBadge.visibility = View.VISIBLE
 
+                    // Interactive Heart Button ❤️ on Series, Movies, Live TV
+                    val isFav = IptvRepository.isFavoriteStream(ctx, item.sourceId, item.id)
+                    binding.btnFavoriteHeart.visibility = View.VISIBLE
+                    binding.btnFavoriteHeart.background = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(Color.parseColor("#B3090D16"))
+                    }
+                    binding.btnFavoriteHeart.setImageResource(
+                        if (isFav) R.drawable.ic_heart_filled else R.drawable.ic_heart_outline
+                    )
+                    binding.btnFavoriteHeart.setOnClickListener {
+                        val nowFav = IptvRepository.toggleFavoriteStream(ctx, item.sourceId, item.id)
+                        binding.btnFavoriteHeart.setImageResource(
+                            if (nowFav) R.drawable.ic_heart_filled else R.drawable.ic_heart_outline
+                        )
+                        binding.btnFavoriteHeart.animate().scaleX(1.25f).scaleY(1.25f).setDuration(100L).withEndAction {
+                            binding.btnFavoriteHeart.animate().scaleX(1f).scaleY(1f).setDuration(120L).start()
+                        }.start()
+                        onIptvFavoriteToggle(item, nowFav)
+                    }
+
                     if (item.rating.isNotBlank() && item.rating != "0") {
                         binding.tvDurationBadge.text = "⭐ ${item.rating}"
                         binding.tvDurationBadge.visibility = View.VISIBLE
@@ -457,7 +480,22 @@ class MediaAdapter(
                         binding.tvDurationBadge.visibility = View.GONE
                     }
 
-                    binding.tvSubtitle.text = item.categoryName
+                    // Show last watched episode/position indicator on Series & Movies!
+                    val seriesKey = item.seriesId.ifBlank { item.seriesName.ifBlank { item.title } }
+                    val lastEpBadge = if (item.contentType == IptvContentType.SERIES) {
+                        IptvRepository.getLastWatchedSeriesEpisodeLabel(ctx, item.sourceId, seriesKey)
+                    } else null
+                    val savedMoviePos = if (item.streamUrl.isNotBlank()) {
+                        PlaybackStore.getSavedPosition(ctx, Uri.parse(item.streamUrl))
+                    } else 0L
+
+                    val progressSuffix = when {
+                        !lastEpBadge.isNullOrBlank() -> "  •  ▶ $lastEpBadge"
+                        savedMoviePos > 3000L -> "  •  ⏸ ${PlaybackStore.formatTime(savedMoviePos)}"
+                        else -> ""
+                    }
+                    binding.tvSubtitle.text = "${item.categoryName}$progressSuffix"
+
                     val fallbackIcon = when (item.contentType) {
                         IptvContentType.LIVE_TV -> R.drawable.ic_iptv_tv
                         IptvContentType.RADIO -> R.drawable.ic_audio_track_modern
@@ -490,8 +528,23 @@ class MediaAdapter(
                     binding.root.setOnLongClickListener(null)
                 }
                 is IptvEpisodeItem -> {
-                    binding.tvNewBadge.text = "S${item.seasonNumber}E${item.episodeNumber}"
+                    val savedEpPos = if (item.streamUrl.isNotBlank()) {
+                        PlaybackStore.getSavedPosition(ctx, Uri.parse(item.streamUrl))
+                    } else 0L
+                    val hasBeenOpened = item.streamUrl.isNotBlank() && PlaybackStore.hasVideoBeenOpened(ctx, Uri.parse(item.streamUrl))
+                    if (hasBeenOpened) {
+                        binding.itemContentLayout.alpha = 0.55f
+                        binding.tvTitle.setTextColor(Color.parseColor("#94A3B8"))
+                        binding.tvNewBadge.background = GradientDrawable().apply {
+                            cornerRadius = dp(ctx, 6).toFloat()
+                            setColor(Color.parseColor("#D9334155"))
+                        }
+                        binding.tvNewBadge.text = "✓ S${item.seasonNumber}E${item.episodeNumber}"
+                    } else {
+                        binding.tvNewBadge.text = "S${item.seasonNumber}E${item.episodeNumber}"
+                    }
                     binding.tvNewBadge.visibility = View.VISIBLE
+
                     if (item.durationLabel.isNotBlank()) {
                         binding.tvDurationBadge.text = item.durationLabel
                         binding.tvDurationBadge.visibility = View.VISIBLE
@@ -501,7 +554,9 @@ class MediaAdapter(
 
                     IptvImageLoader.loadLogoOrPoster(ctx, item.logoUrl, binding.ivIcon, R.drawable.ic_play_modern, accentColor)
                     binding.tvTitle.text = item.title
-                    binding.tvSubtitle.text = if (item.plot.isNotBlank()) item.plot else "S${item.seasonNumber} • E${item.episodeNumber}"
+                    val resumeHint = if (savedEpPos > 3000L) "  •  ⏸ ${PlaybackStore.formatTime(savedEpPos)}" else ""
+                    val baseSub = if (item.plot.isNotBlank()) item.plot else "S${item.seasonNumber} • E${item.episodeNumber}"
+                    binding.tvSubtitle.text = "$baseSub$resumeHint"
                     binding.root.setOnClickListener { onIptvItemClick(item) }
                     binding.root.setOnLongClickListener {
                         onIptvItemLongClick(item)

@@ -34,7 +34,7 @@
                 android:scaleType="centerCrop"
                 android:src="@drawable/ic_play_modern" />
 
-            <!-- Subtle "NEW" Badge for newly added unwatched videos -->
+            <!-- Subtle "NEW" or Type Badge -->
             <TextView
                 android:id="@+id/tvNewBadge"
                 android:layout_width="wrap_content"
@@ -50,6 +50,20 @@
                 android:textColor="#FFFFFF"
                 android:textSize="9.5sp"
                 android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- Interactive Heart Button on Movies, Series, Live Channels -->
+            <ImageButton
+                android:id="@+id/btnFavoriteHeart"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="top|end"
+                android:layout_margin="4dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="@string/iptv_subtab_favorites"
+                android:padding="4dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_heart_outline"
                 android:visibility="gone" />
 
             <TextView

@@ -142,14 +142,13 @@
             android:tint="#FFFFFF" />
     </LinearLayout>
 
-    <!-- Optional IPTV Quick Action / Filter Sub-Header Bar (Visible in IPTV mode when browsing categories/sources) -->
+    <!-- IPTV Sub-Header Bar + Section Sub-Tabs (All / Favorites ❤️ / Continue Watching ⏱️) -->
     <LinearLayout
         android:id="@+id/iptvHeaderBar"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:background="#0E1525"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:paddingStart="12dp"
         android:paddingTop="8dp"
         android:paddingEnd="12dp"
@@ -159,42 +158,109 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/searchBarContainer">
 
-        <TextView
-            android:id="@+id/tvIptvStatusSubtitle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="@string/iptv_sources_subtitle"
-            android:textAlignment="viewStart"
-            android:textColor="#94A3B8"
-            android:textSize="12.5sp" />
-
         <LinearLayout
-            android:id="@+id/btnAddIptvSourceBar"
-            android:layout_width="wrap_content"
-            android:layout_height="34dp"
-            android:contentDescription="@string/iptv_add_source_title"
-            android:gravity="center"
-            android:orientation="horizontal"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp">
-
-            <ImageView
-                android:id="@+id/ivAddIptvPlus"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginEnd="5dp"
-                android:src="@drawable/ic_plus_circle"
-                android:tint="#38BDF8" />
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <TextView
-                android:id="@+id/tvAddIptvBarLabel"
-                android:layout_width="wrap_content"
+                android:id="@+id/tvIptvStatusSubtitle"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="@string/iptv_add_source_short"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/iptv_sources_subtitle"
+                android:textAlignment="viewStart"
+                android:textColor="#94A3B8"
+                android:textSize="12.5sp" />
+
+            <LinearLayout
+                android:id="@+id/btnAddIptvSourceBar"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:contentDescription="@string/iptv_add_source_title"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp">
+
+                <ImageView
+                    android:id="@+id/ivAddIptvPlus"
+                    android:layout_width="15dp"
+                    android:layout_height="15dp"
+                    android:layout_marginEnd="5dp"
+                    android:src="@drawable/ic_plus_circle"
+                    android:tint="#38BDF8" />
+
+                <TextView
+                    android:id="@+id/tvAddIptvBarLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/iptv_add_source_short"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Sub-Tabs inside Series / Movies / Live TV: All Categories | Favorites ❤️ | History & Continue Watching ⏱️ -->
+        <LinearLayout
+            android:id="@+id/iptvSubTabsBar"
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/btnIptvSubTabAll"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:maxLines="1"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:text="@string/iptv_subtab_all"
                 android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btnIptvSubTabFav"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:maxLines="1"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:text="@string/iptv_subtab_favorites"
+                android:textColor="#94A3B8"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btnIptvSubTabRecent"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:maxLines="1"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:text="@string/iptv_subtab_recent"
+                android:textColor="#94A3B8"
                 android:textSize="12sp"
                 android:textStyle="bold" />
         </LinearLayout>

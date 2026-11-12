@@ -1394,10 +1394,13 @@ object XtreamCodesClient {
 }
 
 object IptvRepository {
-    private const val PREF_IPTV = "pure_player_iptv_store_v1"
+        private const val PREF_IPTV = "pure_player_iptv_store_v1"
     private const val KEY_SOURCES_JSON = "iptv_sources_json_v1"
     private const val KEY_ACTIVE_SOURCE_ID = "iptv_active_source_id"
     private const val PREFIX_CAT_OVERRIDES = "iptv_cat_overrides_"
+    private const val PREFIX_FAV_IDS = "iptv_fav_ids_"
+    private const val PREFIX_RECENT_IDS = "iptv_recent_ordered_csv_"
+    private const val PREFIX_SERIES_LAST_EP = "iptv_series_last_ep_" 
 
     private val memoryStreamsCache = HashMap<String, List<IptvStreamItem>>()
 
@@ -1459,6 +1462,117 @@ object IptvRepository {
             arr.put(o)
         }
         prefs(context).edit().putString(KEY_SOURCES_JSON, arr.toString()).apply()
+    }
+
+
+    fun isFavoriteStream(context: Context, sourceId: String, itemId: String): Boolean {
+        val set = prefs(context).getStringSet(PREFIX_FAV_IDS + sourceId, emptySet()) ?: emptySet()
+        return set.contains(itemId)
+    }
+
+    fun toggleFavoriteStream(context: Context, sourceId: String, itemId: String): Boolean {
+        val p = prefs(context)
+        val current = p.getStringSet(PREFIX_FAV_IDS + sourceId, emptySet())?.toMutableSet() ?: mutableSetOf()
+        val nowFav = if (current.contains(itemId)) {
+            current.remove(itemId)
+            false
+        } else {
+            current.add(itemId)
+            true
+        }
+        p.edit().putStringSet(PREFIX_FAV_IDS + sourceId, current).apply()
+        return nowFav
+    }
+
+    fun getFavoriteItems(
+        context: Context,
+        sourceId: String,
+        contentType: IptvContentType? = null
+    ): List<IptvStreamItem> {
+        val favIds = prefs(context).getStringSet(PREFIX_FAV_IDS + sourceId, emptySet()) ?: emptySet()
+        if (favIds.isEmpty()) return emptyList()
+        return loadCachedStreams(context, sourceId).filter { item ->
+            item.id in favIds && (contentType == null || item.contentType == contentType)
+        }
+    }
+
+    fun recordRecentWatchedItem(context: Context, sourceId: String, itemId: String) {
+        if (sourceId.isBlank() || itemId.isBlank()) return
+        val p = prefs(context)
+        val rawCsv = p.getString(PREFIX_RECENT_IDS + sourceId, "") ?: ""
+        val currentList = rawCsv.split(",").map { it.trim() }.filter { it.isNotEmpty() && it != itemId }.toMutableList()
+        currentList.add(0, itemId)
+        val trimmed = currentList.take(80).joinToString(",")
+        p.edit().putString(PREFIX_RECENT_IDS + sourceId, trimmed).apply()
+    }
+
+    fun getRecentWatchedItems(
+        context: Context,
+        sourceId: String,
+        contentType: IptvContentType? = null
+    ): List<IptvStreamItem> {
+        val rawCsv = prefs(context).getString(PREFIX_RECENT_IDS + sourceId, "") ?: ""
+        if (rawCsv.isBlank()) return emptyList()
+        val orderedIds = rawCsv.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        if (orderedIds.isEmpty()) return emptyList()
+        val allById = loadCachedStreams(context, sourceId).associateBy { it.id }
+        return orderedIds.mapNotNull { id ->
+            val item = allById[id]
+            if (item != null && (contentType == null || item.contentType == contentType)) item else null
+        }
+    }
+
+    fun saveLastWatchedSeriesEpisode(
+        context: Context,
+        sourceId: String,
+        seriesKey: String,
+        seasonNumber: Int,
+        episodeNumber: Int,
+        episodeTitle: String,
+        streamUrl: String
+    ) {
+        if (seriesKey.isBlank()) return
+        val obj = JSONObject().apply {
+            put("s", seasonNumber)
+            put("e", episodeNumber)
+            put("t", episodeTitle)
+            put("u", streamUrl)
+        }
+        prefs(context).edit()
+            .putString("${PREFIX_SERIES_LAST_EP}${sourceId}_$seriesKey", obj.toString())
+            .apply()
+    }
+
+    fun getLastWatchedSeriesEpisodeLabel(
+        context: Context,
+        sourceId: String,
+        seriesKey: String
+    ): String? {
+        if (seriesKey.isBlank()) return null
+        val raw = prefs(context).getString("${PREFIX_SERIES_LAST_EP}${sourceId}_$seriesKey", null) ?: return null
+        return try {
+            val o = JSONObject(raw)
+            val s = o.optInt("s", 1)
+            val e = o.optInt("e", 1)
+            "S${String.format(Locale.US, "%02d", s)}E${String.format(Locale.US, "%02d", e)}"
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun getLastWatchedSeriesEpisodeData(
+        context: Context,
+        sourceId: String,
+        seriesKey: String
+    ): Triple<Int, Int, String>? {
+        if (seriesKey.isBlank()) return null
+        val raw = prefs(context).getString("${PREFIX_SERIES_LAST_EP}${sourceId}_$seriesKey", null) ?: return null
+        return try {
+            val o = JSONObject(raw)
+            Triple(o.optInt("s", 1), o.optInt("e", 1), o.optString("u", ""))
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun getActiveSourceId(context: Context): String? =

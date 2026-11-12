@@ -298,4 +298,19 @@ Long-press any folder in Video Folders to lock &amp; move it here, or tap below 
     <string name="settings_cat_developer">👨‍💻 DEVELOPER &amp; CREDITS</string>
     <string name="developer_credit_subtitle">Developer • Pure Video Player Final Edition (v%1$d)</string>
     <string name="iptv_show_password_toggle">Show Password to verify characters</string>
+    <string name="press_back_again_to_exit">Swipe back again to exit app</string>
+    <string name="iptv_subtab_all">📂 Categories</string>
+    <string name="iptv_subtab_favorites">❤️ Favorites</string>
+    <string name="iptv_subtab_recent">⏱️ Watching</string>
+    <string name="iptv_favorites_empty_msg">❤️ Your Favorites list in this section is empty.
+
+Tap the Heart ❤️ icon on any series, movie, or channel to add it here automatically!</string>
+    <string name="iptv_recent_empty_msg">⏱️ No recently watched works in this section yet.
+
+Any series, movie, or channel you play will appear here automatically so you can return to it anytime!</string>
+    <string name="iptv_fav_added_toast">❤️ Added "%1$s" to Favorites</string>
+    <string name="iptv_fav_removed_toast">💔 Removed "%1$s" from Favorites</string>
+    <string name="iptv_fav_add_option">Add to Favorites ❤️</string>
+    <string name="iptv_fav_remove_option">Remove from Favorites 💔</string>
+    <string name="iptv_last_watched_ep_badge">Last watched: %1$s</string>
 </resources>

@@ -298,4 +298,19 @@
     <string name="settings_cat_developer">👨‍💻 مطور التطبيق ومعلومات الإصدار</string>
     <string name="developer_credit_subtitle">مطور التطبيق • النسخة النهائية الاحترافية (v%1$d)</string>
     <string name="iptv_show_password_toggle">إظهار كلمة المرور للتأكد من صحتها</string>
+    <string name="press_back_again_to_exit">اسحب للخلف مرة أخرى للخروج من التطبيق</string>
+    <string name="iptv_subtab_all">📂 التصنيفات</string>
+    <string name="iptv_subtab_favorites">❤️ المفضلة</string>
+    <string name="iptv_subtab_recent">⏱️ أُكمل مشاهدته</string>
+    <string name="iptv_favorites_empty_msg">❤️ قائمة المفضلة في هذا القسم فارغة حالياً.
+
+اضغط على علامة القلب ❤️ الموجودة على أي مسلسل أو فيلم أو قناة ليتم إضافتها هنا تلقائياً!</string>
+    <string name="iptv_recent_empty_msg">⏱️ لا توجد أعمال تمت مشاهدتها مؤخراً في هذا القسم.
+
+أي مسلسل أو فيلم أو قناة تقوم بتشغيلها ستظهر هنا تلقائياً ليسهل عليك الرجوع إليها في أي وقت!</string>
+    <string name="iptv_fav_added_toast">❤️ تمت إضافة "%1$s" إلى المفضلة</string>
+    <string name="iptv_fav_removed_toast">💔 تمت إزالة "%1$s" من المفضلة</string>
+    <string name="iptv_fav_add_option">إضافة إلى المفضلة ❤️</string>
+    <string name="iptv_fav_remove_option">إزالة من المفضلة 💔</string>
+    <string name="iptv_last_watched_ep_badge">آخر حلقة شاهدتها: %1$s</string>
 </resources>

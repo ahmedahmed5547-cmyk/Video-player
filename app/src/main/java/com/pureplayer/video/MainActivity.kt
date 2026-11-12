@@ -28,6 +28,7 @@ import android.text.InputType
 import android.text.TextWatcher
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -225,6 +226,10 @@ class MainActivity : AppCompatActivity() {
     private var activeIptvCategoryName: String = ""
     private var activeIptvSeriesInfo: IptvSeriesInfoResult? = null
     private var activeIptvSeasonGroup: IptvSeasonGroup? = null
+    private var currentOpenedSeriesStreamItem: IptvStreamItem? = null
+    // 0 = All / Categories, 1 = Favorites ❤️, 2 = Continue Watching / History ⏱️
+    private var iptvSectionSubTab = 0
+    private var lastBackExitPressMs = 0L
 
     // Supports Android 14+ "Allow Limited Access" (READ_MEDIA_VISUAL_USER_SELECTED) as well as Full Access!
     private val multiPermissionLauncher = registerForActivityResult(
@@ -296,6 +301,7 @@ class MainActivity : AppCompatActivity() {
             isShowingFolderVideos = savedInstanceState.getBoolean("STATE_SHOWING_FOLDER", false)
             currentOpenedFolderName = savedInstanceState.getString("STATE_OPENED_FOLDER_NAME", null)
             iptvNavLevel = savedInstanceState.getInt("STATE_IPTV_LEVEL", 0)
+            iptvSectionSubTab = savedInstanceState.getInt("STATE_IPTV_SUBTAB", 0)
             activeIptvCategoryId = savedInstanceState.getString("STATE_IPTV_CAT_ID", null)
             activeIptvCategoryName = savedInstanceState.getString("STATE_IPTV_CAT_NAME", "") ?: ""
             savedInstanceState.getString("STATE_IPTV_CONTENT_TYPE", null)?.let { cName ->
@@ -319,6 +325,7 @@ class MainActivity : AppCompatActivity() {
         outState.putBoolean("STATE_SHOWING_FOLDER", isShowingFolderVideos)
         outState.putString("STATE_OPENED_FOLDER_NAME", currentOpenedFolder?.name ?: currentOpenedFolderName)
         outState.putInt("STATE_IPTV_LEVEL", iptvNavLevel)
+        outState.putInt("STATE_IPTV_SUBTAB", iptvSectionSubTab)
         outState.putString("STATE_IPTV_CAT_ID", activeIptvCategoryId)
         outState.putString("STATE_IPTV_CAT_NAME", activeIptvCategoryName)
         outState.putString("STATE_IPTV_CONTENT_TYPE", activeIptvContentType?.name)
@@ -805,6 +812,43 @@ class MainActivity : AppCompatActivity() {
         adapter.notifyDataSetChanged()
     }
 
+    private fun updateIptvSubTabsVisualState() {
+        val accent = PlaybackStore.getAccentColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+        val inactiveText = Color.parseColor("#94A3B8")
+
+        fun tabDrawable(active: Boolean, isFavTab: Boolean = false) = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(11).toFloat()
+            if (active) {
+                val c = if (isFavTab) Color.parseColor("#F43F5E") else accent
+                setColor(Color.argb(45, Color.red(c), Color.green(c), Color.blue(c)))
+                setStroke(dp(1), Color.argb(165, Color.red(c), Color.green(c), Color.blue(c)))
+            } else {
+                setColor(bg)
+                setStroke(dp(1), Color.parseColor("#1FFFFFFF"))
+            }
+        }
+
+        val src = activeIptvSource
+        val cType = activeIptvContentType
+        val favCount = if (src != null) IptvRepository.getFavoriteItems(this, src.id, cType).size else 0
+        val recentCount = if (src != null) IptvRepository.getRecentWatchedItems(this, src.id, cType).size else 0
+
+        binding.btnIptvSubTabAll.text = getString(R.string.iptv_subtab_all)
+        binding.btnIptvSubTabFav.text = if (favCount > 0) "${getString(R.string.iptv_subtab_favorites)} ($favCount)" else getString(R.string.iptv_subtab_favorites)
+        binding.btnIptvSubTabRecent.text = if (recentCount > 0) "${getString(R.string.iptv_subtab_recent)} ($recentCount)" else getString(R.string.iptv_subtab_recent)
+
+        binding.btnIptvSubTabAll.background = tabDrawable(iptvSectionSubTab == 0)
+        binding.btnIptvSubTabAll.setTextColor(if (iptvSectionSubTab == 0) Color.WHITE else inactiveText)
+
+        binding.btnIptvSubTabFav.background = tabDrawable(iptvSectionSubTab == 1, isFavTab = true)
+        binding.btnIptvSubTabFav.setTextColor(if (iptvSectionSubTab == 1) Color.WHITE else inactiveText)
+
+        binding.btnIptvSubTabRecent.background = tabDrawable(iptvSectionSubTab == 2)
+        binding.btnIptvSubTabRecent.setTextColor(if (iptvSectionSubTab == 2) Color.WHITE else inactiveText)
+    }
+
     private fun setupRecyclerView() {
         adapter = MediaAdapter(
             onFolderClick = { folder ->
@@ -824,6 +868,15 @@ class MainActivity : AppCompatActivity() {
             },
             onIptvItemLongClick = { item ->
                 handleIptvItemLongClick(item)
+            },
+            onIptvFavoriteToggle = { streamItem, nowFav ->
+                val msgRes = if (nowFav) R.string.iptv_fav_added_toast else R.string.iptv_fav_removed_toast
+                Toast.makeText(this, getString(msgRes, streamItem.title), Toast.LENGTH_SHORT).show()
+                if (currentMainTab == 2 && iptvSectionSubTab == 1) {
+                    renderIptvCurrentLevel()
+                } else {
+                    updateIptvSubTabsVisualState()
+                }
             }
         )
         updateRecyclerLayoutManager()
@@ -835,7 +888,7 @@ class MainActivity : AppCompatActivity() {
         currentOpenedFolder = folder
         currentOpenedFolderName = folder.name
         binding.tvToolbarTitle.text = "${folder.name} (${folder.videos.size})"
-        binding.btnBackFolder.visibility = View.VISIBLE
+        binding.btnBackFolder.visibility = View.GONE
         adapter.submitVideos(folder.videos)
     }
 
@@ -2386,37 +2439,94 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.btnIptvSubTabAll.setOnClickListener {
+            if (iptvSectionSubTab != 0) {
+                iptvSectionSubTab = 0
+                if (iptvNavLevel < 2) iptvNavLevel = 2
+                renderIptvCurrentLevel()
+            }
+        }
+
+        binding.btnIptvSubTabFav.setOnClickListener {
+            if (iptvSectionSubTab != 1) {
+                iptvSectionSubTab = 1
+                renderIptvCurrentLevel()
+            }
+        }
+
+        binding.btnIptvSubTabRecent.setOnClickListener {
+            if (iptvSectionSubTab != 2) {
+                iptvSectionSubTab = 2
+                renderIptvCurrentLevel()
+            }
+        }
+
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                when {
-                    isSearchActive -> closeSearchBar()
-                    currentMainTab == 2 && iptvNavLevel > 0 -> navigateBackInIptvHierarchy()
-                    currentMainTab == 2 -> {
-                        currentMainTab = 0
-                        isInVaultTab = false
-                        isInIptvTab = false
-                        updateBottomTabsVisualState()
-                        applyFolderVisibilityAndRefreshUI()
-                        updateResumeLastFab()
-                    }
-                    isShowingFolderVideos -> showFoldersList()
-                    currentMainTab == 1 -> {
-                        currentMainTab = 0
-                        isInVaultTab = false
-                        isInIptvTab = false
-                        isShowingFolderVideos = false
-                        currentOpenedFolder = null
-                        updateBottomTabsVisualState()
-                        applyFolderVisibilityAndRefreshUI()
-                        updateResumeLastFab()
-                    }
-                    else -> {
-                        isEnabled = false
-                        onBackPressedDispatcher.onBackPressed()
-                    }
-                }
+                handleUnifiedBackSwipeNavigation()
             }
         })
+    }
+
+
+    /**
+     * Unified Phone Gesture Back-Swipe Handler:
+     * Steps back cleanly level-by-level through Search -> IPTV Episodes -> Seasons -> Streams -> Categories -> Dashboard -> Sources -> Folders.
+     * Never exits the app abruptly on a single accidental swipe!
+     */
+    private fun handleUnifiedBackSwipeNavigation(): Boolean {
+        when {
+            isSearchActive -> {
+                closeSearchBar()
+                return true
+            }
+            currentMainTab == 2 && iptvNavLevel > 0 -> {
+                navigateBackInIptvHierarchy()
+                return true
+            }
+            currentMainTab == 2 -> {
+                currentMainTab = 0
+                isInVaultTab = false
+                isInIptvTab = false
+                updateBottomTabsVisualState()
+                applyFolderVisibilityAndRefreshUI()
+                updateResumeLastFab()
+                return true
+            }
+            isShowingFolderVideos || currentOpenedFolder != null || !currentOpenedFolderName.isNullOrEmpty() -> {
+                showFoldersList()
+                return true
+            }
+            currentMainTab == 1 -> {
+                currentMainTab = 0
+                isInVaultTab = false
+                isInIptvTab = false
+                isShowingFolderVideos = false
+                currentOpenedFolder = null
+                currentOpenedFolderName = null
+                updateBottomTabsVisualState()
+                applyFolderVisibilityAndRefreshUI()
+                updateResumeLastFab()
+                return true
+            }
+            else -> {
+                val now = System.currentTimeMillis()
+                if (now - lastBackExitPressMs < 2000L) {
+                    finish()
+                } else {
+                    lastBackExitPressMs = now
+                    Toast.makeText(this, getString(R.string.press_back_again_to_exit), Toast.LENGTH_SHORT).show()
+                }
+                return true
+            }
+        }
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            return handleUnifiedBackSwipeNavigation()
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
@@ -2507,7 +2617,7 @@ class MainActivity : AppCompatActivity() {
             renderIptvCurrentLevel()
         } else if (isShowingFolderVideos && currentOpenedFolder != null) {
             binding.tvToolbarTitle.text = "${currentOpenedFolder!!.name} (${currentOpenedFolder!!.videos.size})"
-            binding.btnBackFolder.visibility = View.VISIBLE
+            binding.btnBackFolder.visibility = View.GONE
             adapter.submitVideos(currentOpenedFolder!!.videos)
         } else {
             showFoldersList()
@@ -3222,7 +3332,7 @@ class MainActivity : AppCompatActivity() {
                     currentOpenedFolder = updated
                     currentOpenedFolderName = updated.name
                     binding.tvToolbarTitle.text = "${updated.name} (${updated.videos.size})"
-                    binding.btnBackFolder.visibility = View.VISIBLE
+                    binding.btnBackFolder.visibility = View.GONE
                     adapter.submitVideos(updated.videos)
                 } else {
                     showFoldersList()
@@ -3766,6 +3876,7 @@ class MainActivity : AppCompatActivity() {
         if (currentMainTab != 2) return
         binding.iptvHeaderBar.visibility = View.VISIBLE
         binding.fabResumeLast.visibility = View.GONE
+        binding.btnBackFolder.visibility = View.GONE
         adapter.isVaultMode = false
 
         val sources = IptvRepository.getSources(this)
@@ -3779,10 +3890,9 @@ class MainActivity : AppCompatActivity() {
 
         if (sources.isEmpty()) {
             iptvNavLevel = 0
+            binding.iptvSubTabsBar.visibility = View.GONE
             binding.tvToolbarTitle.text = getString(R.string.iptv_toolbar_title)
-            binding.btnBackFolder.visibility = View.GONE
             binding.tvIptvStatusSubtitle.text = getString(R.string.iptv_sources_subtitle)
-            // Show the Xtream / Sources header card with the (+) Add Source card directly below it!
             binding.emptyLayout.visibility = View.GONE
             binding.recyclerView.visibility = View.VISIBLE
             val initialCards = listOf<Any>(
@@ -3801,8 +3911,8 @@ class MainActivity : AppCompatActivity() {
         when (iptvNavLevel) {
             0 -> {
                 // Level 0: Xtream & M3U Sources List + prominent (+) Add New Source card right below
+                binding.iptvSubTabsBar.visibility = View.GONE
                 binding.tvToolbarTitle.text = "${getString(R.string.iptv_toolbar_title)} (${sources.size})"
-                binding.btnBackFolder.visibility = View.GONE
                 binding.tvIptvStatusSubtitle.text = getString(R.string.iptv_sources_manage_hint)
                 val list = mutableListOf<Any>()
                 list.addAll(sources)
@@ -3815,14 +3925,14 @@ class MainActivity : AppCompatActivity() {
                 adapter.submitIptvList(list)
             }
             1 -> {
-                // Level 1: IPTV Smarters Pro Dashboard for Active Source (Shows ONLY non-empty sections!)
+                // Level 1: IPTV Smarters Pro Dashboard for Active Source (Shows ONLY non-empty sections + Favorites & Continue Watching!)
+                binding.iptvSubTabsBar.visibility = View.GONE
                 val src = activeIptvSource ?: run {
                     iptvNavLevel = 0
                     renderIptvCurrentLevel()
                     return
                 }
                 binding.tvToolbarTitle.text = src.name
-                binding.btnBackFolder.visibility = View.VISIBLE
                 binding.tvIptvStatusSubtitle.text = "${src.type.name} • ${src.totalItemsCount()} ${getString(R.string.iptv_items_unit)}"
 
                 val allItems = IptvRepository.loadCachedStreams(this, src.id)
@@ -3872,7 +3982,6 @@ class MainActivity : AppCompatActivity() {
                         )
                     )
                 }
-                // Always include the (+) card below so user can add another source or switch sources easily
                 sectionCards.add(
                     IptvAddCardItem(
                         title = "➕  " + getString(R.string.iptv_add_source_title),
@@ -3881,90 +3990,126 @@ class MainActivity : AppCompatActivity() {
                 )
                 adapter.submitIptvList(sectionCards)
             }
-            2 -> {
-                // Level 2: Categories inside selected ContentType (only non-empty categories)
+            2, 3 -> {
                 val src = activeIptvSource ?: return
                 val cType = activeIptvContentType ?: return
                 val secName = getSectionDisplayName(cType)
-                binding.tvToolbarTitle.text = "${src.name} • $secName"
-                binding.btnBackFolder.visibility = View.VISIBLE
-                binding.tvIptvStatusSubtitle.text = getString(R.string.iptv_long_press_reclassify_hint)
 
-                val sectionStreams = IptvRepository.loadCachedStreams(this, src.id)
-                    .filter { it.contentType == cType }
+                // Show the Sub-Tabs Bar (📂 التصنيفات | ❤️ المفضلة | ⏱️ أُكمل المشاهدة) inside Series, Movies, Live TV, Radio!
+                binding.iptvSubTabsBar.visibility = View.VISIBLE
+                updateIptvSubTabsVisualState()
 
-                val categories = mutableListOf<Any>()
-                if (sectionStreams.isNotEmpty()) {
-                    categories.add(
-                        IptvCategory(
-                            id = "__ALL__",
-                            name = "🌐  " + getString(R.string.iptv_all_channels_category),
-                            contentType = cType,
-                            itemCount = sectionStreams.size
-                        )
-                    )
+                if (iptvSectionSubTab == 1) {
+                    // Favorites Tab ❤️ for this section
+                    binding.tvToolbarTitle.text = "$secName • ${getString(R.string.iptv_subtab_favorites)}"
+                    val favStreams = IptvRepository.getFavoriteItems(this, src.id, cType)
+                    binding.tvIptvStatusSubtitle.text = "${favStreams.size} ${getString(R.string.iptv_items_unit)}"
+                    if (favStreams.isEmpty()) {
+                        showEmptyState(getString(R.string.iptv_favorites_empty_msg), showButton = false)
+                    } else {
+                        binding.emptyLayout.visibility = View.GONE
+                        binding.recyclerView.visibility = View.VISIBLE
+                        adapter.submitIptvList(favStreams)
+                    }
+                    return
                 }
-                val grouped = sectionStreams.groupBy { it.categoryName }
-                    .filter { (_, list) -> list.isNotEmpty() }
-                    .map { (catName, list) ->
-                        IptvCategory(
-                            id = list.first().categoryId,
-                            name = catName,
-                            contentType = cType,
-                            itemCount = list.size
+
+                if (iptvSectionSubTab == 2) {
+                    // Continue Watching / History Tab ⏱️ for this section
+                    binding.tvToolbarTitle.text = "$secName • ${getString(R.string.iptv_subtab_recent)}"
+                    val recentStreams = IptvRepository.getRecentWatchedItems(this, src.id, cType)
+                    binding.tvIptvStatusSubtitle.text = "${recentStreams.size} ${getString(R.string.iptv_items_unit)}"
+                    if (recentStreams.isEmpty()) {
+                        showEmptyState(getString(R.string.iptv_recent_empty_msg), showButton = false)
+                    } else {
+                        binding.emptyLayout.visibility = View.GONE
+                        binding.recyclerView.visibility = View.VISIBLE
+                        adapter.submitIptvList(recentStreams)
+                    }
+                    return
+                }
+
+                // SubTab 0: Standard Categories (Level 2) or Category Streams (Level 3)
+                if (iptvNavLevel == 2) {
+                    binding.tvToolbarTitle.text = "${src.name} • $secName"
+                    binding.tvIptvStatusSubtitle.text = getString(R.string.iptv_long_press_reclassify_hint)
+
+                    val sectionStreams = IptvRepository.loadCachedStreams(this, src.id)
+                        .filter { it.contentType == cType }
+
+                    val categories = mutableListOf<Any>()
+                    if (sectionStreams.isNotEmpty()) {
+                        categories.add(
+                            IptvCategory(
+                                id = "__ALL__",
+                                name = "🌐  " + getString(R.string.iptv_all_channels_category),
+                                contentType = cType,
+                                itemCount = sectionStreams.size
+                            )
                         )
                     }
-                categories.addAll(grouped)
-                adapter.submitIptvList(categories)
-            }
-            3 -> {
-                // Level 3: Streams / Movies / Series inside selected Category
-                val src = activeIptvSource ?: return
-                val cType = activeIptvContentType ?: return
-                binding.tvToolbarTitle.text = activeIptvCategoryName
-                binding.btnBackFolder.visibility = View.VISIBLE
-
-                val rawStreams = IptvRepository.loadCachedStreams(this, src.id)
-                    .filter { it.contentType == cType }
-                    .let { list ->
-                        if (activeIptvCategoryId == "__ALL__" || activeIptvCategoryId.isNullOrEmpty()) {
-                            list
-                        } else {
-                            list.filter { it.categoryName == activeIptvCategoryName || it.categoryId == activeIptvCategoryId }
-                        }
-                    }
-
-                // If M3U Series, group episodes by seriesName so each Series appears once as a Series card
-                val displayStreams = if (cType == IptvContentType.SERIES && src.type != IptvSourceType.XTREAM) {
-                    rawStreams.groupBy { it.seriesName.ifBlank { it.title } }
-                        .map { (sName, eps) ->
-                            val first = eps.first()
-                            first.copy(
-                                title = sName,
-                                categoryName = "${first.categoryName} • ${eps.size} ${getString(R.string.iptv_episodes_unit)}"
+                    val grouped = sectionStreams.groupBy { it.categoryName }
+                        .filter { (_, list) -> list.isNotEmpty() }
+                        .map { (catName, list) ->
+                            IptvCategory(
+                                id = list.first().categoryId,
+                                name = catName,
+                                contentType = cType,
+                                itemCount = list.size
                             )
                         }
+                    categories.addAll(grouped)
+                    adapter.submitIptvList(categories)
                 } else {
-                    rawStreams
-                }
+                    binding.tvToolbarTitle.text = activeIptvCategoryName
+                    val rawStreams = IptvRepository.loadCachedStreams(this, src.id)
+                        .filter { it.contentType == cType }
+                        .let { list ->
+                            if (activeIptvCategoryId == "__ALL__" || activeIptvCategoryId.isNullOrEmpty()) {
+                                list
+                            } else {
+                                list.filter { it.categoryName == activeIptvCategoryName || it.categoryId == activeIptvCategoryId }
+                            }
+                        }
 
-                binding.tvIptvStatusSubtitle.text = "${displayStreams.size} ${getString(R.string.iptv_items_unit)}"
-                adapter.submitIptvList(displayStreams)
+                    val displayStreams = if (cType == IptvContentType.SERIES && src.type != IptvSourceType.XTREAM) {
+                        rawStreams.groupBy { it.seriesName.ifBlank { it.title } }
+                            .map { (sName, eps) ->
+                                val first = eps.first()
+                                first.copy(
+                                    title = sName,
+                                    categoryName = "${first.categoryName} • ${eps.size} ${getString(R.string.iptv_episodes_unit)}"
+                                )
+                            }
+                    } else {
+                        rawStreams
+                    }
+
+                    binding.tvIptvStatusSubtitle.text = "${displayStreams.size} ${getString(R.string.iptv_items_unit)}"
+                    adapter.submitIptvList(displayStreams)
+                }
             }
             4 -> {
                 // Level 4: Series Seasons
+                binding.iptvSubTabsBar.visibility = View.GONE
                 val sInfo = activeIptvSeriesInfo ?: return
                 binding.tvToolbarTitle.text = sInfo.seriesTitle
-                binding.btnBackFolder.visibility = View.VISIBLE
-                binding.tvIptvStatusSubtitle.text = sInfo.plot.ifBlank { "${sInfo.seasons.size} Seasons" }
+                val src = activeIptvSource
+                val sItem = currentOpenedSeriesStreamItem
+                val lastEpLabel = if (src != null && sItem != null) {
+                    val sKey = sItem.seriesId.ifBlank { sItem.seriesName.ifBlank { sItem.title } }
+                    IptvRepository.getLastWatchedSeriesEpisodeLabel(this, src.id, sKey)
+                } else null
+                val prefix = if (!lastEpLabel.isNullOrBlank()) "▶ ${getString(R.string.iptv_last_watched_ep_badge, lastEpLabel)}  •  " else ""
+                binding.tvIptvStatusSubtitle.text = prefix + sInfo.plot.ifBlank { "${sInfo.seasons.size} Seasons" }
                 adapter.submitIptvList(sInfo.seasons)
             }
             5 -> {
                 // Level 5: Season Episodes
+                binding.iptvSubTabsBar.visibility = View.GONE
                 val sInfo = activeIptvSeriesInfo ?: return
                 val season = activeIptvSeasonGroup ?: return
                 binding.tvToolbarTitle.text = "${sInfo.seriesTitle} • ${season.name}"
-                binding.btnBackFolder.visibility = View.VISIBLE
                 binding.tvIptvStatusSubtitle.text = getString(R.string.iptv_episodes_count_format, season.episodes.size)
                 adapter.submitIptvList(season.episodes)
             }
@@ -3972,11 +4117,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun navigateBackInIptvHierarchy() {
-        when (iptvNavLevel) {
-            5 -> iptvNavLevel = 4
-            4 -> iptvNavLevel = 3
-            3 -> iptvNavLevel = 2
-            2 -> iptvNavLevel = 1
+        when {
+            iptvNavLevel == 5 -> iptvNavLevel = 4
+            iptvNavLevel == 4 -> {
+                // Return to either Favorites/Recent subtab or Category streams list
+                iptvNavLevel = if (iptvSectionSubTab != 0) 2 else 3
+            }
+            iptvNavLevel == 3 && iptvSectionSubTab == 0 -> iptvNavLevel = 2
+            iptvNavLevel in 2..3 && iptvSectionSubTab != 0 -> {
+                // If inside ❤️ Favorites or ⏱️ Continue Watching sub-tab, back-swipe returns to All Categories sub-tab first!
+                iptvSectionSubTab = 0
+                iptvNavLevel = 2
+            }
+            iptvNavLevel == 2 -> iptvNavLevel = 1
             else -> iptvNavLevel = 0
         }
         renderIptvCurrentLevel()
@@ -3997,23 +4150,27 @@ class MainActivity : AppCompatActivity() {
             is IptvSource -> {
                 activeIptvSource = item
                 IptvRepository.setActiveSourceId(this, item.id)
+                iptvSectionSubTab = 0
                 iptvNavLevel = 1
                 renderIptvCurrentLevel()
             }
             is IptvSectionCardItem -> {
                 activeIptvContentType = item.contentType
+                iptvSectionSubTab = 0
                 iptvNavLevel = 2
                 renderIptvCurrentLevel()
             }
             is IptvCategory -> {
                 activeIptvCategoryId = item.id
                 activeIptvCategoryName = item.name.removePrefix("🌐  ")
+                iptvSectionSubTab = 0
                 iptvNavLevel = 3
                 renderIptvCurrentLevel()
             }
             is IptvStreamItem -> {
                 when (item.contentType) {
                     IptvContentType.LIVE_TV, IptvContentType.RADIO -> {
+                        IptvRepository.recordRecentWatchedItem(this, item.sourceId, item.id)
                         launchPlayer(
                             uri = Uri.parse(item.streamUrl),
                             title = item.title,
@@ -4026,6 +4183,7 @@ class MainActivity : AppCompatActivity() {
                         showIptvMovieDetailsDialog(item)
                     }
                     IptvContentType.SERIES -> {
+                        currentOpenedSeriesStreamItem = item
                         openIptvSeriesSeasons(item)
                     }
                 }
@@ -4036,6 +4194,21 @@ class MainActivity : AppCompatActivity() {
                 renderIptvCurrentLevel()
             }
             is IptvEpisodeItem -> {
+                val src = activeIptvSource
+                val sItem = currentOpenedSeriesStreamItem
+                if (src != null && sItem != null) {
+                    IptvRepository.recordRecentWatchedItem(this, src.id, sItem.id)
+                    val sKey = sItem.seriesId.ifBlank { sItem.seriesName.ifBlank { sItem.title } }
+                    IptvRepository.saveLastWatchedSeriesEpisode(
+                        context = this,
+                        sourceId = src.id,
+                        seriesKey = sKey,
+                        seasonNumber = item.seasonNumber,
+                        episodeNumber = item.episodeNumber,
+                        episodeTitle = item.title,
+                        streamUrl = item.streamUrl
+                    )
+                }
                 val savedPos = PlaybackStore.getSavedPosition(this, Uri.parse(item.streamUrl))
                 launchPlayer(
                     uri = Uri.parse(item.streamUrl),
@@ -4057,17 +4230,40 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             is IptvStreamItem -> {
-                showReclassifyCategoryDialog(item.categoryName)
+                // Long press on a Series, Movie, or Channel allows quick Favorite toggle or Category Reclassification!
+                val isFav = IptvRepository.isFavoriteStream(this, item.sourceId, item.id)
+                val favTitle = if (isFav) getString(R.string.iptv_fav_remove_option) else getString(R.string.iptv_fav_add_option)
+                showPremiumMenuDialog(
+                    headerIcon = if (isFav) "❤️" else "🎬",
+                    title = item.title,
+                    subtitle = item.categoryName,
+                    items = listOf(
+                        PremiumMenuItem(
+                            iconEmoji = if (isFav) "💔" else "❤️",
+                            title = favTitle,
+                            subtitle = getString(R.string.iptv_subtab_favorites),
+                            isAccentHighlighted = true,
+                            onClick = {
+                                val nowFav = IptvRepository.toggleFavoriteStream(this, item.sourceId, item.id)
+                                val msgRes = if (nowFav) R.string.iptv_fav_added_toast else R.string.iptv_fav_removed_toast
+                                Toast.makeText(this, getString(msgRes, item.title), Toast.LENGTH_SHORT).show()
+                                renderIptvCurrentLevel()
+                            }
+                        ),
+                        PremiumMenuItem(
+                            iconEmoji = "🗂️",
+                            title = getString(R.string.iptv_reclassify_category_title),
+                            subtitle = item.categoryName,
+                            onClick = {
+                                showReclassifyCategoryDialog(item.categoryName)
+                            }
+                        )
+                    )
+                )
             }
         }
     }
 
-    /**
-     * Triggered when tapping (+) below Xtream section or in IPTV header bar:
-     * Option 1: M3U / M3U8 (URL or Local File)
-     * Option 2: Xtream Codes API (Username, Password, Server URL)
-     * Option 3: Quick Demo Test Playlist (for instant verification)
-     */
     private fun showAddIptvSourceDialog() {
         settingsBackStack.clear()
         val items = listOf(
@@ -4570,6 +4766,7 @@ class MainActivity : AppCompatActivity() {
         if (movie.rating.isNotBlank() && movie.rating != "0") metaParts.add("⭐ ${movie.rating}")
         if (movie.releaseDate.isNotBlank()) metaParts.add(movie.releaseDate)
         val subLine = metaParts.joinToString(" • ").ifEmpty { "VOD Movie" }
+        val isFav = IptvRepository.isFavoriteStream(this, movie.sourceId, movie.id)
 
         val items = mutableListOf(
             PremiumMenuItem(
@@ -4578,6 +4775,7 @@ class MainActivity : AppCompatActivity() {
                 subtitle = subLine,
                 isAccentHighlighted = true,
                 onClick = {
+                    IptvRepository.recordRecentWatchedItem(this, movie.sourceId, movie.id)
                     val savedPos = PlaybackStore.getSavedPosition(this, Uri.parse(movie.streamUrl))
                     launchPlayer(
                         uri = Uri.parse(movie.streamUrl),
@@ -4586,6 +4784,17 @@ class MainActivity : AppCompatActivity() {
                         httpUserAgent = movie.httpUserAgent,
                         httpReferrer = movie.httpReferrer
                     )
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = if (isFav) "💔" else "❤️",
+                title = if (isFav) getString(R.string.iptv_fav_remove_option) else getString(R.string.iptv_fav_add_option),
+                subtitle = getString(R.string.iptv_subtab_favorites),
+                onClick = {
+                    val nowFav = IptvRepository.toggleFavoriteStream(this, movie.sourceId, movie.id)
+                    val msgRes = if (nowFav) R.string.iptv_fav_added_toast else R.string.iptv_fav_removed_toast
+                    Toast.makeText(this, getString(msgRes, movie.title), Toast.LENGTH_SHORT).show()
+                    renderIptvCurrentLevel()
                 }
             )
         )
