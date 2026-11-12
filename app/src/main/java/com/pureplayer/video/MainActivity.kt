@@ -2714,7 +2714,7 @@ class MainActivity : AppCompatActivity() {
             binding.swipeRefresh.isRefreshing = false
             PlaybackStore.syncDiscoveredVideosForNewBadge(
                 this@MainActivity,
-                videoList.map { it.uri.toString() }.toSet()
+                videoList.map { it.id }.toSet()
             )
             allDiscoveredVideos = videoList
             allDiscoveredFolders = groupedFolders

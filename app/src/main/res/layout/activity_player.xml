@@ -349,7 +349,7 @@
                     android:layout_marginStart="10dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/subtitles"
-                    android:src="@android:drawable/ic_menu_view"
+                    android:src="@drawable/ic_subtitles_cc"
                     android:tint="#FFFFFF" />
 
                 <ImageButton
