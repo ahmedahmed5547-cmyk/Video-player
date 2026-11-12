@@ -19,8 +19,8 @@ android {
         applicationId = "com.pureplayer.video"
         minSdk = 24
         targetSdk = 34
-        versionCode = 32
-        versionName = "32.0.0-SmartXtreamFix"
+        versionCode = 33
+        versionName = "33.0.0-UltimateIPTV"
 
         resourceConfigurations += listOf("en", "ar")
 

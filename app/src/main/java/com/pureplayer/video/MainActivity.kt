@@ -4224,10 +4224,20 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    private fun showAddOrEditXtreamDialog(existingSource: IptvSource? = null) {
+    private fun showAddOrEditXtreamDialog(
+        existingSource: IptvSource? = null,
+        prefillName: String = "",
+        prefillServer: String = "",
+        prefillUser: String = "",
+        prefillPass: String = ""
+    ) {
         val accent = PlaybackStore.getAccentColor(this)
         val surface = PlaybackStore.getSurfaceColor(this)
         val bg = PlaybackStore.getBackgroundColor(this)
+
+        val outerScroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+        }
 
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -4239,65 +4249,69 @@ class MainActivity : AppCompatActivity() {
                 setStroke(dp(1), Color.argb(105, Color.red(accent), Color.green(accent), Color.blue(accent)))
             }
         }
+        outerScroll.addView(container)
 
         val tvTitle = TextView(this).apply {
             text = "📡  " + getString(R.string.iptv_add_xtream_option)
             setTextColor(Color.WHITE)
             textSize = 17f
             setTypeface(typeface, Typeface.BOLD)
-            setPadding(0, 0, 0, dp(12))
+            setPadding(0, 0, 0, dp(10))
+        }
+        container.addView(tvTitle)
+
+        fun makeFieldLabel(textStr: String): TextView {
+            return TextView(this).apply {
+                text = textStr
+                setTextColor(accent)
+                textSize = 12.5f
+                setTypeface(typeface, Typeface.BOLD)
+                setPadding(dp(4), dp(8), dp(4), dp(4))
+            }
         }
 
+        // 1. Source Name (Optional)
+        container.addView(makeFieldLabel("📝 " + getString(R.string.iptv_hint_source_name)))
         val etName = EditText(this).apply {
-            setText(existingSource?.name ?: "")
-            hint = getString(R.string.iptv_hint_source_name)
             setSingleLine(true)
+            setText(existingSource?.name ?: prefillName)
+            hint = getString(R.string.iptv_hint_source_name)
             setPadding(dp(16), dp(12), dp(16), dp(12))
         }
         stylePremiumInputBox(etName, bg, accent)
+        container.addView(etName)
 
-        val etServer = EditText(this).apply {
-            setText(existingSource?.serverOrM3uUrl ?: "")
-            hint = getString(R.string.iptv_hint_server_url)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            setSingleLine(true)
-            setPadding(dp(16), dp(12), dp(16), dp(12))
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = dp(10)
-            }
-        }
-        stylePremiumInputBox(etServer, bg, accent)
-
+        // 2. Username (setSingleLine BEFORE inputType so Android never resets inputType or auto-capitalizes!)
+        container.addView(makeFieldLabel("👤 " + getString(R.string.iptv_hint_username)))
         val etUsername = EditText(this).apply {
-            setText(existingSource?.username ?: "")
-            hint = getString(R.string.iptv_hint_username)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             setSingleLine(true)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            setText(existingSource?.username ?: prefillUser)
+            hint = getString(R.string.iptv_hint_username)
             setPadding(dp(16), dp(12), dp(16), dp(12))
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = dp(10)
-            }
         }
         stylePremiumInputBox(etUsername, bg, accent)
+        container.addView(etUsername)
 
-        val existingPass = if (existingSource != null) IptvCredentialVault.decryptSecret(existingSource.encryptedPassword) else ""
+        // 3. Password (setSingleLine BEFORE inputType!)
+        container.addView(makeFieldLabel("🔑 " + getString(R.string.iptv_hint_password)))
+        val existingPass = if (existingSource != null) IptvCredentialVault.decryptSecret(existingSource.encryptedPassword) else prefillPass
         val etPassword = EditText(this).apply {
+            setSingleLine(true)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             setText(existingPass)
             hint = getString(R.string.iptv_hint_password)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            setSingleLine(true)
             setPadding(dp(16), dp(12), dp(16), dp(12))
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = dp(10)
-            }
         }
         stylePremiumInputBox(etPassword, bg, accent)
+        container.addView(etPassword)
 
         val cbShowPass = CheckBox(this).apply {
             text = getString(R.string.iptv_show_password_toggle)
             setTextColor(Color.parseColor("#CBD5E1"))
             textSize = 13f
             buttonTintList = ColorStateList.valueOf(accent)
+            isChecked = true
             setPadding(dp(6), dp(6), dp(6), dp(2))
             setOnCheckedChangeListener { _, isChecked ->
                 val sel = etPassword.selectionEnd.coerceAtLeast(0)
@@ -4309,13 +4323,21 @@ class MainActivity : AppCompatActivity() {
                 etPassword.setSelection(sel.coerceAtMost(etPassword.text.length))
             }
         }
-
-        container.addView(tvTitle)
-        container.addView(etName)
-        container.addView(etServer)
-        container.addView(etUsername)
-        container.addView(etPassword)
+        // Default to visible password so user can immediately verify there are no typos!
+        etPassword.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         container.addView(cbShowPass)
+
+        // 4. Server URL / Domain (e.g. mar10.sbs or http://mar10.sbs:8080)
+        container.addView(makeFieldLabel("🌐 " + getString(R.string.iptv_hint_server_url)))
+        val etServer = EditText(this).apply {
+            setSingleLine(true)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            setText(existingSource?.serverOrM3uUrl ?: prefillServer)
+            hint = "mar10.sbs  أو  http://mar10.sbs:8080"
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+        }
+        stylePremiumInputBox(etServer, bg, accent)
+        container.addView(etServer)
 
         val btnRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -4323,7 +4345,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, dp(16), 0, 0)
         }
 
-        val dialog = AlertDialog.Builder(this).setView(container).create()
+        val dialog = AlertDialog.Builder(this).setView(outerScroll).create()
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
 
         val btnCancel = TextView(this).apply {
@@ -4348,6 +4370,14 @@ class MainActivity : AppCompatActivity() {
                 var srv = XtreamCodesClient.sanitizeCredentialOrUrl(etServer.text.toString())
                 var usr = XtreamCodesClient.sanitizeCredentialOrUrl(etUsername.text.toString())
                 var pwd = XtreamCodesClient.sanitizeCredentialOrUrl(etPassword.text.toString())
+
+                // Smart Auto-Swap: If user accidentally typed the domain (e.g. mar10.sbs) in Username box and username in Server box!
+                if (!srv.contains(".") && usr.contains(".") && !usr.contains("@")) {
+                    val tmp = srv
+                    srv = usr
+                    usr = tmp
+                }
+
                 // If user pasted a full get.php URL with ?username=...&password=... into Server URL box, auto-extract them!
                 if (srv.contains("username=", ignoreCase = true) && (usr.isEmpty() || pwd.isEmpty())) {
                     val uMatch = Regex("(?i)[?&]username=([^&]+)").find(srv)?.groupValues?.getOrNull(1)
@@ -4355,6 +4385,7 @@ class MainActivity : AppCompatActivity() {
                     if (usr.isEmpty() && !uMatch.isNullOrBlank()) usr = Uri.decode(uMatch)
                     if (pwd.isEmpty() && !pMatch.isNullOrBlank()) pwd = Uri.decode(pMatch)
                 }
+
                 val nameStr = etName.text.toString().trim().ifEmpty {
                     srv.removePrefix("http://").removePrefix("https://").substringBefore("/").substringBefore(":")
                         .ifEmpty { "Xtream IPTV" }
@@ -4420,6 +4451,31 @@ class MainActivity : AppCompatActivity() {
                 }
                 is IptvSyncResult.Error -> {
                     Toast.makeText(this@MainActivity, res.userMessage, Toast.LENGTH_LONG).show()
+                    if (type == IptvSourceType.XTREAM) {
+                        val diagInfo = "Server: $serverOrM3uUrl\nUser: $username\nStatus: ${res.technicalDiagnostic}"
+                        showPremiumMenuDialog(
+                            headerIcon = "⚠️",
+                            title = res.userMessage,
+                            subtitle = diagInfo,
+                            items = listOf(
+                                PremiumMenuItem(
+                                    iconEmoji = "✏️",
+                                    title = getString(R.string.iptv_source_edit_action),
+                                    subtitle = "مراجعة وتعديل الرابط أو اليوزر أو الباسورد",
+                                    isAccentHighlighted = true,
+                                    onClick = {
+                                        showAddOrEditXtreamDialog(
+                                            existingSource = null,
+                                            prefillName = name,
+                                            prefillServer = serverOrM3uUrl,
+                                            prefillUser = username,
+                                            prefillPass = passwordPlain
+                                        )
+                                    }
+                                )
+                            )
+                        )
+                    }
                     renderIptvCurrentLevel()
                 }
             }

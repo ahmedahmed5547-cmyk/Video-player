@@ -8,6 +8,8 @@ import android.net.Uri
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.JsonReader
+import android.util.JsonToken
 import android.util.LruCache
 import android.view.animation.DecelerateInterpolator
 import android.widget.ImageView
@@ -18,27 +20,30 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
-import java.security.SecureRandom
-import java.security.cert.X509Certificate
-import javax.net.ssl.HttpsURLConnection
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 import java.security.KeyStore
 import java.security.MessageDigest
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.util.Locale
 import java.util.UUID
+import java.util.zip.GZIPInputStream
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 enum class IptvSourceType {
     XTREAM,
@@ -75,7 +80,8 @@ data class IptvCategory(
     val id: String,
     val name: String,
     val contentType: IptvContentType,
-    val itemCount: Int
+    val itemCount: Int,
+    val rawXtreamCategoryId: String = ""
 )
 
 data class IptvStreamItem(
@@ -134,15 +140,9 @@ data class IptvSeriesInfoResult(
 
 sealed class IptvSyncResult {
     data class Success(val source: IptvSource, val totalLoaded: Int) : IptvSyncResult()
-    data class Error(val userMessage: String) : IptvSyncResult()
+    data class Error(val userMessage: String, val technicalDiagnostic: String = "") : IptvSyncResult()
 }
 
-/**
- * Arabic & English search text normalizer:
- * - Lowercases English characters
- * - Strips Arabic diacritics/Tashkeel (\u064B-\u065F, \u0670, Tatweel \u0640)
- * - Unifies Alef variants (أ, إ, آ, ٱ -> ا), Teh Marbuta (ة -> ه), Alef Maksura (ى -> ي), Hamza forms
- */
 object IptvSearchNormalizer {
     private val diacriticsRegex = Regex("[\\u064B-\\u065F\\u0670\\u0640]")
     private val multiSpaceRegex = Regex("\\s+")
@@ -175,10 +175,6 @@ object IptvSearchNormalizer {
     }
 }
 
-/**
- * Hardware-backed AndroidKeyStore AES-GCM encryption for IPTV Xtream passwords.
- * Never logs credentials or stores plain-text passwords on disk.
- */
 object IptvCredentialVault {
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
     private const val KEY_ALIAS = "pure_player_iptv_cred_aes_v1"
@@ -242,9 +238,6 @@ object IptvCredentialVault {
     }
 }
 
-/**
- * Memory + Disk cached asynchronous image loader for IPTV channel logos and movie/series posters.
- */
 object IptvImageLoader {
     private val maxMem = (Runtime.getRuntime().maxMemory() / 1024).toInt()
     private val memCache = object : LruCache<String, Bitmap>((maxMem / 10).coerceAtLeast(2048)) {
@@ -320,7 +313,7 @@ object IptvImageLoader {
                 connectTimeout = 7000
                 readTimeout = 7000
                 instanceFollowRedirects = true
-                setRequestProperty("User-Agent", "IPTVSmartersPro/3.1 (Android)")
+                setRequestProperty("User-Agent", "IPTVSmartersPlayer")
             }
             if (conn.responseCode !in 200..299) return null
             val bytes = conn.inputStream.use { it.readBytes() }
@@ -346,11 +339,6 @@ object IptvImageLoader {
     }
 }
 
-/**
- * Background Streaming M3U / M3U8 Parser.
- * Supports #EXTINF, tvg-name, tvg-logo, group-title, #EXTGRP, #EXTVLCOPT:http-user-agent, #EXTVLCOPT:http-referrer.
- * Auto-classifies entries into LIVE_TV, MOVIES, SERIES, and RADIO, and handles tens of thousands of entries smoothly.
- */
 object M3uPlaylistParser {
     private val groupTitleRegex = Regex("""group-title\s*=\s*"([^"]*)"""", RegexOption.IGNORE_CASE)
     private val tvgNameRegex = Regex("""tvg-name\s*=\s*"([^"]*)"""", RegexOption.IGNORE_CASE)
@@ -373,7 +361,7 @@ object M3uPlaylistParser {
 
         reader.useLines { lines ->
             for (rawLine in lines) {
-                val line = rawLine.trim()
+                val line = rawLine.replace("\uFEFF", "").trim()
                 if (line.isEmpty()) continue
 
                 when {
@@ -393,11 +381,8 @@ object M3uPlaylistParser {
                             currentReferrer = opt.substringAfter("=").trim()
                         }
                     }
-                    line.startsWith("#") -> {
-                        // Other comment or directive
-                    }
+                    line.startsWith("#") -> {}
                     else -> {
-                        // Stream URL line
                         val streamUrl = line
                         val extInf = currentExtInf
                         if (streamUrl.startsWith("http://", ignoreCase = true) ||
@@ -500,7 +485,6 @@ object M3uPlaylistParser {
         val lowerTitle = title.lowercase(Locale.ROOT)
         val lowerUrl = streamUrl.lowercase(Locale.ROOT).substringBefore("?")
 
-        // Check if series pattern matches (e.g., S01E02 or الموسم 1 الحلقة 2)
         val seMatch = seriesEpisodeRegex.find(title) ?: arabicSeriesEpisodeRegex.find(title)
         if (overrideType == IptvContentType.SERIES ||
             seMatch != null ||
@@ -521,7 +505,6 @@ object M3uPlaylistParser {
             return Triple(overrideType, "", Pair(0, 0))
         }
 
-        // Check Radio
         if (lowerGroup.contains("radio") ||
             lowerGroup.contains("راديو") ||
             lowerGroup.contains("إذاعة") ||
@@ -534,7 +517,6 @@ object M3uPlaylistParser {
             return Triple(IptvContentType.RADIO, "", Pair(0, 0))
         }
 
-        // Check Movies / VOD
         val isMovieFile = lowerUrl.endsWith(".mp4") || lowerUrl.endsWith(".mkv") || lowerUrl.endsWith(".avi")
         if (lowerUrl.contains("/movie/") ||
             lowerUrl.contains("/vod/") ||
@@ -553,45 +535,48 @@ object M3uPlaylistParser {
 }
 
 /**
- * Xtream Codes Standard API Client (`player_api.php`).
- * Supports:
- * - Authentication & account status verification (`player_api.php`)
- * - `get_live_categories` & `get_live_streams`
- * - `get_vod_categories` & `get_vod_streams`
- * - `get_series_categories` & `get_series`
- * - `get_series_info` (seasons & episodes on demand)
+ * Ultimate Xtream Codes Client (v33):
+ * - Converts Arabic-Indic / Persian digits (٠-٩ / ۰-۹) to ASCII (0-9) and strips invisible WhatsApp/Telegram RTL marks.
+ * - Fast Sequential Port & Protocol Probing (fails fast on closed TCP ports without retrying 4 User-Agents on a dead socket, and avoids triggering Xtream max_connections=1 / Cloudflare anti-DDoS).
+ * - Preserves `/player_api.php?...` when a domain redirect (like `mar10.sbs` -> `http://host:port/`) points to root `/`.
+ * - Streams large JSON arrays directly from `InputStream` via `JsonReader` without loading 50MB strings into memory.
+ * - Supports on-demand per-category stream loading (`&category_id=...`) just like IPTV Smarters Pro!
  */
 object XtreamCodesClient {
 
-    private val invisibleCharsRegex = Regex("[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF\u00A0\r\n\t]")
+    private val invisibleCharsRegex = Regex("[\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\uFEFF\\u00A0\\r\\n\\t]")
 
-    private val userAgents = listOf(
-        "IPTVSmartersPlayer",
-        "okhttp/4.9.3",
-        "VLC/3.0.20 LibVLC/3.0.20",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    )
-
-    /**
-     * Strips invisible Unicode RTL/LTR/Zero-Width characters (often injected when copying from WhatsApp/Telegram)
-     * as well as leading/trailing spaces.
-     */
-    fun sanitizeCredentialOrUrl(raw: String): String {
-        return raw.replace(invisibleCharsRegex, "").trim()
+    private val userAgents: List<String> by lazy {
+        val sysUa = System.getProperty("http.agent")?.takeIf { it.isNotBlank() }
+            ?: "Dalvik/2.1.0 (Linux; U; Android 14; Mobile)"
+        listOf(
+            "IPTVSmartersPlayer",
+            sysUa,
+            "okhttp/3.12.1",
+            "VLC/3.0.20 LibVLC/3.0.20"
+        )
     }
 
     /**
-     * Accepts any server input format:
-     * - "mar10.sbs"
-     * - "mar10.sbs:8080"
-     * - "http://mar10.sbs"
-     * - "https://mar10.sbs/c/"
-     * - "http://mar10.sbs:8080/get.php?username=..."
-     * and returns a primary normalized base URL.
+     * Converts any Arabic-Indic (٠-٩) or Eastern Arabic (۰-۹) digits to ASCII (0-9)
+     * and removes invisible Unicode directional/zero-width marks.
      */
+    fun sanitizeCredentialOrUrl(raw: String): String {
+        val noInvisible = raw.replace(invisibleCharsRegex, "").trim()
+        if (noInvisible.isEmpty()) return ""
+        val sb = StringBuilder(noInvisible.length)
+        for (ch in noInvisible) {
+            when (ch) {
+                in '\u0660'..'\u0669' -> sb.append((ch.code - 0x0660 + '0'.code).toChar())
+                in '\u06F0'..'\u06F9' -> sb.append((ch.code - 0x06F0 + '0'.code).toChar())
+                else -> sb.append(ch)
+            }
+        }
+        return sb.toString().trim()
+    }
+
     fun normalizeServerBaseUrl(rawUrl: String): String {
         var clean = sanitizeCredentialOrUrl(rawUrl)
-        // Remove common trailing paths if user pasted a full portal or M3U link
         clean = clean
             .substringBefore("/player_api.php")
             .substringBefore("/panel_api.php")
@@ -607,10 +592,6 @@ object XtreamCodesClient {
         return clean
     }
 
-    /**
-     * Builds an ordered list of candidate base URLs to try automatically when a user enters
-     * a bare domain like "mar10.sbs" or when http/https or port needs automatic discovery.
-     */
     fun buildCandidateBaseUrls(rawUrl: String): List<String> {
         val rawClean = sanitizeCredentialOrUrl(rawUrl)
             .substringBefore("/player_api.php")
@@ -622,34 +603,38 @@ object XtreamCodesClient {
 
         val hasExplicitHttp = rawClean.startsWith("http://", ignoreCase = true)
         val hasExplicitHttps = rawClean.startsWith("https://", ignoreCase = true)
-        val hostAndPort = rawClean
+        val hostPart = rawClean
             .removePrefix("http://")
             .removePrefix("HTTP://")
             .removePrefix("https://")
             .removePrefix("HTTPS://")
             .trimEnd('/')
 
-        val hasExplicitPort = hostAndPort.contains(":")
+        val hasExplicitPort = hostPart.substringBefore("/").contains(":")
         val candidates = LinkedHashSet<String>()
 
         if (hasExplicitHttps) {
-            candidates.add("https://$hostAndPort")
-            candidates.add("http://$hostAndPort")
+            candidates.add("https://$hostPart")
+            candidates.add("http://$hostPart")
         } else if (hasExplicitHttp) {
-            candidates.add("http://$hostAndPort")
-            candidates.add("https://$hostAndPort")
+            candidates.add("http://$hostPart")
+            candidates.add("https://$hostPart")
         } else {
-            // User entered bare domain like "mar10.sbs" or "mar10.sbs:8080"
-            candidates.add("http://$hostAndPort")
-            candidates.add("https://$hostAndPort")
+            candidates.add("http://$hostPart")
+            candidates.add("https://$hostPart")
         }
 
         if (!hasExplicitPort) {
-            candidates.add("http://$hostAndPort:8080")
-            candidates.add("http://$hostAndPort:80")
-            candidates.add("https://$hostAndPort:443")
-            candidates.add("http://$hostAndPort:2095")
-            candidates.add("http://$hostAndPort:25461")
+            val domainOnly = hostPart.substringBefore("/")
+            val subPath = if (hostPart.contains("/")) "/" + hostPart.substringAfter("/") else ""
+            // Most common Xtream ports ordered by frequency
+            candidates.add("http://$domainOnly:8080$subPath")
+            candidates.add("http://$domainOnly:8000$subPath")
+            candidates.add("http://$domainOnly:25461$subPath")
+            candidates.add("http://$domainOnly:2095$subPath")
+            candidates.add("http://$domainOnly:8880$subPath")
+            candidates.add("http://$domainOnly:2052$subPath")
+            candidates.add("http://$domainOnly:2082$subPath")
         }
         return candidates.toList()
     }
@@ -670,34 +655,85 @@ object XtreamCodesClient {
         }
     }
 
+    private fun wrapGzipIfNeeded(rawStream: InputStream, contentEncoding: String?): InputStream {
+        val pb = BufferedInputStream(rawStream, 16384)
+        pb.mark(4)
+        val b0 = pb.read()
+        val b1 = pb.read()
+        pb.reset()
+        val isGzipMagic = (b0 == 0x1f && b1 == 0x8b)
+        val isGzipHeader = contentEncoding?.contains("gzip", ignoreCase = true) == true
+        return if (isGzipMagic || isGzipHeader) GZIPInputStream(pb) else pb
+    }
+
     /**
-     * Performs HTTP GET or POST while manually following cross-protocol redirects (http <-> https)
-     * and rotating through standard IPTV User-Agents if a firewall/Cloudflare returns 403.
-     * Returns Pair(responseBody, finalResolvedUrl).
+     * Advances a BufferedInputStream past any leading UTF-8 BOM or PHP notices until `{` or `[` is reached.
      */
-    fun httpRequestWithRedirects(
+    private fun skipToStartOfJson(rawStream: InputStream): BufferedInputStream? {
+        val pb = if (rawStream is BufferedInputStream) rawStream else BufferedInputStream(rawStream, 16384)
+        while (true) {
+            pb.mark(4)
+            val b = pb.read()
+            if (b == -1) return null
+            val ch = b.toChar()
+            if (ch == '{' || ch == '[') {
+                pb.reset()
+                return pb
+            }
+        }
+    }
+
+    private fun extractCleanJsonString(rawText: String): String {
+        val noBom = rawText.replace("\uFEFF", "").trim()
+        if (noBom.startsWith("{") || noBom.startsWith("[")) return noBom
+        val firstBrace = noBom.indexOf('{')
+        val firstBracket = noBom.indexOf('[')
+        val startIdx = when {
+            firstBrace >= 0 && firstBracket >= 0 -> minOf(firstBrace, firstBracket)
+            firstBrace >= 0 -> firstBrace
+            firstBracket >= 0 -> firstBracket
+            else -> -1
+        }
+        return if (startIdx >= 0) noBom.substring(startIdx).trim() else noBom
+    }
+
+    /**
+     * Opens an HTTP connection following cross-protocol redirects (http <-> https)
+     * and preserving `/player_api.php?...` if a domain redirect points to root `/`.
+     * IMPORTANT: Only retries another User-Agent if the server returned an HTTP error code (e.g. 403/401/503);
+     * if TCP connect itself fails (timeout/refused), fails fast immediately so we don't waste time on dead ports!
+     */
+    private fun openRedirectedStream(
         initialUrl: String,
-        timeoutMs: Int = 15_000,
+        connectTimeoutMs: Int = 5_000,
+        readTimeoutMs: Int = 18_000,
         postFormBody: String? = null
-    ): Pair<String, String> {
+    ): Pair<InputStream, String> {
         var lastException: Exception? = null
+        val initialUrlObj = runCatching { URL(initialUrl) }.getOrNull()
+        val initialPathAndQuery = if (initialUrlObj != null) {
+            val p = initialUrlObj.path ?: ""
+            val q = initialUrlObj.query
+            if (!q.isNullOrEmpty()) "$p?$q" else p
+        } else ""
 
         for (ua in userAgents) {
             try {
                 var currentUrl = initialUrl
+                var currentPostBody = postFormBody
                 var redirectsRemaining = 6
 
                 while (redirectsRemaining >= 0) {
                     val urlObj = URL(currentUrl)
                     val conn = (urlObj.openConnection() as HttpURLConnection).apply {
                         configurePermissiveSsl(this)
-                        connectTimeout = timeoutMs
-                        readTimeout = timeoutMs
+                        connectTimeout = connectTimeoutMs
+                        readTimeout = readTimeoutMs
                         instanceFollowRedirects = false
                         setRequestProperty("User-Agent", ua)
-                        setRequestProperty("Accept", "application/json, text/plain, */*")
+                        setRequestProperty("Accept", "*/*")
                         setRequestProperty("Connection", "keep-alive")
-                        if (postFormBody != null) {
+                        if (currentPostBody != null) {
                             requestMethod = "POST"
                             doOutput = true
                             setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
@@ -706,9 +742,9 @@ object XtreamCodesClient {
                         }
                     }
 
-                    if (postFormBody != null) {
+                    if (currentPostBody != null) {
                         conn.outputStream.use { os ->
-                            os.write(postFormBody.toByteArray(Charsets.UTF_8))
+                            os.write(currentPostBody.toByteArray(Charsets.UTF_8))
                         }
                     }
 
@@ -717,145 +753,210 @@ object XtreamCodesClient {
                         val location = conn.getHeaderField("Location")?.trim()
                         conn.disconnect()
                         if (location.isNullOrEmpty()) break
-                        val resolvedUrl = URL(urlObj, location).toString()
-                        // Preserve query string if redirect stripped it on player_api.php
-                        val initialQuery = urlObj.query
-                        currentUrl = if (!initialQuery.isNullOrEmpty() && !resolvedUrl.contains("?") && resolvedUrl.contains("player_api.php")) {
-                            "$resolvedUrl?$initialQuery"
-                        } else {
-                            resolvedUrl
+                        var resolvedUrl = URL(urlObj, location).toString()
+                        val resolvedObj = URL(resolvedUrl)
+                        val rPath = resolvedObj.path ?: ""
+                        if ((rPath.isEmpty() || rPath == "/") && initialPathAndQuery.isNotEmpty() && initialPathAndQuery != "/") {
+                            val baseResolved = resolvedUrl.trimEnd('/')
+                            resolvedUrl = "$baseResolved$initialPathAndQuery"
                         }
+                        if (code in listOf(301, 302, 303) && currentPostBody != null) {
+                            if (!resolvedUrl.contains("?")) {
+                                resolvedUrl = "$resolvedUrl?$currentPostBody"
+                            }
+                            currentPostBody = null
+                        }
+                        currentUrl = resolvedUrl
                         redirectsRemaining--
                         continue
                     }
 
                     if (code in 200..299) {
-                        val body = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                        return Pair(body, currentUrl)
+                        val stream = wrapGzipIfNeeded(conn.inputStream, conn.contentEncoding)
+                        return Pair(stream, currentUrl)
                     }
 
-                    if (code == 403 || code == 401 || code == 503) {
-                        // Try next User-Agent in case Cloudflare/WAF blocked this UA
+                    conn.disconnect()
+                    if (code == 403 || code == 401 || code == 503 || code == 406) {
+                        // Server is alive on this port but rejected User-Agent; try next User-Agent!
                         lastException = IllegalStateException("HTTP_$code")
                         break
                     }
 
+                    // Other HTTP code (e.g. 404, 500, 502): no need to retry 4 User-Agents
                     throw IllegalStateException("HTTP_$code")
                 }
             } catch (e: Exception) {
                 lastException = e
+                // If TCP connection itself timed out or was refused, do NOT retry 4 User-Agents on this dead port!
+                val msg = e.message ?: ""
+                if (!msg.startsWith("HTTP_403") && !msg.startsWith("HTTP_401") && !msg.startsWith("HTTP_503")) {
+                    break
+                }
             }
         }
         throw (lastException ?: IllegalStateException("CONNECTION_FAILED"))
     }
 
-    private fun httpGetString(urlStr: String, timeoutMs: Int = 18_000): String {
+    fun httpRequestWithRedirects(
+        initialUrl: String,
+        timeoutMs: Int = 9_000,
+        postFormBody: String? = null
+    ): Pair<String, String> {
+        val (stream, finalUrl) = openRedirectedStream(
+            initialUrl = initialUrl,
+            connectTimeoutMs = timeoutMs.coerceAtMost(6_000),
+            readTimeoutMs = timeoutMs,
+            postFormBody = postFormBody
+        )
+        val body = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        return Pair(body, finalUrl)
+    }
+
+    private fun httpGetString(urlStr: String, timeoutMs: Int = 14_000): String {
         return httpRequestWithRedirects(urlStr, timeoutMs).first
     }
 
-    fun fetchXtreamSourceContent(
+    private data class ProbeOutcome(
+        val candidateBase: String,
+        val resolvedBase: String?,
+        val authJson: JSONObject?,
+        val sawExplicitAuthZero: Boolean,
+        val errorDetail: String?
+    )
+
+    private fun probeSingleBaseUrl(
+        candidateBase: String,
+        cleanUser: String,
+        cleanPass: String,
+        uEnc: String,
+        pEnc: String
+    ): ProbeOutcome {
+        var sawAuthZero = false
+        var lastErr: String? = null
+
+        val endpoints = mutableListOf(
+            Triple("$candidateBase/player_api.php?username=$uEnc&password=$pEnc", null as String?, "/player_api.php")
+        )
+        if (uEnc != cleanUser || pEnc != cleanPass) {
+            endpoints.add(Triple("$candidateBase/player_api.php?username=$cleanUser&password=$cleanPass", null as String?, "/player_api.php"))
+        }
+        endpoints.add(Triple("$candidateBase/player_api.php", "username=$uEnc&password=$pEnc", "/player_api.php"))
+        endpoints.add(Triple("$candidateBase/panel_api.php?username=$uEnc&password=$pEnc", null as String?, "/panel_api.php"))
+
+        for ((idx, triple) in endpoints.withIndex()) {
+            val (targetUrl, postBody, apiPath) = triple
+            try {
+                val (rawResp, finalUrl) = httpRequestWithRedirects(targetUrl, timeoutMs = 5_500, postFormBody = postBody)
+                val cleanJsonStr = extractCleanJsonString(rawResp)
+                if (cleanJsonStr.startsWith("{")) {
+                    val json = JSONObject(cleanJsonStr)
+                    val uInfo = json.optJSONObject("user_info")
+                    if (uInfo != null) {
+                        val authVal = uInfo.opt("auth")?.toString()?.trim() ?: ""
+                        val statusVal = uInfo.optString("status", "").trim()
+                        val hasUsername = !uInfo.optString("username", "").isNullOrBlank()
+                        val isAuthExplicitlyFailed = (authVal == "0" || authVal.equals("false", ignoreCase = true)) && !hasUsername && !statusVal.equals("Active", ignoreCase = true)
+                        if (!isAuthExplicitlyFailed && authVal != "0" && !authVal.equals("false", ignoreCase = true)) {
+                            var redirectedBase = finalUrl.substringBefore(apiPath).substringBefore("?").trimEnd('/')
+                            if (redirectedBase.isEmpty()) redirectedBase = candidateBase
+                            return ProbeOutcome(
+                                candidateBase = candidateBase,
+                                resolvedBase = redirectedBase,
+                                authJson = json,
+                                sawExplicitAuthZero = false,
+                                errorDetail = null
+                            )
+                        } else {
+                            sawAuthZero = true
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                lastErr = e.message ?: e.javaClass.simpleName
+                // If the first attempt on this port failed with a TCP Connect/Timeout error, this port is not listening—skip remaining endpoints on this port!
+                if (idx == 0 && !lastErr.startsWith("HTTP_")) {
+                    break
+                }
+            }
+        }
+        return ProbeOutcome(candidateBase, null, null, sawAuthZero, lastErr)
+    }
+
+    suspend fun fetchXtreamSourceContent(
         sourceId: String,
         sourceName: String,
         rawServerUrl: String,
         username: String,
         passwordPlain: String
-    ): Pair<IptvSource, List<IptvStreamItem>> {
+    ): Pair<IptvSource, List<IptvStreamItem>> = withContext(Dispatchers.IO) {
         val cleanUser = sanitizeCredentialOrUrl(username)
         val cleanPass = sanitizeCredentialOrUrl(passwordPlain)
-
-        // If user pasted a full get.php URL with username & password in the Server URL box, extract them if needed
         val candidateBases = buildCandidateBaseUrls(rawServerUrl)
         val uEnc = URLEncoder.encode(cleanUser, "UTF-8")
         val pEnc = URLEncoder.encode(cleanPass, "UTF-8")
 
-        var workingBaseUrl: String? = null
-        var workingApiBase: String? = null
-        var authJson: JSONObject? = null
-        var sawExplicitAuthZero = false
-        var lastErrorMsg = "CONNECTION_FAILED"
+        var winningOutcome: ProbeOutcome? = null
+        var anySawAuthZero = false
+        val diagnostics = mutableListOf<String>()
 
-        // Try each candidate base URL (http, https, ports) until we get a valid Xtream response!
-        for (candidateBase in candidateBases) {
-            val attempts = listOf(
-                // Attempt 1: Standard GET with URL-encoded credentials
-                Triple("$candidateBase/player_api.php?username=$uEnc&password=$pEnc", null as String?, true),
-                // Attempt 2: GET with raw credentials (for non-standard panels where symbols aren't decoded)
-                Triple("$candidateBase/player_api.php?username=$cleanUser&password=$cleanPass", null as String?, false),
-                // Attempt 3: POST to player_api.php
-                Triple("$candidateBase/player_api.php", "username=$uEnc&password=$pEnc", true)
-            )
-
-            for ((targetUrl, postBody, _) in attempts) {
-                try {
-                    val (rawResp, finalUrl) = httpRequestWithRedirects(targetUrl, timeoutMs = 12_000, postFormBody = postBody)
-                    val trimmed = rawResp.trim()
-                    if (trimmed.startsWith("{")) {
-                        val json = JSONObject(trimmed)
-                        val uInfo = json.optJSONObject("user_info")
-                        if (uInfo != null) {
-                            val authVal = uInfo.opt("auth")?.toString() ?: "0"
-                            if (authVal != "0" && !authVal.equals("false", ignoreCase = true)) {
-                                authJson = json
-                                // Resolve final base URL from redirect or server_info
-                                val redirectedBase = finalUrl.substringBefore("/player_api.php").trimEnd('/')
-                                workingBaseUrl = redirectedBase.ifEmpty { candidateBase }
-                                workingApiBase = "${workingBaseUrl}/player_api.php?username=$uEnc&password=$pEnc"
-                                break
-                            } else {
-                                sawExplicitAuthZero = true
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    lastErrorMsg = e.message ?: "CONNECTION_FAILED"
-                }
+        // Probe candidates sequentially with fast fail on dead ports so we don't trigger Cloudflare/Xtream flood bans!
+        for (cand in candidateBases) {
+            val outcome = probeSingleBaseUrl(cand, cleanUser, cleanPass, uEnc, pEnc)
+            if (outcome.authJson != null && outcome.resolvedBase != null) {
+                winningOutcome = outcome
+                break
             }
-            if (authJson != null && workingBaseUrl != null) break
+            if (outcome.sawExplicitAuthZero) {
+                anySawAuthZero = true
+            }
+            outcome.errorDetail?.let { diagnostics.add("${cand.removePrefix("http://")}: $it") }
         }
 
-        // Fallback: If player_api.php wasn't reachable or returned non-JSON, try standard Xtream get.php M3U endpoint!
-        if (authJson == null) {
-            for (candidateBase in candidateBases.take(2)) {
+        // Fallback: If player_api.php wasn't reachable, try get.php M3U endpoint
+        if (winningOutcome == null) {
+            for (candidateBase in candidateBases.take(3)) {
                 try {
                     val m3uUrl = "$candidateBase/get.php?username=$uEnc&password=$pEnc&type=m3u_plus&output=ts"
-                    val (m3uBody, _) = httpRequestWithRedirects(m3uUrl, timeoutMs = 16_000)
-                    if (m3uBody.contains("#EXTM3U", ignoreCase = true) || m3uBody.contains("#EXTINF", ignoreCase = true)) {
-                        val parsed = m3uBody.byteInputStream(Charsets.UTF_8).bufferedReader(Charsets.UTF_8).use { reader ->
-                            M3uPlaylistParser.parseFromReader(sourceId, reader)
-                        }
-                        if (parsed.isNotEmpty()) {
-                            val src = IptvSource(
-                                id = sourceId,
-                                name = sourceName,
-                                type = IptvSourceType.XTREAM,
-                                serverOrM3uUrl = candidateBase,
-                                username = cleanUser,
-                                encryptedPassword = IptvCredentialVault.encryptSecret(cleanPass),
-                                lastUpdatedMs = System.currentTimeMillis(),
-                                liveCount = parsed.count { it.contentType == IptvContentType.LIVE_TV },
-                                movieCount = parsed.count { it.contentType == IptvContentType.MOVIES },
-                                seriesCount = parsed.filter { it.contentType == IptvContentType.SERIES }.map { it.seriesName.ifEmpty { it.title } }.distinct().size,
-                                radioCount = parsed.count { it.contentType == IptvContentType.RADIO },
-                                accountStatus = "Active"
-                            )
-                            return Pair(src, parsed)
-                        }
+                    val (stream, finalU) = openRedirectedStream(m3uUrl, connectTimeoutMs = 5_500, readTimeoutMs = 20_000)
+                    val parsed = BufferedReader(InputStreamReader(stream, Charsets.UTF_8)).use { reader ->
+                        M3uPlaylistParser.parseFromReader(sourceId, reader)
+                    }
+                    if (parsed.isNotEmpty()) {
+                        val resolvedBase = finalU.substringBefore("/get.php").trimEnd('/').ifEmpty { candidateBase }
+                        val src = IptvSource(
+                            id = sourceId,
+                            name = sourceName,
+                            type = IptvSourceType.XTREAM,
+                            serverOrM3uUrl = resolvedBase,
+                            username = cleanUser,
+                            encryptedPassword = IptvCredentialVault.encryptSecret(cleanPass),
+                            lastUpdatedMs = System.currentTimeMillis(),
+                            liveCount = parsed.count { it.contentType == IptvContentType.LIVE_TV },
+                            movieCount = parsed.count { it.contentType == IptvContentType.MOVIES },
+                            seriesCount = parsed.filter { it.contentType == IptvContentType.SERIES }.map { it.seriesName.ifEmpty { it.title } }.distinct().size,
+                            radioCount = parsed.count { it.contentType == IptvContentType.RADIO },
+                            accountStatus = "Active"
+                        )
+                        return@withContext Pair(src, parsed)
                     }
                 } catch (_: Exception) {}
             }
 
-            if (sawExplicitAuthZero) {
+            if (anySawAuthZero) {
                 throw IllegalStateException("AUTH_FAILED")
             } else {
-                throw IllegalStateException(lastErrorMsg)
+                val diagSummary = diagnostics.take(2).joinToString(" | ").ifEmpty { "Timeout/Refused" }
+                throw IllegalStateException("CONN_DETAIL:$diagSummary")
             }
         }
 
-        val baseUrl = workingBaseUrl!!
-        val apiBase = workingApiBase!!
-        val userInfo = authJson!!.optJSONObject("user_info") ?: JSONObject()
+        val baseUrl = winningOutcome.resolvedBase!!
+        val authJson = winningOutcome.authJson!!
+        val userInfo = authJson.optJSONObject("user_info") ?: JSONObject()
+        val apiBase = "$baseUrl/player_api.php?username=$uEnc&password=$pEnc"
 
-        val statusStr = userInfo.optString("status", "Active")
+        val statusStr = userInfo.optString("status", "Active").ifBlank { "Active" }
         if (statusStr.equals("Expired", ignoreCase = true) ||
             statusStr.equals("Banned", ignoreCase = true) ||
             statusStr.equals("Disabled", ignoreCase = true)
@@ -864,124 +965,43 @@ object XtreamCodesClient {
         }
 
         val expDateSec = userInfo.optString("exp_date", "0").toLongOrNull() ?: 0L
-        val nowSec = System.currentTimeMillis() / 1000L
-        if (expDateSec in 1 until nowSec) {
-            throw IllegalStateException("ACCOUNT_EXPIRED")
-        }
 
-        val allItems = ArrayList<IptvStreamItem>(4096)
-        val seenKeys = HashSet<String>(4096)
-
-        // 2. Live Categories & Live Streams (including Radio detection)
+        // Fetch Categories & Streams sequentially using direct InputStream -> JsonReader streaming
+        // (Zero RAM bloat and zero risk of triggering Xtream max_connections=1 rate limits!)
         val liveCatMap = fetchCategoryMap("$apiBase&action=get_live_categories")
-        try {
-            val liveRaw = httpGetString("$apiBase&action=get_live_streams", timeoutMs = 25_000)
-            val arr = parseJsonArrayFlexible(liveRaw)
-            for (i in 0 until arr.length()) {
-                val obj = arr.optJSONObject(i) ?: continue
-                val streamId = obj.opt("stream_id")?.toString()?.takeIf { it.isNotEmpty() } ?: continue
-                val name = obj.optString("name", "Channel $streamId").trim()
-                val catId = obj.optString("category_id", "0")
-                val catName = liveCatMap[catId] ?: "Live Channels"
-                val logo = obj.optString("stream_icon", "")
-                val streamType = obj.optString("stream_type", "live").lowercase(Locale.ROOT)
-                val isRadio = streamType.contains("radio") ||
-                    catName.contains("radio", ignoreCase = true) ||
-                    catName.contains("راديو") ||
-                    catName.contains("إذاعة")
-
-                val contentType = if (isRadio) IptvContentType.RADIO else IptvContentType.LIVE_TV
-                val streamUrl = "$baseUrl/live/$cleanUser/$cleanPass/$streamId.ts"
-                val uniqueKey = "${contentType.name}_$streamId"
-                if (seenKeys.add(uniqueKey)) {
-                    allItems.add(
-                        IptvStreamItem(
-                            id = "${sourceId}_$uniqueKey",
-                            sourceId = sourceId,
-                            contentType = contentType,
-                            categoryId = "${contentType.name}_$catId",
-                            categoryName = catName,
-                            title = name,
-                            streamUrl = streamUrl,
-                            logoUrl = logo
-                        )
-                    )
-                }
-            }
-        } catch (_: Exception) {}
-
-        // 3. VOD (Movies) Categories & Streams
         val vodCatMap = fetchCategoryMap("$apiBase&action=get_vod_categories")
-        try {
-            val vodRaw = httpGetString("$apiBase&action=get_vod_streams", timeoutMs = 25_000)
-            val arr = parseJsonArrayFlexible(vodRaw)
-            for (i in 0 until arr.length()) {
-                val obj = arr.optJSONObject(i) ?: continue
-                val streamId = obj.opt("stream_id")?.toString()?.takeIf { it.isNotEmpty() } ?: continue
-                val name = obj.optString("name", "Movie $streamId").trim()
-                val catId = obj.optString("category_id", "0")
-                val catName = vodCatMap[catId] ?: "Movies"
-                val logo = obj.optString("stream_icon", "")
-                val rating = obj.optString("rating", "")
-                val ext = obj.optString("container_extension", "mp4").ifBlank { "mp4" }
-                val streamUrl = "$baseUrl/movie/$cleanUser/$cleanPass/$streamId.$ext"
-                val uniqueKey = "MOVIES_$streamId"
-                if (seenKeys.add(uniqueKey)) {
-                    allItems.add(
-                        IptvStreamItem(
-                            id = "${sourceId}_$uniqueKey",
-                            sourceId = sourceId,
-                            contentType = IptvContentType.MOVIES,
-                            categoryId = "MOVIES_$catId",
-                            categoryName = catName,
-                            title = name,
-                            streamUrl = streamUrl,
-                            logoUrl = logo,
-                            rating = rating,
-                            containerExtension = ext
-                        )
-                    )
-                }
-            }
-        } catch (_: Exception) {}
-
-        // 4. Series Categories & Series List
         val seriesCatMap = fetchCategoryMap("$apiBase&action=get_series_categories")
-        try {
-            val seriesRaw = httpGetString("$apiBase&action=get_series", timeoutMs = 25_000)
-            val arr = parseJsonArrayFlexible(seriesRaw)
-            for (i in 0 until arr.length()) {
-                val obj = arr.optJSONObject(i) ?: continue
-                val seriesId = obj.opt("series_id")?.toString()?.takeIf { it.isNotEmpty() } ?: continue
-                val name = obj.optString("name", "Series $seriesId").trim()
-                val catId = obj.optString("category_id", "0")
-                val catName = seriesCatMap[catId] ?: "Series"
-                val cover = obj.optString("cover", "")
-                val plot = obj.optString("plot", "")
-                val rating = obj.optString("rating", "")
-                val releaseDate = obj.optString("releaseDate", "")
-                val uniqueKey = "SERIES_$seriesId"
-                if (seenKeys.add(uniqueKey)) {
-                    allItems.add(
-                        IptvStreamItem(
-                            id = "${sourceId}_$uniqueKey",
-                            sourceId = sourceId,
-                            contentType = IptvContentType.SERIES,
-                            categoryId = "SERIES_$catId",
-                            categoryName = catName,
-                            title = name,
-                            streamUrl = "",
-                            logoUrl = cover,
-                            rating = rating,
-                            plot = plot,
-                            releaseDate = releaseDate,
-                            seriesId = seriesId,
-                            seriesName = name
-                        )
-                    )
-                }
+
+        val allItems = ArrayList<IptvStreamItem>(8192)
+        allItems.addAll(
+            fetchLiveStreamsDirect(sourceId, baseUrl, cleanUser, cleanPass, "$apiBase&action=get_live_streams", liveCatMap)
+        )
+        allItems.addAll(
+            fetchVodStreamsDirect(sourceId, baseUrl, cleanUser, cleanPass, "$apiBase&action=get_vod_streams", vodCatMap)
+        )
+        allItems.addAll(
+            fetchSeriesStreamsDirect(sourceId, "$apiBase&action=get_series", seriesCatMap)
+        )
+
+        // If the server only returns streams per-category (&category_id=...) and returned empty on bulk list,
+        // create lightweight category entries or fetch the first categories so sections are immediately visible!
+        if (allItems.isEmpty()) {
+            for ((catId, _) in liveCatMap.entries.take(5)) {
+                allItems.addAll(
+                    fetchLiveStreamsDirect(sourceId, baseUrl, cleanUser, cleanPass, "$apiBase&action=get_live_streams&category_id=$catId", liveCatMap)
+                )
             }
-        } catch (_: Exception) {}
+            for ((catId, _) in vodCatMap.entries.take(5)) {
+                allItems.addAll(
+                    fetchVodStreamsDirect(sourceId, baseUrl, cleanUser, cleanPass, "$apiBase&action=get_vod_streams&category_id=$catId", vodCatMap)
+                )
+            }
+            for ((catId, _) in seriesCatMap.entries.take(5)) {
+                allItems.addAll(
+                    fetchSeriesStreamsDirect(sourceId, "$apiBase&action=get_series&category_id=$catId", seriesCatMap)
+                )
+            }
+        }
 
         val liveCnt = allItems.count { it.contentType == IptvContentType.LIVE_TV }
         val movieCnt = allItems.count { it.contentType == IptvContentType.MOVIES }
@@ -1004,7 +1024,228 @@ object XtreamCodesClient {
             accountStatus = statusStr
         )
 
-        return Pair(updatedSource, allItems)
+        Pair(updatedSource, allItems)
+    }
+
+    private fun fetchLiveStreamsDirect(
+        sourceId: String,
+        baseUrl: String,
+        cleanUser: String,
+        cleanPass: String,
+        urlStr: String,
+        liveCatMap: Map<String, String>
+    ): List<IptvStreamItem> {
+        val out = ArrayList<IptvStreamItem>(2048)
+        val seen = HashSet<String>(2048)
+        try {
+            val (rawStream, _) = openRedirectedStream(urlStr, connectTimeoutMs = 6_000, readTimeoutMs = 28_000)
+            rawStream.use { s ->
+                val jsonStream = skipToStartOfJson(s) ?: return out
+                JsonReader(InputStreamReader(jsonStream, Charsets.UTF_8)).apply { isLenient = true }.use { reader ->
+                    if (reader.peek() != JsonToken.BEGIN_ARRAY) return out
+                    reader.beginArray()
+                    while (reader.hasNext()) {
+                        if (reader.peek() != JsonToken.BEGIN_OBJECT) {
+                            reader.skipValue()
+                            continue
+                        }
+                        var streamId = ""
+                        var name = ""
+                        var catId = "0"
+                        var logo = ""
+                        var streamType = "live"
+                        reader.beginObject()
+                        while (reader.hasNext()) {
+                            when (reader.nextName()) {
+                                "stream_id" -> streamId = nextStringSafe(reader)
+                                "name" -> name = nextStringSafe(reader)
+                                "category_id" -> catId = nextStringSafe(reader).ifEmpty { "0" }
+                                "stream_icon" -> logo = nextStringSafe(reader)
+                                "stream_type" -> streamType = nextStringSafe(reader)
+                                else -> reader.skipValue()
+                            }
+                        }
+                        reader.endObject()
+                        if (streamId.isNotEmpty()) {
+                            val catName = liveCatMap[catId] ?: "Live Channels"
+                            val isRadio = streamType.contains("radio", ignoreCase = true) ||
+                                catName.contains("radio", ignoreCase = true) ||
+                                catName.contains("راديو") ||
+                                catName.contains("إذاعة")
+                            val cType = if (isRadio) IptvContentType.RADIO else IptvContentType.LIVE_TV
+                            val uKey = "${cType.name}_$streamId"
+                            if (seen.add(uKey)) {
+                                out.add(
+                                    IptvStreamItem(
+                                        id = "${sourceId}_$uKey",
+                                        sourceId = sourceId,
+                                        contentType = cType,
+                                        categoryId = "${cType.name}_$catId",
+                                        categoryName = catName,
+                                        title = name.ifBlank { "Channel $streamId" },
+                                        streamUrl = "$baseUrl/live/$cleanUser/$cleanPass/$streamId.ts",
+                                        logoUrl = logo
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    reader.endArray()
+                }
+            }
+        } catch (_: Throwable) {}
+        return out
+    }
+
+    private fun fetchVodStreamsDirect(
+        sourceId: String,
+        baseUrl: String,
+        cleanUser: String,
+        cleanPass: String,
+        urlStr: String,
+        vodCatMap: Map<String, String>
+    ): List<IptvStreamItem> {
+        val out = ArrayList<IptvStreamItem>(2048)
+        val seen = HashSet<String>(2048)
+        try {
+            val (rawStream, _) = openRedirectedStream(urlStr, connectTimeoutMs = 6_000, readTimeoutMs = 28_000)
+            rawStream.use { s ->
+                val jsonStream = skipToStartOfJson(s) ?: return out
+                JsonReader(InputStreamReader(jsonStream, Charsets.UTF_8)).apply { isLenient = true }.use { reader ->
+                    if (reader.peek() != JsonToken.BEGIN_ARRAY) return out
+                    reader.beginArray()
+                    while (reader.hasNext()) {
+                        if (reader.peek() != JsonToken.BEGIN_OBJECT) {
+                            reader.skipValue()
+                            continue
+                        }
+                        var streamId = ""
+                        var name = ""
+                        var catId = "0"
+                        var logo = ""
+                        var rating = ""
+                        var ext = "mp4"
+                        reader.beginObject()
+                        while (reader.hasNext()) {
+                            when (reader.nextName()) {
+                                "stream_id" -> streamId = nextStringSafe(reader)
+                                "name" -> name = nextStringSafe(reader)
+                                "category_id" -> catId = nextStringSafe(reader).ifEmpty { "0" }
+                                "stream_icon" -> logo = nextStringSafe(reader)
+                                "rating" -> rating = nextStringSafe(reader)
+                                "container_extension" -> ext = nextStringSafe(reader).ifBlank { "mp4" }
+                                else -> reader.skipValue()
+                            }
+                        }
+                        reader.endObject()
+                        if (streamId.isNotEmpty() && seen.add(streamId)) {
+                            val catName = vodCatMap[catId] ?: "Movies"
+                            out.add(
+                                IptvStreamItem(
+                                    id = "${sourceId}_MOVIES_$streamId",
+                                    sourceId = sourceId,
+                                    contentType = IptvContentType.MOVIES,
+                                    categoryId = "MOVIES_$catId",
+                                    categoryName = catName,
+                                    title = name.ifBlank { "Movie $streamId" },
+                                    streamUrl = "$baseUrl/movie/$cleanUser/$cleanPass/$streamId.$ext",
+                                    logoUrl = logo,
+                                    rating = rating,
+                                    containerExtension = ext
+                                )
+                            )
+                        }
+                    }
+                    reader.endArray()
+                }
+            }
+        } catch (_: Throwable) {}
+        return out
+    }
+
+    private fun fetchSeriesStreamsDirect(
+        sourceId: String,
+        urlStr: String,
+        seriesCatMap: Map<String, String>
+    ): List<IptvStreamItem> {
+        val out = ArrayList<IptvStreamItem>(2048)
+        val seen = HashSet<String>(2048)
+        try {
+            val (rawStream, _) = openRedirectedStream(urlStr, connectTimeoutMs = 6_000, readTimeoutMs = 28_000)
+            rawStream.use { s ->
+                val jsonStream = skipToStartOfJson(s) ?: return out
+                JsonReader(InputStreamReader(jsonStream, Charsets.UTF_8)).apply { isLenient = true }.use { reader ->
+                    if (reader.peek() != JsonToken.BEGIN_ARRAY) return out
+                    reader.beginArray()
+                    while (reader.hasNext()) {
+                        if (reader.peek() != JsonToken.BEGIN_OBJECT) {
+                            reader.skipValue()
+                            continue
+                        }
+                        var seriesId = ""
+                        var name = ""
+                        var catId = "0"
+                        var cover = ""
+                        var plot = ""
+                        var rating = ""
+                        var releaseDate = ""
+                        reader.beginObject()
+                        while (reader.hasNext()) {
+                            when (reader.nextName()) {
+                                "series_id" -> seriesId = nextStringSafe(reader)
+                                "name" -> name = nextStringSafe(reader)
+                                "category_id" -> catId = nextStringSafe(reader).ifEmpty { "0" }
+                                "cover" -> cover = nextStringSafe(reader)
+                                "plot" -> plot = nextStringSafe(reader)
+                                "rating" -> rating = nextStringSafe(reader)
+                                "releaseDate" -> releaseDate = nextStringSafe(reader)
+                                else -> reader.skipValue()
+                            }
+                        }
+                        reader.endObject()
+                        if (seriesId.isNotEmpty() && seen.add(seriesId)) {
+                            val catName = seriesCatMap[catId] ?: "Series"
+                            val finalName = name.ifBlank { "Series $seriesId" }
+                            out.add(
+                                IptvStreamItem(
+                                    id = "${sourceId}_SERIES_$seriesId",
+                                    sourceId = sourceId,
+                                    contentType = IptvContentType.SERIES,
+                                    categoryId = "SERIES_$catId",
+                                    categoryName = catName,
+                                    title = finalName,
+                                    streamUrl = "",
+                                    logoUrl = cover,
+                                    rating = rating,
+                                    plot = plot,
+                                    releaseDate = releaseDate,
+                                    seriesId = seriesId,
+                                    seriesName = finalName
+                                )
+                            )
+                        }
+                    }
+                    reader.endArray()
+                }
+            }
+        } catch (_: Throwable) {}
+        return out
+    }
+
+    private fun nextStringSafe(reader: JsonReader): String {
+        return when (reader.peek()) {
+            JsonToken.NULL -> {
+                reader.nextNull()
+                ""
+            }
+            JsonToken.STRING -> reader.nextString().trim()
+            JsonToken.NUMBER -> reader.nextString().trim()
+            JsonToken.BOOLEAN -> reader.nextBoolean().toString()
+            else -> {
+                reader.skipValue()
+                ""
+            }
+        }
     }
 
     fun fetchSeriesSeasonsAndEpisodes(
@@ -1020,7 +1261,7 @@ object XtreamCodesClient {
 
         val url = "$baseUrl/player_api.php?username=$uEnc&password=$pEnc&action=get_series_info&series_id=$sEnc"
         val raw = httpGetString(url, timeoutMs = 18_000)
-        val root = JSONObject(raw)
+        val root = JSONObject(extractCleanJsonString(raw))
 
         val infoObj = root.optJSONObject("info")
         val title = infoObj?.optString("name")?.takeIf { it.isNotBlank() } ?: seriesItem.title
@@ -1114,10 +1355,10 @@ object XtreamCodesClient {
     }
 
     private fun fetchCategoryMap(urlStr: String): Map<String, String> {
-        val map = HashMap<String, String>()
+        val map = LinkedHashMap<String, String>()
         try {
-            val raw = httpGetString(urlStr, timeoutMs = 14_000)
-            val arr = parseJsonArrayFlexible(raw)
+            val raw = httpGetString(urlStr, timeoutMs = 12_000)
+            val arr = parseJsonArrayFlexible(extractCleanJsonString(raw))
             for (i in 0 until arr.length()) {
                 val obj = arr.optJSONObject(i) ?: continue
                 val id = obj.optString("category_id", "")
@@ -1268,7 +1509,6 @@ object IptvRepository {
         }
         prefs(context).edit().putString(PREFIX_CAT_OVERRIDES + sourceId, obj.toString()).apply()
 
-        // Immediately update cached items in memory & disk so reclassification takes effect right away
         val cachedItems = loadCachedStreams(context, sourceId)
         if (cachedItems.isNotEmpty()) {
             val updatedItems = cachedItems.map { item ->
@@ -1348,9 +1588,6 @@ object IptvRepository {
         }
     }
 
-    /**
-     * Writes streams in JSON-Lines batches so even 50,000+ channels serialize quickly without OOM.
-     */
     private fun saveStreamsToDiskCache(context: Context, sourceId: String, items: List<IptvStreamItem>) {
         memoryStreamsCache[sourceId] = items
         val tempFile = File(cacheDir(context), "streams_${sourceId}.tmp")
@@ -1389,10 +1626,6 @@ object IptvRepository {
         }
     }
 
-    /**
-     * Adds, edits, or refreshes an Xtream or M3U source off the main thread.
-     * If refreshing an existing source fails, existing cached streams and source metadata are preserved!
-     */
     suspend fun syncAndSaveSource(
         context: Context,
         existingSourceId: String? = null,
@@ -1459,7 +1692,6 @@ object IptvRepository {
                 }
             }
 
-            // Persist streams to disk cache and update source list
             saveStreamsToDiskCache(context, sourceId, items)
             val currentList = getSources(context).toMutableList()
             val idx = currentList.indexOfFirst { it.id == sourceId }
@@ -1472,17 +1704,21 @@ object IptvRepository {
             setActiveSourceId(context, sourceId)
 
             IptvSyncResult.Success(updatedSource, items.size)
-        } catch (e: Exception) {
-            val code = e.message ?: "UNKNOWN"
+        } catch (t: Throwable) {
+            val code = t.message ?: t.javaClass.simpleName
             val friendlyMsg = when {
                 code == "AUTH_FAILED" -> context.getString(R.string.iptv_err_auth_failed)
                 code == "ACCOUNT_EXPIRED" -> context.getString(R.string.iptv_err_account_expired)
                 code.startsWith("ACCOUNT_") -> context.getString(R.string.iptv_err_account_inactive, code.removePrefix("ACCOUNT_"))
                 code == "EMPTY_PLAYLIST" -> context.getString(R.string.iptv_err_empty_playlist)
                 code == "FILE_READ_ERROR" -> context.getString(R.string.iptv_err_file_read)
-                else -> context.getString(R.string.iptv_err_connection)
+                code.startsWith("CONN_DETAIL:") -> {
+                    val detail = code.removePrefix("CONN_DETAIL:")
+                    "${context.getString(R.string.iptv_err_connection)}\n($detail)"
+                }
+                else -> "${context.getString(R.string.iptv_err_connection)}\n($code)"
             }
-            IptvSyncResult.Error(friendlyMsg)
+            IptvSyncResult.Error(friendlyMsg, code)
         }
     }
 
