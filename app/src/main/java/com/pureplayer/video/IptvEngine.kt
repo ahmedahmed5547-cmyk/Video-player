@@ -725,6 +725,7 @@ object XtreamCodesClient {
 
                 while (redirectsRemaining >= 0) {
                     val urlObj = URL(currentUrl)
+                    val postPayload: String? = currentPostBody
                     val conn = (urlObj.openConnection() as HttpURLConnection).apply {
                         configurePermissiveSsl(this)
                         connectTimeout = connectTimeoutMs
@@ -733,7 +734,7 @@ object XtreamCodesClient {
                         setRequestProperty("User-Agent", ua)
                         setRequestProperty("Accept", "*/*")
                         setRequestProperty("Connection", "keep-alive")
-                        if (currentPostBody != null) {
+                        if (postPayload != null) {
                             requestMethod = "POST"
                             doOutput = true
                             setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
@@ -742,9 +743,9 @@ object XtreamCodesClient {
                         }
                     }
 
-                    if (currentPostBody != null) {
+                    if (postPayload != null) {
                         conn.outputStream.use { os ->
-                            os.write(currentPostBody.toByteArray(Charsets.UTF_8))
+                            os.write(postPayload.toByteArray(Charsets.UTF_8))
                         }
                     }
 
@@ -833,7 +834,7 @@ object XtreamCodesClient {
         pEnc: String
     ): ProbeOutcome {
         var sawAuthZero = false
-        var lastErr: String? = null
+        var lastErr: String = ""
 
         val endpoints = mutableListOf(
             Triple("$candidateBase/player_api.php?username=$uEnc&password=$pEnc", null as String?, "/player_api.php")
@@ -880,7 +881,7 @@ object XtreamCodesClient {
                 }
             }
         }
-        return ProbeOutcome(candidateBase, null, null, sawAuthZero, lastErr)
+        return ProbeOutcome(candidateBase, null, null, sawAuthZero, lastErr.ifEmpty { null })
     }
 
     suspend fun fetchXtreamSourceContent(
@@ -951,8 +952,9 @@ object XtreamCodesClient {
             }
         }
 
-        val baseUrl = winningOutcome.resolvedBase!!
-        val authJson = winningOutcome.authJson!!
+        val finalOutcome = winningOutcome!!
+        val baseUrl = finalOutcome.resolvedBase!!
+        val authJson = finalOutcome.authJson!!
         val userInfo = authJson.optJSONObject("user_info") ?: JSONObject()
         val apiBase = "$baseUrl/player_api.php?username=$uEnc&password=$pEnc"
 
