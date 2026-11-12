@@ -126,8 +126,8 @@
     <string name="pro_sleep_60">🌙 Sleep Timer (60 min)</string>
     <string name="pro_pip">🖼️ Picture-in-Picture (PiP)</string>
     <string name="folder_locked_badge">🔒 Locked (Password &amp; Fingerprint) • %1$d videos</string>
-    <string name="folder_menu_lock">🔒 Lock Folder with Password &amp; Fingerprint</string>
-    <string name="folder_menu_unlock">🔓 Unlock Folder (Remove Lock)</string>
+    <string name="folder_menu_lock">🔒 Lock & Move Folder to Vault</string>
+    <string name="folder_menu_unlock">🔓 Restore Folder from Vault (Unhide)</string>
     <string name="folder_locked_toast">🔒 Locked folder \"%1$s\"</string>
     <string name="folder_unlocked_toast">🔓 Unlocked folder \"%1$s\"</string>
     <string name="setting_privacy_section">🔒 Privacy &amp; Folder Lock (Password + Fingerprint)</string>
@@ -161,7 +161,7 @@
     <string name="privacy_current_pin_hint">Enter CURRENT password...</string>
     <string name="privacy_new_fingerprint_blocked_toast">🛡️ Security Alert: New fingerprint detected on device! Please enter your Password first.</string>
     <string name="privacy_new_fingerprint_warning">🛡️ New fingerprint or security change detected! You MUST enter your Password first to unlock.</string>
-    <string name="folder_lock_item_sub">Protect folder with Fingerprint &amp; Password</string>
+    <string name="folder_lock_item_sub">Completely hides this folder from Video Folders and moves it to Vault</string>
     <string name="privacy_change_pin_sub">Update your current privacy password</string>
     <string name="privacy_manage_all_sub">Select multiple folders to lock or toggle Fingerprint</string>
     <string name="active_mode_badge">Currently Active</string>
@@ -198,4 +198,29 @@
     <string name="update_downloading_title">⬇️ Downloading Latest Update from GitHub...</string>
     <string name="update_fallback_actions_toast">🌐 Opening latest GitHub Actions build page to download APK...</string>
     <string name="update_install_error_toast">⚠️ Please allow Install Unknown Apps permission to install the update.</string>
+    <string name="tab_video_folders">📁 Video Folders</string>
+    <string name="tab_vault">🛡️ Private Vault</string>
+    <string name="vault_toolbar_title">🛡️ Private Vault</string>
+    <string name="vault_auth_subtitle">Authenticate once to unlock all folders in your Private Vault</string>
+    <string name="vault_empty_msg">🛡️ Your Private Vault is currently empty.
+
+Long-press any folder in Video Folders to lock & move it here, or tap below to choose folders to hide in the Vault.</string>
+    <string name="vault_add_folders_btn">➕ Select Folders to Move to Vault</string>
+    <string name="vault_unlocked_badge">🛡️ Vault • %1$d videos</string>
+    <string name="folder_moved_to_vault_toast">🛡️ Moved "%1$s" to Private Vault (hidden from main list)</string>
+    <string name="folder_restored_from_vault_toast">🔓 Restored "%1$s" back to Video Folders</string>
+    <string name="sort_and_layout_title">Media Layout & Sort</string>
+    <string name="section_media_layout">📐 Media Layout (List or Grid)</string>
+    <string name="layout_mode_list">📋 Detailed List View</string>
+    <string name="layout_mode_list_sub">Classic horizontal cards with full metadata</string>
+    <string name="layout_mode_grid">🔲 Compact Grid View (2 Columns)</string>
+    <string name="layout_mode_grid_sub">Cinema poster grid for folders & videos</string>
+    <string name="section_sort_by">🔃 Sort Content By</string>
+    <string name="sort_date_newest">📅 Date (Newest First)</string>
+    <string name="sort_date_oldest">🕰️ Date (Oldest First)</string>
+    <string name="sort_name_az">🔤 Name (A to Z)</string>
+    <string name="sort_name_za">🔤 Name (Z to A)</string>
+    <string name="sort_size_largest">💾 Size (Largest First)</string>
+    <string name="sort_size_smallest">💾 Size (Smallest First)</string>
+    <string name="sort_duration_longest">⏱️ Duration (Longest First)</string>
 </resources>

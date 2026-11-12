@@ -54,6 +54,7 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.pureplayer.video.databinding.ActivityMainBinding
 import kotlinx.coroutines.Dispatchers
@@ -180,9 +181,13 @@ class MainActivity : AppCompatActivity() {
     private var allDiscoveredVideos = listOf<VideoItem>()
     private var allDiscoveredFolders = listOf<VideoFolder>()
 
-    private var allVideosFlat = listOf<VideoItem>()
-    private var videoFoldersOnly = listOf<VideoFolder>()
+    private var publicFoldersOnly = listOf<VideoFolder>()
+    private var publicVideosFlat = listOf<VideoItem>()
+    private var vaultFoldersOnly = listOf<VideoFolder>()
+    private var vaultVideosFlat = listOf<VideoItem>()
 
+    private var isInVaultTab = false
+    private var isVaultSessionUnlocked = false
     private var isShowingFolderVideos = false
     private var currentOpenedFolder: VideoFolder? = null
     private var isSearchActive = false
@@ -525,10 +530,12 @@ class MainActivity : AppCompatActivity() {
 
         binding.mainRoot.setBackgroundColor(bg)
         binding.topBar.setBackgroundColor(surface)
+        binding.bottomNavBar.setBackgroundColor(surface)
         binding.searchBarContainer.setBackgroundColor(surface)
         window.statusBarColor = surface
-        window.navigationBarColor = bg
+        window.navigationBarColor = surface
         binding.btnSettings.imageTintList = ColorStateList.valueOf(accent)
+        binding.btnSortAndLayout.imageTintList = ColorStateList.valueOf(accent)
         binding.btnToggleSearch.imageTintList = ColorStateList.valueOf(accent)
         binding.fabResumeLast.backgroundTintList = ColorStateList.valueOf(accent)
 
@@ -539,6 +546,7 @@ class MainActivity : AppCompatActivity() {
             setStroke(2, accent)
         }
         binding.etSearchVideos.background = searchBoxBg
+        updateBottomTabsVisualState()
         adapter.notifyDataSetChanged()
     }
 
@@ -574,16 +582,65 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateBottomTabsVisualState() {
+        val accent = PlaybackStore.getAccentColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+        val lockedCount = PlaybackStore.getLockedFolders(this).size
+
+        val activeBg = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(16).toFloat()
+            setColor(Color.argb(42, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            setStroke(dp(1), Color.argb(145, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+        val inactiveBg = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(16).toFloat()
+            setColor(bg)
+            setStroke(dp(1), Color.parseColor("#18FFFFFF"))
+        }
+
+        binding.tvTabVideos.text = getString(R.string.tab_video_folders)
+        binding.tvTabVault.text = if (lockedCount > 0 && isInVaultTab && isVaultSessionUnlocked) {
+            "${getString(R.string.tab_vault)} ($lockedCount)"
+        } else {
+            getString(R.string.tab_vault)
+        }
+
+        if (!isInVaultTab) {
+            binding.tabVideos.background = activeBg
+            binding.tvTabVideos.setTextColor(Color.WHITE)
+            binding.tabVault.background = inactiveBg
+            binding.tvTabVault.setTextColor(Color.parseColor("#94A3B8"))
+        } else {
+            binding.tabVault.background = activeBg
+            binding.tvTabVault.setTextColor(Color.WHITE)
+            binding.tabVideos.background = inactiveBg
+            binding.tvTabVideos.setTextColor(Color.parseColor("#94A3B8"))
+        }
+    }
+
+    private fun updateRecyclerLayoutManager() {
+        val gridEnabled = PlaybackStore.isGridLayoutEnabled(this)
+        adapter.isGridMode = gridEnabled
+        val currentLm = binding.recyclerView.layoutManager
+        if (gridEnabled) {
+            if (currentLm !is GridLayoutManager) {
+                binding.recyclerView.layoutManager = GridLayoutManager(this, 2)
+            }
+        } else {
+            if (currentLm is GridLayoutManager || currentLm == null) {
+                binding.recyclerView.layoutManager = LinearLayoutManager(this)
+            }
+        }
+        adapter.notifyDataSetChanged()
+    }
+
     private fun setupRecyclerView() {
         adapter = MediaAdapter(
             onFolderClick = { folder ->
-                if (PlaybackStore.isFolderLocked(this, folder.name)) {
-                    authenticatePrivacyAccess(folder.name) {
-                        openFolderNow(folder)
-                    }
-                } else {
-                    openFolderNow(folder)
-                }
+                // In Vault tab, the user already authenticated once upon entering the Vault!
+                openFolderNow(folder)
             },
             onVideoClick = { video ->
                 handleVideoSelection(video.uri, video.title)
@@ -595,7 +652,7 @@ class MainActivity : AppCompatActivity() {
                 showFolderLockMenu(folder)
             }
         )
-        binding.recyclerView.layoutManager = LinearLayoutManager(this)
+        updateRecyclerLayoutManager()
         binding.recyclerView.adapter = adapter
     }
 
@@ -628,10 +685,14 @@ class MainActivity : AppCompatActivity() {
                 onClick = {
                     if (!PlaybackStore.hasPrivacyPin(this)) {
                         showFirstTimeSetupPinDialog {
+                            isVaultSessionUnlocked = true
                             toggleSingleFolderLock(folder.name)
                         }
+                    } else if (isInVaultTab && isVaultSessionUnlocked) {
+                        toggleSingleFolderLock(folder.name)
                     } else {
                         authenticatePrivacyAccess(folder.name) {
+                            isVaultSessionUnlocked = true
                             toggleSingleFolderLock(folder.name)
                         }
                     }
@@ -693,7 +754,7 @@ class MainActivity : AppCompatActivity() {
         PlaybackStore.setLockedFolders(this, currentLocked)
         applyFolderVisibilityAndRefreshUI()
         updateResumeLastFab()
-        val msgRes = if (nowLocked) R.string.folder_locked_toast else R.string.folder_unlocked_toast
+        val msgRes = if (nowLocked) R.string.folder_moved_to_vault_toast else R.string.folder_restored_from_vault_toast
         Toast.makeText(this, getString(msgRes, folderName), Toast.LENGTH_SHORT).show()
     }
 
@@ -1167,6 +1228,8 @@ class MainActivity : AppCompatActivity() {
                     dialog.dismiss()
                     PlaybackStore.clearPrivacyPinAndLocks(this@MainActivity)
                     BiometricHardwareGuard.clearBiometricKey(this@MainActivity)
+                    isVaultSessionUnlocked = false
+                    isInVaultTab = false
                     applyFolderVisibilityAndRefreshUI()
                     updateResumeLastFab()
                     Toast.makeText(this@MainActivity, getString(R.string.privacy_pin_removed_toast), Toast.LENGTH_LONG).show()
@@ -1746,12 +1809,63 @@ class MainActivity : AppCompatActivity() {
             openDocumentLauncher.launch(arrayOf("video/*", "application/x-matroska"))
         }
 
+        binding.btnSortAndLayout.setOnClickListener {
+            showSortAndLayoutDialog()
+        }
+
         binding.btnSettings.setOnClickListener {
             showProSettingsDialog()
         }
 
+        binding.tabVideos.setOnClickListener {
+            if (isInVaultTab) {
+                isInVaultTab = false
+                isShowingFolderVideos = false
+                currentOpenedFolder = null
+                if (isSearchActive) closeSearchBar()
+                updateBottomTabsVisualState()
+                applyFolderVisibilityAndRefreshUI()
+            } else if (isShowingFolderVideos) {
+                showFoldersList()
+            }
+        }
+
+        binding.tabVault.setOnClickListener {
+            if (isInVaultTab && isVaultSessionUnlocked) {
+                if (isShowingFolderVideos) {
+                    showFoldersList()
+                }
+                return@setOnClickListener
+            }
+            if (!PlaybackStore.hasPrivacyPin(this)) {
+                showFirstTimeSetupPinDialog {
+                    isVaultSessionUnlocked = true
+                    isInVaultTab = true
+                    isShowingFolderVideos = false
+                    currentOpenedFolder = null
+                    if (isSearchActive) closeSearchBar()
+                    updateBottomTabsVisualState()
+                    applyFolderVisibilityAndRefreshUI()
+                }
+            } else {
+                authenticatePrivacyAccess(getString(R.string.vault_auth_subtitle)) {
+                    isVaultSessionUnlocked = true
+                    isInVaultTab = true
+                    isShowingFolderVideos = false
+                    currentOpenedFolder = null
+                    if (isSearchActive) closeSearchBar()
+                    updateBottomTabsVisualState()
+                    applyFolderVisibilityAndRefreshUI()
+                }
+            }
+        }
+
         binding.btnGrantPermission.setOnClickListener {
-            requestStoragePermission()
+            if (isInVaultTab && isVaultSessionUnlocked) {
+                showLockedFoldersMultiPickerDialog()
+            } else {
+                requestStoragePermission()
+            }
         }
 
         binding.swipeRefresh.setOnRefreshListener {
@@ -1763,6 +1877,13 @@ class MainActivity : AppCompatActivity() {
                 when {
                     isSearchActive -> closeSearchBar()
                     isShowingFolderVideos -> showFoldersList()
+                    isInVaultTab -> {
+                        isInVaultTab = false
+                        isShowingFolderVideos = false
+                        currentOpenedFolder = null
+                        updateBottomTabsVisualState()
+                        applyFolderVisibilityAndRefreshUI()
+                    }
                     else -> {
                         isEnabled = false
                         onBackPressedDispatcher.onBackPressed()
@@ -1802,11 +1923,10 @@ class MainActivity : AppCompatActivity() {
         val query = rawQuery.trim()
         if (!isSearchActive) return
 
-        val sourcePool = if (isShowingFolderVideos && currentOpenedFolder != null) {
-            currentOpenedFolder!!.videos
-        } else {
-            val lockedSet = PlaybackStore.getLockedFolders(this)
-            allVideosFlat.filter { it.folderName !in lockedSet }
+        val sourcePool = when {
+            isShowingFolderVideos && currentOpenedFolder != null -> currentOpenedFolder!!.videos
+            isInVaultTab && isVaultSessionUnlocked -> vaultVideosFlat
+            else -> publicVideosFlat
         }
 
         if (query.isEmpty()) {
@@ -1818,6 +1938,150 @@ class MainActivity : AppCompatActivity() {
             it.title.contains(query, ignoreCase = true) || it.folderName.contains(query, ignoreCase = true)
         }
         adapter.submitVideos(filtered)
+    }
+
+    /**
+     * Premium Media Layout (List / Grid) & Comprehensive Sort Dialog!
+     */
+    private fun showSortAndLayoutDialog() {
+        val isGrid = PlaybackStore.isGridLayoutEnabled(this)
+        val sortMode = PlaybackStore.getSortOrderMode(this)
+
+        val items = listOf(
+            // Section 1: Media Layout (List vs Grid)
+            PremiumMenuItem(
+                iconEmoji = "📋",
+                title = getString(R.string.layout_mode_list),
+                subtitle = if (!isGrid) "✅ " + getString(R.string.active_mode_badge) else getString(R.string.layout_mode_list_sub),
+                isAccentHighlighted = !isGrid,
+                sectionHeader = getString(R.string.section_media_layout),
+                onClick = {
+                    PlaybackStore.setGridLayoutEnabled(this, false)
+                    updateRecyclerLayoutManager()
+                    applyFolderVisibilityAndRefreshUI()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🔲",
+                title = getString(R.string.layout_mode_grid),
+                subtitle = if (isGrid) "✅ " + getString(R.string.active_mode_badge) else getString(R.string.layout_mode_grid_sub),
+                isAccentHighlighted = isGrid,
+                onClick = {
+                    PlaybackStore.setGridLayoutEnabled(this, true)
+                    updateRecyclerLayoutManager()
+                    applyFolderVisibilityAndRefreshUI()
+                }
+            ),
+            // Section 2: Sort By
+            PremiumMenuItem(
+                iconEmoji = "📅",
+                title = getString(R.string.sort_date_newest),
+                subtitle = if (sortMode == 0) "✅ " + getString(R.string.active_mode_badge) else null,
+                isAccentHighlighted = (sortMode == 0),
+                sectionHeader = getString(R.string.section_sort_by),
+                onClick = {
+                    PlaybackStore.setSortOrderMode(this, 0)
+                    applyFolderVisibilityAndRefreshUI()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🕰️",
+                title = getString(R.string.sort_date_oldest),
+                subtitle = if (sortMode == 1) "✅ " + getString(R.string.active_mode_badge) else null,
+                isAccentHighlighted = (sortMode == 1),
+                onClick = {
+                    PlaybackStore.setSortOrderMode(this, 1)
+                    applyFolderVisibilityAndRefreshUI()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🔤",
+                title = getString(R.string.sort_name_az),
+                subtitle = if (sortMode == 2) "✅ " + getString(R.string.active_mode_badge) else null,
+                isAccentHighlighted = (sortMode == 2),
+                onClick = {
+                    PlaybackStore.setSortOrderMode(this, 2)
+                    applyFolderVisibilityAndRefreshUI()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🔤",
+                title = getString(R.string.sort_name_za),
+                subtitle = if (sortMode == 3) "✅ " + getString(R.string.active_mode_badge) else null,
+                isAccentHighlighted = (sortMode == 3),
+                onClick = {
+                    PlaybackStore.setSortOrderMode(this, 3)
+                    applyFolderVisibilityAndRefreshUI()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "💾",
+                title = getString(R.string.sort_size_largest),
+                subtitle = if (sortMode == 4) "✅ " + getString(R.string.active_mode_badge) else null,
+                isAccentHighlighted = (sortMode == 4),
+                onClick = {
+                    PlaybackStore.setSortOrderMode(this, 4)
+                    applyFolderVisibilityAndRefreshUI()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "💾",
+                title = getString(R.string.sort_size_smallest),
+                subtitle = if (sortMode == 5) "✅ " + getString(R.string.active_mode_badge) else null,
+                isAccentHighlighted = (sortMode == 5),
+                onClick = {
+                    PlaybackStore.setSortOrderMode(this, 5)
+                    applyFolderVisibilityAndRefreshUI()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "⏱️",
+                title = getString(R.string.sort_duration_longest),
+                subtitle = if (sortMode == 6) "✅ " + getString(R.string.active_mode_badge) else null,
+                isAccentHighlighted = (sortMode == 6),
+                onClick = {
+                    PlaybackStore.setSortOrderMode(this, 6)
+                    applyFolderVisibilityAndRefreshUI()
+                }
+            )
+        )
+
+        val currentLayoutName = if (isGrid) getString(R.string.layout_mode_grid) else getString(R.string.layout_mode_list)
+        showPremiumMenuDialog(
+            headerIcon = "📐",
+            title = getString(R.string.sort_and_layout_title),
+            subtitle = currentLayoutName,
+            items = items
+        )
+    }
+
+    private fun sortVideosList(videos: List<VideoItem>, sortMode: Int): List<VideoItem> {
+        return when (sortMode) {
+            0 -> videos.sortedByDescending { it.dateAddedSec }
+            1 -> videos.sortedBy { it.dateAddedSec }
+            2 -> videos.sortedBy { it.title.lowercase(Locale.getDefault()) }
+            3 -> videos.sortedByDescending { it.title.lowercase(Locale.getDefault()) }
+            4 -> videos.sortedByDescending { it.size }
+            5 -> videos.sortedBy { it.size }
+            6 -> videos.sortedByDescending { it.duration }
+            else -> videos.sortedByDescending { it.dateAddedSec }
+        }
+    }
+
+    private fun sortFoldersList(folders: List<VideoFolder>, sortMode: Int): List<VideoFolder> {
+        val withSortedInnerVideos = folders.map { folder ->
+            VideoFolder(folder.name, sortVideosList(folder.videos, sortMode))
+        }
+        return when (sortMode) {
+            0 -> withSortedInnerVideos.sortedByDescending { f -> f.videos.maxOfOrNull { it.dateAddedSec } ?: 0L }
+            1 -> withSortedInnerVideos.sortedBy { f -> f.videos.minOfOrNull { it.dateAddedSec } ?: 0L }
+            2 -> withSortedInnerVideos.sortedBy { it.name.lowercase(Locale.getDefault()) }
+            3 -> withSortedInnerVideos.sortedByDescending { it.name.lowercase(Locale.getDefault()) }
+            4 -> withSortedInnerVideos.sortedByDescending { f -> f.videos.sumOf { it.size } }
+            5 -> withSortedInnerVideos.sortedBy { f -> f.videos.sumOf { it.size } }
+            6 -> withSortedInnerVideos.sortedByDescending { f -> f.videos.sumOf { it.duration } }
+            else -> withSortedInnerVideos
+        }
     }
 
     /**
@@ -1892,14 +2156,23 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
+        val layoutSub = if (PlaybackStore.isGridLayoutEnabled(this)) getString(R.string.layout_mode_grid) else getString(R.string.layout_mode_list)
+
         // Category 2: Appearance, Language & Display
         items.addAll(
             listOf(
                 PremiumMenuItem(
+                    iconEmoji = "📐",
+                    title = getString(R.string.sort_and_layout_title),
+                    subtitle = layoutSub,
+                    isAccentHighlighted = true,
+                    sectionHeader = getString(R.string.settings_cat_appearance_display),
+                    onClick = { showSortAndLayoutDialog() }
+                ),
+                PremiumMenuItem(
                     iconEmoji = "🎨",
                     title = getString(R.string.setting_app_theme),
                     subtitle = currentThemeName,
-                    sectionHeader = getString(R.string.settings_cat_appearance_display),
                     onClick = { showThemeSelectorDialog() }
                 ),
                 PremiumMenuItem(
@@ -2236,56 +2509,84 @@ class MainActivity : AppCompatActivity() {
     private fun showFoldersList() {
         isShowingFolderVideos = false
         currentOpenedFolder = null
+        adapter.isVaultMode = isInVaultTab
+
+        if (isInVaultTab) {
+            binding.tvToolbarTitle.text = "${getString(R.string.vault_toolbar_title)} (${vaultFoldersOnly.size})"
+            binding.btnBackFolder.visibility = View.GONE
+            adapter.submitFolders(vaultFoldersOnly)
+            return
+        }
+
         val filterMode = PlaybackStore.getFolderFilterMode(this)
         if (filterMode == 2) {
-            val lockedSet = PlaybackStore.getLockedFolders(this)
-            val unlockedVideos = allVideosFlat.filter { it.folderName !in lockedSet }
-            binding.tvToolbarTitle.text = "${getString(R.string.folders_title)} (${unlockedVideos.size})"
+            binding.tvToolbarTitle.text = "${getString(R.string.folders_title)} (${publicVideosFlat.size})"
             binding.btnBackFolder.visibility = View.GONE
-            adapter.submitVideos(unlockedVideos)
+            adapter.submitVideos(publicVideosFlat)
         } else {
             val suffix = if (isUsingLimitedAccessMode()) " • Limited" else ""
             binding.tvToolbarTitle.text = "${getString(R.string.folders_title)}$suffix"
             binding.btnBackFolder.visibility = View.GONE
-            adapter.submitFolders(videoFoldersOnly)
+            adapter.submitFolders(publicFoldersOnly)
         }
     }
 
     private fun applyFolderVisibilityAndRefreshUI() {
         val mode = PlaybackStore.getFolderFilterMode(this)
         val allowedSet = PlaybackStore.getAllowedFolders(this)
+        val lockedSet = PlaybackStore.getLockedFolders(this)
+        val sortMode = PlaybackStore.getSortOrderMode(this)
 
+        updateRecyclerLayoutManager()
+        updateBottomTabsVisualState()
+        adapter.isVaultMode = isInVaultTab
+
+        // 1. Vault folders: any folder locked by user moves automatically into Vault and is 100% hidden from normal tab
+        val rawVaultFolders = allDiscoveredFolders.filter { it.name in lockedSet }
+        vaultFoldersOnly = sortFoldersList(rawVaultFolders, sortMode)
+        vaultVideosFlat = sortVideosList(allDiscoveredVideos.filter { it.folderName in lockedSet }, sortMode)
+
+        // 2. Public (unhidden) folders for Tab 1 (Video Folders)
+        val unlockedDiscovered = allDiscoveredFolders.filter { it.name !in lockedSet }
         val filteredBySelection = if (mode == 1 && allowedSet.isNotEmpty()) {
-            allDiscoveredFolders.filter { it.name in allowedSet }
+            unlockedDiscovered.filter { it.name in allowedSet }
         } else {
-            allDiscoveredFolders
+            unlockedDiscovered
         }
 
-        // If user is in "Allow Limited Access" mode or deleted/changed folders such that allowedSet didn't match,
-        // automatically fall back to showing all discovered folders so the screen is never blank!
-        videoFoldersOnly = if (filteredBySelection.isEmpty() && allDiscoveredFolders.isNotEmpty()) {
-            allDiscoveredFolders
+        val basePublicFolders = if (filteredBySelection.isEmpty() && unlockedDiscovered.isNotEmpty()) {
+            unlockedDiscovered
         } else {
             filteredBySelection
         }
+        publicFoldersOnly = sortFoldersList(basePublicFolders, sortMode)
+        val visiblePublicNames = publicFoldersOnly.map { it.name }.toSet()
+        publicVideosFlat = sortVideosList(allDiscoveredVideos.filter { it.folderName in visiblePublicNames }, sortMode)
 
-        val visibleFolderNames = videoFoldersOnly.map { it.name }.toSet()
-        allVideosFlat = allDiscoveredVideos.filter { it.folderName in visibleFolderNames }
+        val activeFoldersList = if (isInVaultTab) vaultFoldersOnly else publicFoldersOnly
 
-        if (videoFoldersOnly.isEmpty()) {
-            val msg = if (isUsingLimitedAccessMode()) {
-                getString(R.string.limited_access_empty_msg)
+        if (activeFoldersList.isEmpty()) {
+            if (isInVaultTab) {
+                binding.tvToolbarTitle.text = getString(R.string.vault_toolbar_title)
+                binding.btnBackFolder.visibility = View.GONE
+                binding.btnGrantPermission.text = getString(R.string.vault_add_folders_btn)
+                showEmptyState(getString(R.string.vault_empty_msg), showButton = allDiscoveredFolders.isNotEmpty())
             } else {
-                getString(R.string.no_videos_found)
+                binding.btnGrantPermission.text = getString(R.string.grant_permission)
+                val msg = if (isUsingLimitedAccessMode()) {
+                    getString(R.string.limited_access_empty_msg)
+                } else {
+                    getString(R.string.no_videos_found)
+                }
+                showEmptyState(msg, showButton = isUsingLimitedAccessMode())
             }
-            showEmptyState(msg, showButton = isUsingLimitedAccessMode())
         } else {
             binding.emptyLayout.visibility = View.GONE
             binding.recyclerView.visibility = View.VISIBLE
             if (isSearchActive) {
                 filterVideosByQuery(binding.etSearchVideos.text.toString())
             } else if (isShowingFolderVideos && currentOpenedFolder != null) {
-                val updated = videoFoldersOnly.find { it.name == currentOpenedFolder?.name }
+                val updated = activeFoldersList.find { it.name == currentOpenedFolder?.name }
                 if (updated != null) {
                     currentOpenedFolder = updated
                     binding.tvToolbarTitle.text = "${updated.name} (${updated.videos.size})"
@@ -2337,7 +2638,8 @@ class MainActivity : AppCompatActivity() {
                     MediaStore.Video.Media.DATA,
                     MediaStore.Video.Media.BUCKET_DISPLAY_NAME,
                     MediaStore.Video.Media.WIDTH,
-                    MediaStore.Video.Media.HEIGHT
+                    MediaStore.Video.Media.HEIGHT,
+                    MediaStore.Video.Media.DATE_ADDED
                 )
                 val selection = "${MediaStore.Video.Media.SIZE} > 0"
                 val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} DESC"
@@ -2358,6 +2660,7 @@ class MainActivity : AppCompatActivity() {
                         val bucketCol = cursor.getColumnIndex(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)
                         val widthCol = cursor.getColumnIndex(MediaStore.Video.Media.WIDTH)
                         val heightCol = cursor.getColumnIndex(MediaStore.Video.Media.HEIGHT)
+                        val dateAddedCol = cursor.getColumnIndex(MediaStore.Video.Media.DATE_ADDED)
 
                         while (cursor.moveToNext()) {
                             val id = cursor.getLong(idCol)
@@ -2367,6 +2670,7 @@ class MainActivity : AppCompatActivity() {
                             val path = if (dataCol != -1) (cursor.getString(dataCol) ?: "") else ""
                             val width = if (widthCol != -1) cursor.getInt(widthCol) else 0
                             val height = if (heightCol != -1) cursor.getInt(heightCol) else 0
+                            val dateAddedSec = if (dateAddedCol != -1) cursor.getLong(dateAddedCol) else 0L
 
                             val bucketName = if (bucketCol != -1) cursor.getString(bucketCol) else null
                             val folderName = when {
@@ -2389,7 +2693,8 @@ class MainActivity : AppCompatActivity() {
                                     folderName = folderName,
                                     width = width,
                                     height = height,
-                                    path = path
+                                    path = path,
+                                    dateAddedSec = dateAddedSec
                                 )
                             )
                         }
@@ -2407,6 +2712,10 @@ class MainActivity : AppCompatActivity() {
 
             if (isFinishing || isDestroyed) return@launch
             binding.swipeRefresh.isRefreshing = false
+            PlaybackStore.syncDiscoveredVideosForNewBadge(
+                this@MainActivity,
+                videoList.map { it.uri.toString() }.toSet()
+            )
             allDiscoveredVideos = videoList
             allDiscoveredFolders = groupedFolders
 
@@ -2791,6 +3100,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun launchPlayer(uri: Uri, title: String, startPositionMs: Long) {
+        PlaybackStore.markVideoOpened(this, uri)
         val intent = Intent(this, PlayerActivity::class.java).apply {
             data = uri
             putExtra("VIDEO_TITLE", title)

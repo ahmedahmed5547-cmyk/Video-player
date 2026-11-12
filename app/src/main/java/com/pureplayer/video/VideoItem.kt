@@ -56,7 +56,8 @@ data class VideoItem(
     val folderName: String,
     val width: Int = 0,
     val height: Int = 0,
-    val path: String = ""
+    val path: String = "",
+    val dateAddedSec: Long = 0L
 ) {
     fun getResolutionLabel(): String {
         if (width <= 0 || height <= 0) return "HD"
@@ -114,11 +115,17 @@ object PlaybackStore {
     private const val KEY_FOLDER_FILTER_MODE = "folder_filter_mode"
     private const val KEY_ALLOWED_FOLDERS = "allowed_visible_folders_set"
     private const val KEY_GITHUB_REPO = "github_repo_slug"
+    private const val KEY_MEDIA_LAYOUT_GRID = "media_layout_is_grid"
+    private const val KEY_SORT_ORDER_MODE = "media_sort_order_mode"
+    private const val KEY_OPENED_VIDEO_URIS = "opened_video_uris_set"
+    private const val KEY_KNOWN_VIDEO_IDS = "known_video_ids_set"
+    private const val KEY_NEW_VIDEO_IDS = "newly_discovered_video_ids_set"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
 
     fun saveProgress(context: Context, uri: Uri, title: String, positionMs: Long, durationMs: Long) {
+        markVideoOpened(context, uri)
         val safePos = if (durationMs > 0 && positionMs >= durationMs - 4000L) 0L else positionMs
         prefs(context).edit()
             .putLong(PREFIX_POS + uri.toString(), safePos)
@@ -357,6 +364,69 @@ object PlaybackStore {
 
     fun setGitHubRepo(context: Context, repoSlug: String) {
         prefs(context).edit().putString(KEY_GITHUB_REPO, repoSlug.trim()).apply()
+    }
+
+    fun isGridLayoutEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_MEDIA_LAYOUT_GRID, false)
+
+    fun setGridLayoutEnabled(context: Context, isGrid: Boolean) {
+        prefs(context).edit().putBoolean(KEY_MEDIA_LAYOUT_GRID, isGrid).apply()
+    }
+
+    fun getSortOrderMode(context: Context): Int =
+        prefs(context).getInt(KEY_SORT_ORDER_MODE, 0).coerceIn(0, 6)
+
+    fun setSortOrderMode(context: Context, mode: Int) {
+        prefs(context).edit().putInt(KEY_SORT_ORDER_MODE, mode.coerceIn(0, 6)).apply()
+    }
+
+    fun markVideoOpened(context: Context, uri: Uri) {
+        val p = prefs(context)
+        val opened = p.getStringSet(KEY_OPENED_VIDEO_URIS, emptySet())?.toMutableSet() ?: mutableSetOf()
+        val uriStr = uri.toString()
+        if (opened.add(uriStr)) {
+            p.edit().putStringSet(KEY_OPENED_VIDEO_URIS, opened).apply()
+        }
+    }
+
+    fun hasVideoBeenOpened(context: Context, uri: Uri): Boolean {
+        val opened = prefs(context).getStringSet(KEY_OPENED_VIDEO_URIS, emptySet()) ?: emptySet()
+        return opened.contains(uri.toString())
+    }
+
+    fun syncDiscoveredVideosForNewBadge(context: Context, currentVideoIds: Set<Long>) {
+        val p = prefs(context)
+        val currentStrSet = currentVideoIds.map { it.toString() }.toSet()
+        val known = p.getStringSet(KEY_KNOWN_VIDEO_IDS, null)
+        if (known == null) {
+            // First scan on install: record baseline IDs so only recently added or future videos get NEW badge
+            p.edit()
+                .putStringSet(KEY_KNOWN_VIDEO_IDS, currentStrSet)
+                .putStringSet(KEY_NEW_VIDEO_IDS, emptySet())
+                .apply()
+        } else {
+            val newlyAdded = p.getStringSet(KEY_NEW_VIDEO_IDS, emptySet())?.toMutableSet() ?: mutableSetOf()
+            for (idStr in currentStrSet) {
+                if (idStr !in known) {
+                    newlyAdded.add(idStr)
+                }
+            }
+            val updatedKnown = known.toMutableSet().apply { addAll(currentStrSet) }
+            p.edit()
+                .putStringSet(KEY_KNOWN_VIDEO_IDS, updatedKnown)
+                .putStringSet(KEY_NEW_VIDEO_IDS, newlyAdded)
+                .apply()
+        }
+    }
+
+    fun isVideoNewBadgeVisible(context: Context, video: VideoItem): Boolean {
+        if (hasVideoBeenOpened(context, video.uri)) return false
+        val p = prefs(context)
+        val newlyDiscovered = p.getStringSet(KEY_NEW_VIDEO_IDS, emptySet()) ?: emptySet()
+        if (newlyDiscovered.contains(video.id.toString())) return true
+        // Also mark as NEW if added to the device within the last 48 hours and never opened yet
+        val nowSec = System.currentTimeMillis() / 1000L
+        return video.dateAddedSec > 0L && (nowSec - video.dateAddedSec) in 0L..(48L * 3600L)
     }
 
     fun getHdrModeIndex(context: Context): Int =

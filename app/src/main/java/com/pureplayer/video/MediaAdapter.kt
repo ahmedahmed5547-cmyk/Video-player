@@ -3,11 +3,14 @@ package com.pureplayer.video
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.provider.MediaStore
 import android.util.LruCache
 import android.util.Size
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -15,6 +18,7 @@ import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.ImageView
+import android.widget.LinearLayout
 import androidx.recyclerview.widget.RecyclerView
 import com.pureplayer.video.databinding.ItemMediaBinding
 import kotlinx.coroutines.CoroutineScope
@@ -123,6 +127,8 @@ class MediaAdapter(
 
     private val items = mutableListOf<Any>()
     private var lastAnimatedPosition = -1
+    var isGridMode: Boolean = false
+    var isVaultMode: Boolean = false
     private val decelerateInterpolator = DecelerateInterpolator(1.6f)
     private val overshootInterpolator = OvershootInterpolator(1.4f)
 
@@ -182,6 +188,14 @@ class MediaAdapter(
             }
         }
 
+        private fun dp(ctx: Context, value: Int): Int {
+            return TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP,
+                value.toFloat(),
+                ctx.resources.displayMetrics
+            ).toInt()
+        }
+
         fun cancelThumbnailLoad() {
             thumbJob?.cancel()
             thumbJob = null
@@ -194,24 +208,57 @@ class MediaAdapter(
             val surfaceColor = PlaybackStore.getSurfaceColor(ctx)
             binding.root.setCardBackgroundColor(surfaceColor)
 
+            // Configure List vs Grid layout dynamically
+            if (isGridMode) {
+                binding.itemContentLayout.orientation = LinearLayout.VERTICAL
+                binding.thumbContainer.layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    dp(ctx, 108)
+                )
+                binding.textContainer.layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dp(ctx, 10)
+                    marginStart = 0
+                }
+            } else {
+                binding.itemContentLayout.orientation = LinearLayout.HORIZONTAL
+                binding.thumbContainer.layoutParams = LinearLayout.LayoutParams(
+                    dp(ctx, 116),
+                    dp(ctx, 68)
+                )
+                binding.textContainer.layoutParams = LinearLayout.LayoutParams(
+                    0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    1f
+                ).apply {
+                    marginStart = dp(ctx, 14)
+                    topMargin = 0
+                }
+            }
+
+            // Style NEW badge pill
+            binding.tvNewBadge.background = GradientDrawable().apply {
+                cornerRadius = dp(ctx, 6).toFloat()
+                setColor(Color.parseColor("#E610B981"))
+            }
+
             when (item) {
                 is VideoFolder -> {
-                    val isLocked = PlaybackStore.isFolderLocked(ctx, item.name)
                     binding.tvDurationBadge.visibility = View.GONE
+                    val hasNewInFolder = item.videos.any { PlaybackStore.isVideoNewBadgeVisible(ctx, it) }
+                    binding.tvNewBadge.visibility = if (hasNewInFolder) View.VISIBLE else View.GONE
+
                     binding.ivIcon.tag = null
                     binding.ivIcon.alpha = 1f
                     binding.ivIcon.scaleType = ImageView.ScaleType.CENTER_INSIDE
                     binding.ivIcon.setPadding(20, 20, 20, 20)
                     binding.ivIcon.imageTintList = ColorStateList.valueOf(accentColor)
-                    if (isLocked) {
-                        binding.ivIcon.setImageResource(android.R.drawable.ic_lock_lock)
-                        binding.tvTitle.text = "🔒 ${item.name}"
-                        binding.tvSubtitle.text = ctx.getString(R.string.folder_locked_badge, item.videos.size)
-                    } else {
-                        binding.ivIcon.setImageResource(android.R.drawable.ic_menu_agenda)
-                        binding.tvTitle.text = item.name
-                        binding.tvSubtitle.text = ctx.getString(R.string.videos_count_format, item.videos.size)
-                    }
+                    binding.ivIcon.setImageResource(android.R.drawable.ic_menu_agenda)
+
+                    binding.tvTitle.text = if (isVaultMode) "🛡️ ${item.name}" else item.name
+                    binding.tvSubtitle.text = ctx.getString(R.string.videos_count_format, item.videos.size)
                     binding.root.setOnClickListener { onFolderClick(item) }
                     binding.root.setOnLongClickListener {
                         onFolderLongClick(item)
@@ -223,6 +270,9 @@ class MediaAdapter(
                     val durationStr = formatDuration(item.duration)
                     binding.tvDurationBadge.text = durationStr
                     binding.tvDurationBadge.visibility = View.VISIBLE
+
+                    val isNew = PlaybackStore.isVideoNewBadgeVisible(ctx, item)
+                    binding.tvNewBadge.visibility = if (isNew) View.VISIBLE else View.GONE
 
                     val sizeMb = String.format(Locale.US, "%.1f MB", item.size / (1024.0 * 1024.0))
                     val resShort = if (item.width > 0 && item.height > 0) "  •  ${item.getResolutionLabel().substringBefore(" ")}" else ""

@@ -126,8 +126,8 @@
     <string name="pro_sleep_60">🌙 مؤقت النوم (60 دقيقة)</string>
     <string name="pro_pip">🖼️ نافذة عائمة (PiP)</string>
     <string name="folder_locked_badge">🔒 مقفل بالباسورد والبصمة • %1$d فيديو</string>
-    <string name="folder_menu_lock">🔒 قفل هذا المجلد بالباسورد والبصمة</string>
-    <string name="folder_menu_unlock">🔓 إلغاء قفل هذا المجلد</string>
+    <string name="folder_menu_lock">🔒 قفل المجلد ونقله تلقائياً إلى الخزنة (Vault)</string>
+    <string name="folder_menu_unlock">🔓 إخراج المجلد من الخزنة وإظهاره بالقائمة</string>
     <string name="folder_locked_toast">🔒 تم قفل المجلد \"%1$s\" بنجاح</string>
     <string name="folder_unlocked_toast">🔓 تم فتح قفل المجلد \"%1$s\"</string>
     <string name="setting_privacy_section">🔒 قسم الخصوصية (قفل المجلدات بالباسورد والبصمة)</string>
@@ -161,7 +161,7 @@
     <string name="privacy_current_pin_hint">اكتب الباسورد الحالي أولاً...</string>
     <string name="privacy_new_fingerprint_blocked_toast">🛡️ تنبيه أمني: تم اكتشاف تسجيل بصمة جديدة في الجهاز! لا يمكن الفتح إلا بإدخال الباسورد أولاً.</string>
     <string name="privacy_new_fingerprint_warning">🛡️ تم اكتشاف بصمة جديدة في الجهاز! يجب إدخال الباسورد السري أولاً للتحقق من هويتك.</string>
-    <string name="folder_lock_item_sub">حماية الفولدر ببصمة الإصبع والرقم السري</string>
+    <string name="folder_lock_item_sub">يخفي المجلد واسمه ومحتوياته تماماً وينقله إلى تبويب الخزنة</string>
     <string name="privacy_change_pin_sub">تحديث كلمة المرور الحالية للمجلدات الخاصة</string>
     <string name="privacy_manage_all_sub">تحديد عدة مجلدات لقفلها أو التحكم في البصمة</string>
     <string name="active_mode_badge">الوضع المفعّل حالياً</string>
@@ -198,4 +198,29 @@
     <string name="update_downloading_title">⬇️ جاري تنزيل أحدث نسخة من GitHub...</string>
     <string name="update_fallback_actions_toast">🌐 جاري فتح صفحة آخر بناء ناجح في GitHub Actions لتنزيل النسخة...</string>
     <string name="update_install_error_toast">⚠️ يرجى السماح بتثبيت التطبيقات لإتمام التحديث.</string>
+    <string name="tab_video_folders">📁 مجلدات الفيديو</string>
+    <string name="tab_vault">🛡️ الخزنة الخاصة (Vault)</string>
+    <string name="vault_toolbar_title">🛡️ الخزنة الخاصة (Vault)</string>
+    <string name="vault_auth_subtitle">أدخل البصمة أو الرقم السري مرة واحدة لفتح جميع مجلدات الخزنة</string>
+    <string name="vault_empty_msg">🛡️ الخزنة الخاصة فارغة حالياً.
+
+اضغط مطولاً على أي مجلد في القائمة الرئيسية لقسم الفيديوهات لنقله وإخفائه تماماً داخل الخزنة، أو اضغط بالأسفل لاختيار المجلدات.</string>
+    <string name="vault_add_folders_btn">➕ اختيار مجلدات لنقلها إلى الخزنة</string>
+    <string name="vault_unlocked_badge">🛡️ داخل الخزنة • %1$d فيديو</string>
+    <string name="folder_moved_to_vault_toast">🛡️ تم إخفاء المجلد "%1$s" ونقله إلى الخزنة (Vault)</string>
+    <string name="folder_restored_from_vault_toast">🔓 تم إرجاع المجلد "%1$s" إلى مجلدات الفيديو</string>
+    <string name="sort_and_layout_title">طريقة العرض والترتيب (Layout & Sort)</string>
+    <string name="section_media_layout">📐 طريقة عرض الفيديوهات والمجلدات (Media Layout)</string>
+    <string name="layout_mode_list">📋 عرض قائمة تفصيلية (List View)</string>
+    <string name="layout_mode_list_sub">بطاقات أفقية كلاسيكية مع كامل التفاصيل</string>
+    <string name="layout_mode_grid">🔲 عرض شبكة مصغرة (Grid View)</string>
+    <string name="layout_mode_grid_sub">شبكة سينمائية من عمودين للمجلدات والفيديوهات</string>
+    <string name="section_sort_by">🔃 ترتيب المحتويات حسب (Sort By)</string>
+    <string name="sort_date_newest">📅 التاريخ (الأحدث أولاً)</string>
+    <string name="sort_date_oldest">🕰️ التاريخ (الأقدم أولاً)</string>
+    <string name="sort_name_az">🔤 الأبجدية (من أ إلى ي / A-Z)</string>
+    <string name="sort_name_za">🔤 الأبجدية (من ي إلى أ / Z-A)</string>
+    <string name="sort_size_largest">💾 الحجم (الأكبر حجماً أولاً)</string>
+    <string name="sort_size_smallest">💾 الحجم (الأصغر حجماً أولاً)</string>
+    <string name="sort_duration_longest">⏱️ المدة (الأطول مدة أولاً)</string>
 </resources>
