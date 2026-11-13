@@ -3654,8 +3654,7 @@ class MainActivity : AppCompatActivity() {
 
         modeOptions.forEach { (modeCode, emoji, label) ->
             val btn = TextView(this).apply {
-                text = "$emoji
-$label"
+                text = "$emoji  $label"
                 gravity = Gravity.CENTER
                 textSize = 12f
                 setTypeface(typeface, Typeface.BOLD)
