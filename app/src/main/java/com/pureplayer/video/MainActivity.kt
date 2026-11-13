@@ -40,6 +40,7 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -215,9 +216,13 @@ class MainActivity : AppCompatActivity() {
     private var loadMediaJob: Job? = null
     private var iptvSyncJob: Job? = null
 
-    // Settings & Sub-Settings Back-Stack (ensures Back from any sub-setting returns to parent Settings menu)
+    // Settings & Sub-Settings Back-Stack + Persistent Full-Screen Host (eliminates window close/open flicker)
     private val settingsBackStack = ArrayDeque<() -> Unit>()
     private var isNavigatingToSubDialog = false
+    private var activeFullScreenDialog: AlertDialog? = null
+    private var activeFullScreenHost: FrameLayout? = null
+    private var activeFullScreenCardView: View? = null
+    private var fullScreenMenuRenderToken: Int = 0
 
     // Instant Debounced Search StateFlow (280ms debounce + distinctUntilChanged + flatMapLatest)
     private val searchQueryFlow = MutableStateFlow("")
@@ -324,6 +329,13 @@ class MainActivity : AppCompatActivity() {
         setupInstantDebouncedSearchFlow()
         applyUserTheme()
         checkPermissionAndLoad()
+        if (savedInstanceState?.getBoolean("STATE_SETTINGS_OPEN", false) == true) {
+            binding.root.post {
+                if (!isFinishing && !isDestroyed) {
+                    showProSettingsDialog(clearStack = true)
+                }
+            }
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -337,6 +349,18 @@ class MainActivity : AppCompatActivity() {
         outState.putString("STATE_IPTV_CAT_ID", activeIptvCategoryId)
         outState.putString("STATE_IPTV_CAT_NAME", activeIptvCategoryName)
         outState.putString("STATE_IPTV_CONTENT_TYPE", activeIptvContentType?.name)
+        outState.putBoolean("STATE_SETTINGS_OPEN", activeFullScreenDialog?.isShowing == true)
+    }
+
+    override fun onDestroy() {
+        activeFullScreenDialog?.setOnCancelListener(null)
+        if (activeFullScreenDialog?.isShowing == true) {
+            runCatching { activeFullScreenDialog?.dismiss() }
+        }
+        activeFullScreenDialog = null
+        activeFullScreenHost = null
+        activeFullScreenCardView = null
+        super.onDestroy()
     }
 
     override fun onResume() {
@@ -447,7 +471,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun dismissDialogSmoothly(dialog: AlertDialog, cardView: View, onFinished: () -> Unit = {}) {
+    private fun closeActiveFullScreenDialogSmoothly(onFinished: () -> Unit = {}) {
+        val dialog = activeFullScreenDialog
+        val cardView = activeFullScreenCardView
+        if (dialog == null || !dialog.isShowing) {
+            activeFullScreenDialog = null
+            activeFullScreenHost = null
+            activeFullScreenCardView = null
+            onFinished()
+            return
+        }
+        if (cardView == null) {
+            isNavigatingToSubDialog = true
+            runCatching { dialog.dismiss() }
+            isNavigatingToSubDialog = false
+            activeFullScreenDialog = null
+            activeFullScreenHost = null
+            activeFullScreenCardView = null
+            onFinished()
+            return
+        }
         cardView.animate().cancel()
         cardView.animate()
             .alpha(0f)
@@ -457,17 +500,112 @@ class MainActivity : AppCompatActivity() {
             .setDuration(135L)
             .setInterpolator(DecelerateInterpolator())
             .withEndAction {
+                isNavigatingToSubDialog = true
                 if (dialog.isShowing) {
-                    dialog.dismiss()
+                    runCatching { dialog.dismiss() }
                 }
+                isNavigatingToSubDialog = false
+                activeFullScreenDialog = null
+                activeFullScreenHost = null
+                activeFullScreenCardView = null
                 onFinished()
             }
             .start()
     }
 
+    private fun navigateBackInSettingsOrClose() {
+        if (!popSettingsBackStack()) {
+            closeActiveFullScreenDialogSmoothly()
+        }
+    }
+
     /**
-     * Premium UI Engine: Builds a sleek, floating, theme-harmonious card popup dialog
-     * with fluid spring entrance, staggered row cascade, and smooth exit transitions!
+     * Renders any full-screen Settings or Menu page inside a single persistent Full-Screen AlertDialog host.
+     * Navigating forward or backward swaps views in-place over an opaque surface background so the underlying
+     * MainActivity (Video Folders) never flashes for even a single frame!
+     */
+    private fun presentInFullScreenHost(
+        pageScroll: View,
+        cardContainer: View,
+        animatedRows: List<View>,
+        surfaceColor: Int
+    ) {
+        fullScreenMenuRenderToken++
+        activeFullScreenCardView = cardContainer
+
+        val existingDialog = activeFullScreenDialog
+        val existingHost = activeFullScreenHost
+        if (existingDialog != null && existingDialog.isShowing && existingHost != null) {
+            existingHost.setBackgroundColor(surfaceColor)
+            existingDialog.window?.setBackgroundDrawable(ColorDrawable(surfaceColor))
+            existingDialog.window?.statusBarColor = surfaceColor
+            existingDialog.window?.navigationBarColor = surfaceColor
+            existingHost.removeAllViews()
+            existingHost.addView(
+                pageScroll,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+            animateDialogCardEntrance(cardContainer, animatedRows)
+            return
+        }
+
+        val host = FrameLayout(this).apply {
+            setBackgroundColor(surfaceColor)
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
+        host.addView(
+            pageScroll,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        val dialog = AlertDialog.Builder(this, R.style.Theme_PureVideoPlayer_FullScreenDialog)
+            .setView(host)
+            .create()
+
+        dialog.window?.setBackgroundDrawable(ColorDrawable(surfaceColor))
+        dialog.window?.statusBarColor = surfaceColor
+        dialog.window?.navigationBarColor = surfaceColor
+
+        dialog.setOnKeyListener { _, keyCode, event ->
+            if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
+                navigateBackInSettingsOrClose()
+                true
+            } else {
+                false
+            }
+        }
+
+        dialog.setOnCancelListener {
+            activeFullScreenDialog = null
+            activeFullScreenHost = null
+            activeFullScreenCardView = null
+            if (!isNavigatingToSubDialog) {
+                popSettingsBackStack()
+            }
+        }
+
+        activeFullScreenDialog = dialog
+        activeFullScreenHost = host
+        dialog.show()
+        dialog.window?.setLayout(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT
+        )
+        animateDialogCardEntrance(cardContainer, animatedRows)
+    }
+
+    /**
+     * Premium UI Engine: Builds a sleek, full-screen, theme-harmonious page
+     * with fluid spring entrance, staggered row cascade, and zero-flicker in-place navigation!
      */
     private fun showPremiumMenuDialog(
         headerIcon: String,
@@ -569,14 +707,6 @@ class MainActivity : AppCompatActivity() {
         }
         cardContainer.addView(divider)
 
-        val dialog = AlertDialog.Builder(this, R.style.Theme_PureVideoPlayer_FullScreenDialog)
-            .setView(outerScroll)
-            .create()
-
-        dialog.window?.setBackgroundDrawable(ColorDrawable(surface))
-        dialog.window?.statusBarColor = surface
-        dialog.window?.navigationBarColor = surface
-
         val animatedRows = mutableListOf<View>()
 
         for (item in items) {
@@ -677,10 +807,11 @@ class MainActivity : AppCompatActivity() {
             }
 
             rowCard.setOnClickListener {
-                isNavigatingToSubDialog = true
-                dismissDialogSmoothly(dialog, cardContainer) {
-                    isNavigatingToSubDialog = false
-                    item.onClick()
+                val tokenBefore = fullScreenMenuRenderToken
+                val stackBefore = settingsBackStack.size
+                item.onClick()
+                if (fullScreenMenuRenderToken == tokenBefore && settingsBackStack.size <= stackBefore && settingsBackStack.isEmpty()) {
+                    closeActiveFullScreenDialogSmoothly()
                 }
             }
 
@@ -707,27 +838,12 @@ class MainActivity : AppCompatActivity() {
                 setColor(Color.parseColor("#18FFFFFF"))
             }
             setOnClickListener {
-                isNavigatingToSubDialog = true
-                dismissDialogSmoothly(dialog, cardContainer) {
-                    isNavigatingToSubDialog = false
-                    popSettingsBackStack()
-                }
+                navigateBackInSettingsOrClose()
             }
         }
         cardContainer.addView(btnClose)
 
-        dialog.setOnCancelListener {
-            if (!isNavigatingToSubDialog) {
-                popSettingsBackStack()
-            }
-        }
-
-        dialog.show()
-        dialog.window?.setLayout(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT
-        )
-        animateDialogCardEntrance(cardContainer, animatedRows)
+        presentInFullScreenHost(outerScroll, cardContainer, animatedRows, surface)
     }
 
     private fun applyUserTheme(animated: Boolean = false) {
@@ -1356,10 +1472,13 @@ class MainActivity : AppCompatActivity() {
                 if (newPin.length < 2) {
                     Toast.makeText(this@MainActivity, getString(R.string.privacy_pin_too_short), Toast.LENGTH_SHORT).show()
                 } else {
+                    isNavigatingToSubDialog = true
                     dialog.dismiss()
+                    isNavigatingToSubDialog = false
                     PlaybackStore.setPrivacyPin(this@MainActivity, newPin)
                     BiometricHardwareGuard.bindKeyAfterPasswordVerified(this@MainActivity)
                     Toast.makeText(this@MainActivity, getString(R.string.privacy_pin_saved_toast), Toast.LENGTH_SHORT).show()
+                    popSettingsBackStack()
                     onPinSaved()
                 }
             }
@@ -1556,7 +1675,9 @@ class MainActivity : AppCompatActivity() {
                 if (!PlaybackStore.verifyPrivacyPin(this@MainActivity, entered)) {
                     Toast.makeText(this@MainActivity, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
                 } else {
+                    isNavigatingToSubDialog = true
                     dialog.dismiss()
+                    isNavigatingToSubDialog = false
                     PlaybackStore.clearPrivacyPinAndLocks(this@MainActivity)
                     BiometricHardwareGuard.clearBiometricKey(this@MainActivity)
                     isVaultSessionUnlocked = false
@@ -1564,6 +1685,8 @@ class MainActivity : AppCompatActivity() {
                     applyFolderVisibilityAndRefreshUI()
                     updateResumeLastFab()
                     Toast.makeText(this@MainActivity, getString(R.string.privacy_pin_removed_toast), Toast.LENGTH_LONG).show()
+                    settingsBackStack.removeLastOrNull()
+                    popSettingsBackStack()
                 }
             }
         }
@@ -1817,6 +1940,7 @@ class MainActivity : AppCompatActivity() {
                     getString(R.string.privacy_locked_saved_toast, newLocked.size),
                     Toast.LENGTH_SHORT
                 ).show()
+                popSettingsBackStack()
             }
         )
     }
@@ -1921,6 +2045,7 @@ class MainActivity : AppCompatActivity() {
                 isShowingFolderVideos = false
                 currentOpenedFolder = null
                 applyFolderVisibilityAndRefreshUI()
+                popSettingsBackStack()
             },
             neutralActionLabel = if (Build.VERSION.SDK_INT >= 34) getString(R.string.limited_access_add_more_btn) else getString(R.string.folder_mode_all),
             onNeutralAction = {
@@ -3363,21 +3488,21 @@ class MainActivity : AppCompatActivity() {
         }
         cardContainer.addView(tvTitle)
 
-        val dialog = AlertDialog.Builder(this, R.style.Theme_PureVideoPlayer_FullScreenDialog).setView(outerScroll).create()
-        dialog.window?.setBackgroundDrawable(ColorDrawable(surface))
-        dialog.window?.statusBarColor = surface
-        dialog.window?.navigationBarColor = surface
-
         val rowViews = mutableListOf<LinearLayout>()
         val checkViews = mutableListOf<TextView>()
 
         fun refreshVisualSelection(activeIdx: Int) {
             val activeAccent = Color.parseColor(themes[activeIdx].accentHex)
+            val activeSurface = PlaybackStore.getSurfaceColor(this)
+            val activeBg = PlaybackStore.getBackgroundColor(this)
+            outerScroll.setBackgroundColor(activeSurface)
+            cardContainer.setBackgroundColor(activeSurface)
+            activeFullScreenHost?.setBackgroundColor(activeSurface)
+            activeFullScreenDialog?.window?.setBackgroundDrawable(ColorDrawable(activeSurface))
+            activeFullScreenDialog?.window?.statusBarColor = activeSurface
+            activeFullScreenDialog?.window?.navigationBarColor = activeSurface
+
             (topPill.background as? GradientDrawable)?.setColor(activeAccent)
-            (cardContainer.background as? GradientDrawable)?.setStroke(
-                dp(1),
-                Color.argb(135, Color.red(activeAccent), Color.green(activeAccent), Color.blue(activeAccent))
-            )
 
             themes.forEachIndexed { idx, opt ->
                 val isSelected = (idx == activeIdx)
@@ -3388,7 +3513,7 @@ class MainActivity : AppCompatActivity() {
                 row.background = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dp(16).toFloat()
-                    setColor(if (isSelected) Color.argb(38, Color.red(optColor), Color.green(optColor), Color.blue(optColor)) else bg)
+                    setColor(if (isSelected) Color.argb(38, Color.red(optColor), Color.green(optColor), Color.blue(optColor)) else activeBg)
                     setStroke(dp(if (isSelected) 2 else 1), if (isSelected) optColor else Color.parseColor("#22FFFFFF"))
                 }
                 check.text = if (isSelected) "✓" else ""
@@ -3468,8 +3593,8 @@ class MainActivity : AppCompatActivity() {
 
             row.setOnClickListener {
                 selectedIdx = idx
-                refreshVisualSelection(idx)
                 PlaybackStore.setThemeIndex(this, idx)
+                refreshVisualSelection(idx)
                 applyUserTheme(animated = true)
             }
 
@@ -3499,27 +3624,12 @@ class MainActivity : AppCompatActivity() {
                 setColor(Color.parseColor("#18FFFFFF"))
             }
             setOnClickListener {
-                isNavigatingToSubDialog = true
-                dismissDialogSmoothly(dialog, cardContainer) {
-                    isNavigatingToSubDialog = false
-                    popSettingsBackStack()
-                }
+                navigateBackInSettingsOrClose()
             }
         }
         cardContainer.addView(btnBack)
 
-        dialog.setOnCancelListener {
-            if (!isNavigatingToSubDialog) {
-                popSettingsBackStack()
-            }
-        }
-
-        dialog.show()
-        dialog.window?.setLayout(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT
-        )
-        animateDialogCardEntrance(cardContainer, animatedItems)
+        presentInFullScreenHost(outerScroll, cardContainer, animatedItems, PlaybackStore.getSurfaceColor(this))
     }
 
     private fun showSubtitleStyleDialog() {
