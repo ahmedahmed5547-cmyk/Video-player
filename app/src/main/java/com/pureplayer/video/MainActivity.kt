@@ -5711,7 +5711,7 @@ class MainActivity : AppCompatActivity() {
                 val savedFile = withContext(Dispatchers.IO) {
                     try {
                         val moviesRoot = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
-                            ?: externalFilesDir
+                            ?: getExternalFilesDir(Environment.DIRECTORY_MOVIES)
                             ?: filesDir
                         val targetDir = File(moviesRoot, "PureVideoPlayer").apply { mkdirs() }
                         val outFile = File(targetDir, fileName)
