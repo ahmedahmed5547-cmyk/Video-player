@@ -344,4 +344,11 @@
     <string name="cast_status_connected">متصل حالياً بشاشة خارجية: %1$s</string>
     <string name="cast_status_ready">اختر طريقة بث الفيديو إلى شاشة التلفزيون</string>
     <string name="cast_opening_settings_toast">اختر شاشة التلفزيون من قائمة البث اللاسلكي</string>
+    <string name="toast_rewind_hold">ترجيع سريع</string>
+    <string name="iptv_download_btn">تحميل للمشاهدة بدون إنترنت (Download)</string>
+    <string name="iptv_download_sub">حفظ الفيديو محلياً على الهاتف داخل مجلد Movies/PureVideoPlayer</string>
+    <string name="iptv_download_started_toast">⬇️ بدأ التحميل: %1$s (تابع التقدم في شريط الإشعارات)</string>
+    <string name="iptv_download_completed_toast">✅ اكتمل التحميل في مجلد Movies/PureVideoPlayer: %1$s</string>
+    <string name="iptv_download_failed_toast">⚠️ تعذر بدء التحميل المباشر لهذا الرابط</string>
+    <string name="iptv_episode_play_option">تشغيل الحلقة الآن</string>
 </resources>

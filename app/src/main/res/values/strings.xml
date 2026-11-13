@@ -344,4 +344,11 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="cast_status_connected">Connected to External Display: %1$s</string>
     <string name="cast_status_ready">Select how you want to cast to your TV</string>
     <string name="cast_opening_settings_toast">Select your TV from the Wireless Display list</string>
+    <string name="toast_rewind_hold">Rewind</string>
+    <string name="iptv_download_btn">Download for Offline Watch</string>
+    <string name="iptv_download_sub">Save video locally to Movies/PureVideoPlayer folder</string>
+    <string name="iptv_download_started_toast">⬇️ Downloading: %1$s (Check notification bar)</string>
+    <string name="iptv_download_completed_toast">✅ Download saved to Movies/PureVideoPlayer: %1$s</string>
+    <string name="iptv_download_failed_toast">⚠️ Could not start download for this stream</string>
+    <string name="iptv_episode_play_option">Play Episode Now</string>
 </resources>

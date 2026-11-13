@@ -11,7 +11,11 @@ import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.hardware.display.DisplayManager
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import android.provider.Settings
 import android.widget.Toast
 import android.net.Uri
@@ -77,7 +81,31 @@ class PlayerActivity : AppCompatActivity() {
     private var isUserSeeking = false
     private var currentSpeed = 1.0f
     private var isHoldSpeedActive = false
+    private var isHoldRewindActive = false
     private var speedBeforeHold = 1.0f
+    private var mediaSession: MediaSession? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private var lastHeadsetHookTapMs = 0L
+
+    private val holdRewindRunnable = object : Runnable {
+        override fun run() {
+            if (!isHoldRewindActive || !::mediaPlayer.isInitialized) return
+            val cur = mediaPlayer.time
+            val nextTime = (cur - 2_000L).coerceAtLeast(0L)
+            mediaPlayer.time = nextTime
+            val length = mediaPlayer.length
+            if (length > 0) {
+                val progress = ((nextTime.toDouble() / length.toDouble()) * 1000).toInt()
+                binding.seekBar.progress = progress
+                binding.tvCurrentTime.text = formatTime(nextTime)
+            }
+            updateDraggableSubtitleText(nextTime)
+            showToastIndicator("⏪ ${getString(R.string.toast_rewind_hold)} • ${formatTime(nextTime)}")
+            if (nextTime > 0L) {
+                handler.postDelayed(this, 180L)
+            }
+        }
+    }
 
     private var currentVideoUri: Uri? = null
     private var currentVideoTitle = "Video"
@@ -246,6 +274,7 @@ class PlayerActivity : AppCompatActivity() {
                 MediaPlayer.Event.Playing -> {
                     binding.playerLoadingBar.visibility = View.GONE
                     binding.btnPlayPause.setImageResource(R.drawable.ic_pause_modern)
+                    updateMediaSessionPlaybackState(isPlaying = true)
                     if (externalSubtitleCues.isNotEmpty()) {
                         mediaPlayer.spuTrack = -1
                     }
@@ -259,6 +288,7 @@ class PlayerActivity : AppCompatActivity() {
                 }
                 MediaPlayer.Event.Paused -> {
                     binding.btnPlayPause.setImageResource(R.drawable.ic_play_modern)
+                    updateMediaSessionPlaybackState(isPlaying = false)
                 }
                 MediaPlayer.Event.EncounteredError -> {
                     binding.playerLoadingBar.visibility = View.GONE
@@ -285,6 +315,7 @@ class PlayerActivity : AppCompatActivity() {
 
         setupControls()
         setupTouchGestures()
+        setupMediaSessionAndAudioFocus()
     }
 
     /**
@@ -623,8 +654,213 @@ class PlayerActivity : AppCompatActivity() {
         handler.postDelayed(hideVerticalSliderRunnable, 1200L)
     }
 
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        if (!::mediaPlayer.isInitialized) return@OnAudioFocusChangeListener
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                if (mediaPlayer.isPlaying) {
+                    saveCurrentPositionNow()
+                    mediaPlayer.pause()
+                    binding.btnPlayPause.setImageResource(R.drawable.ic_play_modern)
+                    updateMediaSessionPlaybackState(isPlaying = false)
+                }
+            }
+        }
+    }
+
+    private fun requestPlayerAudioFocus() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val attrs = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+                    .build()
+                val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(attrs)
+                    .setAcceptsDelayedFocusGain(true)
+                    .setOnAudioFocusChangeListener(audioFocusChangeListener, handler)
+                    .build()
+                audioFocusRequest = req
+                audioManager.requestAudioFocus(req)
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager.requestAudioFocus(
+                    audioFocusChangeListener,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN
+                )
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun abandonPlayerAudioFocus() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager.abandonAudioFocus(audioFocusChangeListener)
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun togglePlayPauseFromHeadset(forcePlay: Boolean? = null) {
+        if (!::mediaPlayer.isInitialized) return
+        val shouldPlay = forcePlay ?: !mediaPlayer.isPlaying
+        if (shouldPlay) {
+            requestPlayerAudioFocus()
+            mediaPlayer.play()
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            binding.btnPlayPause.setImageResource(R.drawable.ic_pause_modern)
+            updateMediaSessionPlaybackState(isPlaying = true)
+            showToastIndicator("▶️")
+        } else {
+            saveCurrentPositionNow()
+            mediaPlayer.pause()
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            binding.btnPlayPause.setImageResource(R.drawable.ic_play_modern)
+            updateMediaSessionPlaybackState(isPlaying = false)
+            showToastIndicator("⏸️")
+        }
+    }
+
+    private fun seekByHeadsetDelta(deltaMs: Long) {
+        if (!::mediaPlayer.isInitialized) return
+        val length = mediaPlayer.length
+        val target = if (deltaMs > 0) {
+            (mediaPlayer.time + deltaMs).coerceAtMost(if (length > 0) length else Long.MAX_VALUE)
+        } else {
+            (mediaPlayer.time + deltaMs).coerceAtLeast(0L)
+        }
+        mediaPlayer.time = target
+        saveCurrentPositionNow()
+        updateMediaSessionPlaybackState(isPlaying = mediaPlayer.isPlaying)
+        showToastIndicator(if (deltaMs > 0) getString(R.string.toast_forward_15) else getString(R.string.toast_rewind_15))
+    }
+
+    private fun handleMediaKeyEvent(keyCode: Int): Boolean {
+        return when (keyCode) {
+            KeyEvent.KEYCODE_HEADSETHOOK,
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                val now = System.currentTimeMillis()
+                if (now - lastHeadsetHookTapMs in 1..360) {
+                    lastHeadsetHookTapMs = 0L
+                    seekByHeadsetDelta(15_000L)
+                } else {
+                    lastHeadsetHookTapMs = now
+                    togglePlayPauseFromHeadset(null)
+                }
+                true
+            }
+            KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                togglePlayPauseFromHeadset(true)
+                true
+            }
+            KeyEvent.KEYCODE_MEDIA_PAUSE,
+            KeyEvent.KEYCODE_MEDIA_STOP -> {
+                togglePlayPauseFromHeadset(false)
+                true
+            }
+            KeyEvent.KEYCODE_MEDIA_NEXT,
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                seekByHeadsetDelta(15_000L)
+                true
+            }
+            KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+            KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                seekByHeadsetDelta(-15_000L)
+                true
+            }
+            else -> false
+        }
+    }
+
+    private fun updateMediaSessionPlaybackState(isPlaying: Boolean) {
+        val session = mediaSession ?: return
+        try {
+            val pos = if (::mediaPlayer.isInitialized) mediaPlayer.time.coerceAtLeast(0L) else 0L
+            val stateCode = if (isPlaying) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED
+            val actions = PlaybackState.ACTION_PLAY or
+                PlaybackState.ACTION_PAUSE or
+                PlaybackState.ACTION_PLAY_PAUSE or
+                PlaybackState.ACTION_STOP or
+                PlaybackState.ACTION_FAST_FORWARD or
+                PlaybackState.ACTION_REWIND or
+                PlaybackState.ACTION_SKIP_TO_NEXT or
+                PlaybackState.ACTION_SKIP_TO_PREVIOUS or
+                PlaybackState.ACTION_SEEK_TO
+            val pbState = PlaybackState.Builder()
+                .setActions(actions)
+                .setState(stateCode, pos, if (isPlaying) currentSpeed else 0f)
+                .build()
+            session.setPlaybackState(pbState)
+        } catch (_: Exception) {}
+    }
+
+    private fun setupMediaSessionAndAudioFocus() {
+        requestPlayerAudioFocus()
+        try {
+            val session = MediaSession(this, "PureVideoPlayerMediaSession")
+            session.setCallback(object : MediaSession.Callback() {
+                override fun onPlay() {
+                    togglePlayPauseFromHeadset(true)
+                }
+
+                override fun onPause() {
+                    togglePlayPauseFromHeadset(false)
+                }
+
+                override fun onStop() {
+                    togglePlayPauseFromHeadset(false)
+                }
+
+                override fun onSkipToNext() {
+                    seekByHeadsetDelta(15_000L)
+                }
+
+                override fun onSkipToPrevious() {
+                    seekByHeadsetDelta(-15_000L)
+                }
+
+                override fun onFastForward() {
+                    seekByHeadsetDelta(15_000L)
+                }
+
+                override fun onRewind() {
+                    seekByHeadsetDelta(-15_000L)
+                }
+
+                override fun onSeekTo(pos: Long) {
+                    if (::mediaPlayer.isInitialized && mediaPlayer.length > 0) {
+                        mediaPlayer.time = pos.coerceIn(0L, mediaPlayer.length)
+                        saveCurrentPositionNow()
+                        updateMediaSessionPlaybackState(isPlaying = mediaPlayer.isPlaying)
+                    }
+                }
+
+                override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
+                    @Suppress("DEPRECATION")
+                    val keyEvent = mediaButtonIntent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
+                    if (keyEvent != null && keyEvent.action == KeyEvent.ACTION_DOWN) {
+                        if (handleMediaKeyEvent(keyEvent.keyCode)) {
+                            return true
+                        }
+                    }
+                    return super.onMediaButtonEvent(mediaButtonIntent)
+                }
+            })
+            session.isActive = true
+            mediaSession = session
+            updateMediaSessionPlaybackState(isPlaying = true)
+        } catch (_: Exception) {}
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN) {
+            if (handleMediaKeyEvent(event.keyCode)) {
+                return true
+            }
             when (event.keyCode) {
                 KeyEvent.KEYCODE_VOLUME_UP -> {
                     val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
@@ -1324,11 +1560,22 @@ class PlayerActivity : AppCompatActivity() {
 
             override fun onLongPress(e: MotionEvent) {
                 if (isLocked || isDraggingSubtitle || isPinchingSubtitle) return
-                if (mediaPlayer.isPlaying) {
-                    isHoldSpeedActive = true
-                    speedBeforeHold = currentSpeed
-                    mediaPlayer.rate = 2.0f
-                    showToastIndicator(getString(R.string.toast_speed_hold))
+                val screenWidth = binding.playerRoot.width.toFloat().coerceAtLeast(1f)
+                if (e.x >= screenWidth * 0.5f) {
+                    // Right Half Long-Press -> Fast Forward (2.0x)
+                    if (mediaPlayer.isPlaying) {
+                        isHoldSpeedActive = true
+                        isHoldRewindActive = false
+                        speedBeforeHold = currentSpeed
+                        mediaPlayer.rate = 2.0f
+                        showToastIndicator(getString(R.string.toast_speed_hold))
+                    }
+                } else {
+                    // Left Half Long-Press -> Continuous Smooth Rewind
+                    isHoldRewindActive = true
+                    isHoldSpeedActive = false
+                    handler.removeCallbacks(holdRewindRunnable)
+                    handler.post(holdRewindRunnable)
                 }
             }
 
@@ -1338,7 +1585,7 @@ class PlayerActivity : AppCompatActivity() {
                 distanceX: Float,
                 distanceY: Float
             ): Boolean {
-                if (isLocked || isDraggingSubtitle || isPinchingSubtitle || isHoldSpeedActive || e1 == null) return false
+                if (isLocked || isDraggingSubtitle || isPinchingSubtitle || isHoldSpeedActive || isHoldRewindActive || e1 == null) return false
 
                 val screenWidth = binding.playerRoot.width.toFloat().coerceAtLeast(1f)
                 val screenHeight = binding.playerRoot.height.toFloat().coerceAtLeast(1f)
@@ -1374,6 +1621,12 @@ class PlayerActivity : AppCompatActivity() {
                     isHoldSpeedActive = false
                     mediaPlayer.rate = speedBeforeHold
                     showToastIndicator(getString(R.string.toast_speed_normal, speedBeforeHold.toString()))
+                }
+                if (isHoldRewindActive) {
+                    isHoldRewindActive = false
+                    handler.removeCallbacks(holdRewindRunnable)
+                    saveCurrentPositionNow()
+                    showToastIndicator("▶️ ${formatTime(mediaPlayer.time)}")
                 }
             }
             gestureDetector.onTouchEvent(event)
@@ -2264,6 +2517,12 @@ class PlayerActivity : AppCompatActivity() {
         saveCurrentPositionNow()
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
+        try {
+            mediaSession?.isActive = false
+            mediaSession?.release()
+            mediaSession = null
+        } catch (_: Exception) {}
+        abandonPlayerAudioFocus()
         if (viewsAttached) {
             mediaPlayer.detachViews()
             viewsAttached = false

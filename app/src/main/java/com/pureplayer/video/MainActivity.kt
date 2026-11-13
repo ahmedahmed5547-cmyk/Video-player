@@ -6,6 +6,7 @@ import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.Manifest
 import android.app.Activity
+import android.app.DownloadManager
 import android.app.RecoverableSecurityException
 import android.content.ContentUris
 import android.content.Context
@@ -19,9 +20,11 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.hardware.biometrics.BiometricPrompt
 import android.media.MediaMetadataRetriever
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.CancellationSignal
 import android.provider.MediaStore
 import android.security.keystore.KeyGenParameterSpec
@@ -1111,6 +1114,9 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     updateIptvSubTabsVisualState()
                 }
+            },
+            onIptvDownloadClick = { item ->
+                handleIptvDownloadRequest(item)
             }
         )
         updateRecyclerLayoutManager()
@@ -3964,6 +3970,29 @@ class MainActivity : AppCompatActivity() {
         multiPermissionLauncher.launch(permissions)
     }
 
+    private val supportedVideoExtensions = setOf(
+        "mkv", "mp4", "avi", "mov", "webm", "ts", "m2ts", "mts",
+        "m4v", "flv", "wmv", "3gp", "3g2", "ogv", "divx", "vob", "f4v", "rmvb", "asf", "mpg", "mpeg"
+    )
+
+    private val releaseVideoNameRegex = Regex(
+        "(?i)(s\\d{1,2}[._\\s-]*e\\d{1,3}|\\b(?:2160p|1080p|720p|480p|h264|x264|h265|x265|hevc|webrip|web-dl|bluray|bdrip|hdrip)\\b)"
+    )
+
+    private fun isRecognizedVideoFile(fileName: String, mimeType: String? = null, sizeBytes: Long = 0L): Boolean {
+        val cleanName = fileName.trim()
+        if (cleanName.isEmpty() || cleanName.startsWith(".")) return false
+        val ext = cleanName.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        if (ext in supportedVideoExtensions) return true
+        val mime = mimeType?.lowercase(Locale.ROOT) ?: ""
+        if (mime.startsWith("video/") || mime.contains("matroska") || mime.contains("mpegurl")) return true
+        // Catch downloaded episode/movie files whose extension was omitted or non-standard (e.g. dexter.resurrection.s02e03.1080p.web.h264-cakes)
+        if (sizeBytes >= 5L * 1024L * 1024L && ext !in setOf("zip", "rar", "7z", "apk", "pdf", "iso", "srt", "ass", "sub", "txt", "jpg", "png", "mp3", "flac", "wav", "part", "crdownload")) {
+            if (releaseVideoNameRegex.containsMatchIn(cleanName)) return true
+        }
+        return false
+    }
+
     private fun loadVideoFoldersOnly() {
         loadMediaJob?.cancel()
         binding.swipeRefresh.isRefreshing = true
@@ -3971,6 +4000,9 @@ class MainActivity : AppCompatActivity() {
         loadMediaJob = lifecycleScope.launch {
             val (videoList, groupedFolders) = withContext(Dispatchers.IO) {
                 val list = mutableListOf<VideoItem>()
+                val seenIds = HashSet<Long>()
+                val seenPaths = HashSet<String>()
+
                 val projection = arrayOf(
                     MediaStore.Video.Media._ID,
                     MediaStore.Video.Media.DISPLAY_NAME,
@@ -3985,6 +4017,7 @@ class MainActivity : AppCompatActivity() {
                 val selection = "${MediaStore.Video.Media.SIZE} > 0"
                 val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} DESC"
 
+                // Stage 1: Standard MediaStore.Video table
                 try {
                     contentResolver.query(
                         MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
@@ -4024,6 +4057,8 @@ class MainActivity : AppCompatActivity() {
                                 MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
                                 id
                             )
+                            seenIds.add(id)
+                            if (path.isNotEmpty()) seenPaths.add(path.lowercase(Locale.ROOT))
                             list.add(
                                 VideoItem(
                                     id = id,
@@ -4037,6 +4072,168 @@ class MainActivity : AppCompatActivity() {
                                     path = path,
                                     dateAddedSec = dateAddedSec
                                 )
+                            )
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                // Stage 2: Deep MediaStore.Files query for MKV & unindexed container files (e.g. application/x-matroska, octet-stream, or release episodes)
+                try {
+                    val filesUri = MediaStore.Files.getContentUri("external")
+                    val filesProj = arrayOf(
+                        MediaStore.Files.FileColumns._ID,
+                        MediaStore.Files.FileColumns.DISPLAY_NAME,
+                        MediaStore.Files.FileColumns.SIZE,
+                        MediaStore.Files.FileColumns.DATA,
+                        MediaStore.Files.FileColumns.MIME_TYPE,
+                        MediaStore.Files.FileColumns.DATE_ADDED,
+                        MediaStore.Video.Media.DURATION,
+                        MediaStore.Video.Media.BUCKET_DISPLAY_NAME,
+                        MediaStore.Video.Media.WIDTH,
+                        MediaStore.Video.Media.HEIGHT
+                    )
+                    val filesSelection = "${MediaStore.Files.FileColumns.SIZE} > 0 AND (" +
+                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.mkv' OR " +
+                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.mp4' OR " +
+                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.avi' OR " +
+                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.mov' OR " +
+                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.webm' OR " +
+                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.ts' OR " +
+                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.m2ts' OR " +
+                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.m4v' OR " +
+                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.flv' OR " +
+                        "${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'video/%' OR " +
+                        "${MediaStore.Files.FileColumns.MIME_TYPE} LIKE '%matroska%' OR " +
+                        "${MediaStore.Files.FileColumns.SIZE} > 5242880)"
+
+                    contentResolver.query(
+                        filesUri,
+                        filesProj,
+                        filesSelection,
+                        null,
+                        "${MediaStore.Files.FileColumns.DATE_ADDED} DESC"
+                    )?.use { cursor ->
+                        val idCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
+                        val nameCol = cursor.getColumnIndex(MediaStore.Files.FileColumns.DISPLAY_NAME)
+                        val sizeCol = cursor.getColumnIndex(MediaStore.Files.FileColumns.SIZE)
+                        val dataCol = cursor.getColumnIndex(MediaStore.Files.FileColumns.DATA)
+                        val mimeCol = cursor.getColumnIndex(MediaStore.Files.FileColumns.MIME_TYPE)
+                        val dateCol = cursor.getColumnIndex(MediaStore.Files.FileColumns.DATE_ADDED)
+                        val durCol = cursor.getColumnIndex(MediaStore.Video.Media.DURATION)
+                        val bucketCol = cursor.getColumnIndex(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)
+                        val widthCol = cursor.getColumnIndex(MediaStore.Video.Media.WIDTH)
+                        val heightCol = cursor.getColumnIndex(MediaStore.Video.Media.HEIGHT)
+
+                        while (cursor.moveToNext()) {
+                            val id = cursor.getLong(idCol)
+                            if (id in seenIds) continue
+                            val path = if (dataCol != -1) (cursor.getString(dataCol) ?: "") else ""
+                            if (path.isNotEmpty() && path.lowercase(Locale.ROOT) in seenPaths) continue
+
+                            val rawTitle = (if (nameCol != -1) cursor.getString(nameCol) else null)
+                                ?: (if (path.isNotEmpty()) File(path).name else null)
+                                ?: continue
+                            val size = if (sizeCol != -1) cursor.getLong(sizeCol) else 0L
+                            val mime = if (mimeCol != -1) cursor.getString(mimeCol) else null
+
+                            if (!isRecognizedVideoFile(rawTitle, mime, size)) continue
+
+                            val duration = if (durCol != -1) cursor.getLong(durCol) else 0L
+                            val width = if (widthCol != -1) cursor.getInt(widthCol) else 0
+                            val height = if (heightCol != -1) cursor.getInt(heightCol) else 0
+                            val dateAddedSec = if (dateCol != -1) cursor.getLong(dateCol) else 0L
+                            val bucketName = if (bucketCol != -1) cursor.getString(bucketCol) else null
+                            val folderName = when {
+                                !bucketName.isNullOrBlank() -> bucketName
+                                path.isNotEmpty() -> File(path).parentFile?.name ?: "Downloads"
+                                else -> "Downloads"
+                            }
+
+                            val contentUri = ContentUris.withAppendedId(filesUri, id)
+                            seenIds.add(id)
+                            if (path.isNotEmpty()) seenPaths.add(path.lowercase(Locale.ROOT))
+                            list.add(
+                                VideoItem(
+                                    id = id,
+                                    title = rawTitle,
+                                    uri = contentUri,
+                                    duration = duration,
+                                    size = size,
+                                    folderName = folderName,
+                                    width = width,
+                                    height = height,
+                                    path = path,
+                                    dateAddedSec = dateAddedSec
+                                )
+                            )
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                // Stage 3: Direct Filesystem Walk for unindexed MKV & release files in Download, Movies, Video, Telegram
+                val unindexedPathsToScan = mutableListOf<String>()
+                try {
+                    val candidateRoots = linkedSetOf<File>()
+                    runCatching { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)?.let { candidateRoots.add(it) } }
+                    runCatching { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)?.let { candidateRoots.add(it) } }
+                    runCatching { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)?.let { candidateRoots.add(it) } }
+                    runCatching {
+                        val extRoot = Environment.getExternalStorageDirectory()
+                        if (extRoot != null) {
+                            candidateRoots.add(File(extRoot, "Download"))
+                            candidateRoots.add(File(extRoot, "Movies"))
+                            candidateRoots.add(File(extRoot, "Video"))
+                            candidateRoots.add(File(extRoot, "Videos"))
+                            candidateRoots.add(File(extRoot, "Telegram"))
+                            candidateRoots.add(File(extRoot, "Android/media"))
+                        }
+                    }
+
+                    fun scanFolderRecursive(dir: File, depth: Int) {
+                        if (depth > 4 || !dir.exists() || !dir.isDirectory || !dir.canRead()) return
+                        val children = dir.listFiles() ?: return
+                        for (child in children) {
+                            if (child.name.startsWith(".")) continue
+                            if (child.isDirectory) {
+                                scanFolderRecursive(child, depth + 1)
+                            } else if (child.isFile && child.length() > 0L) {
+                                val absPath = child.absolutePath
+                                val normPath = absPath.lowercase(Locale.ROOT)
+                                if (normPath in seenPaths) continue
+                                if (isRecognizedVideoFile(child.name, null, child.length())) {
+                                    seenPaths.add(normPath)
+                                    unindexedPathsToScan.add(absPath)
+                                    val syntheticId = (absPath.hashCode().toLong() and 0x7FFFFFFFL) + 900_000_000L
+                                    val folderName = child.parentFile?.name ?: "Download"
+                                    list.add(
+                                        VideoItem(
+                                            id = syntheticId,
+                                            title = child.name,
+                                            uri = Uri.fromFile(child),
+                                            duration = 0L,
+                                            size = child.length(),
+                                            folderName = folderName,
+                                            width = 0,
+                                            height = 0,
+                                            path = absPath,
+                                            dateAddedSec = child.lastModified() / 1000L
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    for (rootDir in candidateRoots) {
+                        scanFolderRecursive(rootDir, 0)
+                    }
+                    if (unindexedPathsToScan.isNotEmpty()) {
+                        runCatching {
+                            MediaScannerConnection.scanFile(
+                                applicationContext,
+                                unindexedPathsToScan.toTypedArray(),
+                                null,
+                                null
                             )
                         }
                     }
@@ -4835,32 +5032,89 @@ class MainActivity : AppCompatActivity() {
             }
             is IptvStreamItem -> {
                 settingsBackStack.clear()
-                // Long press on a Series, Movie, or Channel allows quick Favorite toggle or Category Reclassification!
                 val isFav = IptvRepository.isFavoriteStream(this, item.sourceId, item.id)
                 val favTitle = if (isFav) getString(R.string.iptv_fav_remove_option) else getString(R.string.iptv_fav_add_option)
+                val menuItems = mutableListOf<PremiumMenuItem>()
+                if (item.contentType == IptvContentType.MOVIES && item.streamUrl.isNotBlank()) {
+                    menuItems.add(
+                        PremiumMenuItem(
+                            iconEmoji = "⬇️",
+                            title = getString(R.string.iptv_download_btn),
+                            subtitle = getString(R.string.iptv_download_sub),
+                            isAccentHighlighted = true,
+                            onClick = {
+                                downloadIptvMediaLocally(
+                                    title = item.title,
+                                    streamUrl = item.streamUrl,
+                                    userAgent = item.httpUserAgent,
+                                    referrer = item.httpReferrer
+                                )
+                            }
+                        )
+                    )
+                }
+                menuItems.add(
+                    PremiumMenuItem(
+                        iconEmoji = if (isFav) "💔" else "❤️",
+                        title = favTitle,
+                        subtitle = getString(R.string.iptv_subtab_favorites),
+                        isAccentHighlighted = (item.contentType != IptvContentType.MOVIES),
+                        onClick = {
+                            val nowFav = IptvRepository.toggleFavoriteStream(this, item.sourceId, item.id)
+                            val msgRes = if (nowFav) R.string.iptv_fav_added_toast else R.string.iptv_fav_removed_toast
+                            Toast.makeText(this, getString(msgRes, item.title), Toast.LENGTH_SHORT).show()
+                            renderIptvCurrentLevel()
+                        }
+                    )
+                )
+                menuItems.add(
+                    PremiumMenuItem(
+                        iconEmoji = "🗂️",
+                        title = getString(R.string.iptv_reclassify_category_title),
+                        subtitle = item.categoryName,
+                        onClick = {
+                            showReclassifyCategoryDialog(item.categoryName)
+                        }
+                    )
+                )
                 showPremiumMenuDialog(
                     headerIcon = if (isFav) "❤️" else "🎬",
                     title = item.title,
                     subtitle = item.categoryName,
+                    items = menuItems
+                )
+            }
+            is IptvEpisodeItem -> {
+                settingsBackStack.clear()
+                val epLabel = "S${item.seasonNumber}E${item.episodeNumber} • ${item.title}"
+                showPremiumMenuDialog(
+                    headerIcon = "🎞️",
+                    title = item.title,
+                    subtitle = "Season ${item.seasonNumber} • Episode ${item.episodeNumber}",
                     items = listOf(
                         PremiumMenuItem(
-                            iconEmoji = if (isFav) "💔" else "❤️",
-                            title = favTitle,
-                            subtitle = getString(R.string.iptv_subtab_favorites),
+                            iconEmoji = "▶️",
+                            title = getString(R.string.iptv_episode_play_option),
+                            subtitle = epLabel,
                             isAccentHighlighted = true,
                             onClick = {
-                                val nowFav = IptvRepository.toggleFavoriteStream(this, item.sourceId, item.id)
-                                val msgRes = if (nowFav) R.string.iptv_fav_added_toast else R.string.iptv_fav_removed_toast
-                                Toast.makeText(this, getString(msgRes, item.title), Toast.LENGTH_SHORT).show()
-                                renderIptvCurrentLevel()
+                                handleIptvItemClick(item)
                             }
                         ),
                         PremiumMenuItem(
-                            iconEmoji = "🗂️",
-                            title = getString(R.string.iptv_reclassify_category_title),
-                            subtitle = item.categoryName,
+                            iconEmoji = "⬇️",
+                            title = getString(R.string.iptv_download_btn),
+                            subtitle = getString(R.string.iptv_download_sub),
+                            isAccentHighlighted = true,
                             onClick = {
-                                showReclassifyCategoryDialog(item.categoryName)
+                                val sTitle = activeIptvSeriesInfo?.seriesTitle ?: ""
+                                val dlTitle = if (sTitle.isNotBlank()) "${sTitle}_S${item.seasonNumber}E${item.episodeNumber}_${item.title}" else item.title
+                                downloadIptvMediaLocally(
+                                    title = dlTitle,
+                                    streamUrl = item.streamUrl,
+                                    userAgent = item.httpUserAgent,
+                                    referrer = item.httpReferrer
+                                )
                             }
                         )
                     )
@@ -5366,6 +5620,154 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    private fun handleIptvDownloadRequest(item: Any) {
+        when (item) {
+            is IptvStreamItem -> {
+                if (item.streamUrl.isNotBlank()) {
+                    downloadIptvMediaLocally(
+                        title = item.title,
+                        streamUrl = item.streamUrl,
+                        userAgent = item.httpUserAgent,
+                        referrer = item.httpReferrer
+                    )
+                }
+            }
+            is IptvEpisodeItem -> {
+                if (item.streamUrl.isNotBlank()) {
+                    val sTitle = activeIptvSeriesInfo?.seriesTitle ?: ""
+                    val dlTitle = if (sTitle.isNotBlank()) {
+                        "${sTitle}_S${item.seasonNumber}E${item.episodeNumber}_${item.title}"
+                    } else {
+                        "S${item.seasonNumber}E${item.episodeNumber}_${item.title}"
+                    }
+                    downloadIptvMediaLocally(
+                        title = dlTitle,
+                        streamUrl = item.streamUrl,
+                        userAgent = item.httpUserAgent,
+                        referrer = item.httpReferrer
+                    )
+                }
+            }
+        }
+    }
+
+    private fun downloadIptvMediaLocally(
+        title: String,
+        streamUrl: String,
+        userAgent: String = "",
+        referrer: String = ""
+    ) {
+        val cleanUrl = streamUrl.trim()
+        if (!cleanUrl.startsWith("http://", ignoreCase = true) && !cleanUrl.startsWith("https://", ignoreCase = true)) {
+            Toast.makeText(this, getString(R.string.iptv_download_failed_toast), Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val urlPath = cleanUrl.substringBefore("?").substringAfterLast("/")
+        val rawExt = urlPath.substringAfterLast(".", "").lowercase(Locale.ROOT)
+        val ext = when {
+            rawExt in setOf("mp4", "mkv", "avi", "mov", "webm", "ts", "flv", "m4v") -> rawExt
+            else -> "mp4"
+        }
+
+        val sanitizedBase = title
+            .replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .ifEmpty { "PureVideo_${System.currentTimeMillis()}" }
+
+        val fileName = if (sanitizedBase.lowercase(Locale.ROOT).endsWith(".$ext")) {
+            sanitizedBase
+        } else {
+            "$sanitizedBase.$ext"
+        }
+
+        val ua = userAgent.ifBlank {
+            "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+        }
+
+        try {
+            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            val req = DownloadManager.Request(Uri.parse(cleanUrl)).apply {
+                setTitle(title)
+                setDescription("Pure Video Player • Offline Download")
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                setAllowedOverMetered(true)
+                setAllowedOverRoaming(true)
+                addRequestHeader("User-Agent", ua)
+                if (referrer.isNotBlank()) {
+                    addRequestHeader("Referer", referrer)
+                }
+                @Suppress("DEPRECATION")
+                allowScanningByMediaScanner()
+                setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES, "PureVideoPlayer/$fileName")
+            }
+            dm.enqueue(req)
+            Toast.makeText(this, getString(R.string.iptv_download_started_toast, title), Toast.LENGTH_LONG).show()
+        } catch (_: Exception) {
+            // Fallback direct background stream download to Movies/PureVideoPlayer
+            Toast.makeText(this, getString(R.string.iptv_download_started_toast, title), Toast.LENGTH_LONG).show()
+            lifecycleScope.launch {
+                val savedFile = withContext(Dispatchers.IO) {
+                    try {
+                        val moviesRoot = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+                            ?: externalFilesDir
+                            ?: filesDir
+                        val targetDir = File(moviesRoot, "PureVideoPlayer").apply { mkdirs() }
+                        val outFile = File(targetDir, fileName)
+                        val conn = (URL(cleanUrl).openConnection() as HttpURLConnection).apply {
+                            instanceFollowRedirects = true
+                            connectTimeout = 15_000
+                            readTimeout = 30_000
+                            setRequestProperty("User-Agent", ua)
+                            if (referrer.isNotBlank()) setRequestProperty("Referer", referrer)
+                        }
+                        if (conn.responseCode !in 200..299) return@withContext null
+                        conn.inputStream.use { input ->
+                            FileOutputStream(outFile).use { output ->
+                                val buf = ByteArray(32 * 1024)
+                                while (true) {
+                                    val r = input.read(buf)
+                                    if (r <= 0) break
+                                    output.write(buf, 0, r)
+                                }
+                            }
+                        }
+                        if (outFile.exists() && outFile.length() > 0L) {
+                            runCatching {
+                                MediaScannerConnection.scanFile(
+                                    applicationContext,
+                                    arrayOf(outFile.absolutePath),
+                                    null,
+                                    null
+                                )
+                            }
+                            outFile
+                        } else null
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+                if (!isFinishing && !isDestroyed) {
+                    if (savedFile != null) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            getString(R.string.iptv_download_completed_toast, title),
+                            Toast.LENGTH_LONG
+                        ).show()
+                        loadVideoFoldersOnly()
+                    } else {
+                        Toast.makeText(
+                            this@MainActivity,
+                            getString(R.string.iptv_download_failed_toast),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }
+        }
+    }
+
     private fun showIptvMovieDetailsDialog(movie: IptvStreamItem) {
         settingsBackStack.clear()
         val metaParts = mutableListOf<String>()
@@ -5390,6 +5792,21 @@ class MainActivity : AppCompatActivity() {
                         startPositionMs = if (savedPos > 3000L) savedPos else 0L,
                         httpUserAgent = movie.httpUserAgent,
                         httpReferrer = movie.httpReferrer
+                    )
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "⬇️",
+                title = getString(R.string.iptv_download_btn),
+                subtitle = getString(R.string.iptv_download_sub),
+                isAccentHighlighted = true,
+                onClick = {
+                    settingsBackStack.clear()
+                    downloadIptvMediaLocally(
+                        title = movie.title,
+                        streamUrl = movie.streamUrl,
+                        userAgent = movie.httpUserAgent,
+                        referrer = movie.httpReferrer
                     )
                 }
             ),

@@ -138,7 +138,8 @@ class MediaAdapter(
     private val onFolderLongClick: (VideoFolder) -> Unit = {},
     private val onIptvItemClick: (Any) -> Unit = {},
     private val onIptvItemLongClick: (Any) -> Unit = {},
-    private val onIptvFavoriteToggle: (IptvStreamItem, Boolean) -> Unit = { _, _ -> }
+    private val onIptvFavoriteToggle: (IptvStreamItem, Boolean) -> Unit = { _, _ -> },
+    private val onIptvDownloadClick: (Any) -> Unit = {}
 ) : RecyclerView.Adapter<MediaAdapter.MediaViewHolder>() {
 
     private val items = mutableListOf<Any>()
@@ -233,6 +234,7 @@ class MediaAdapter(
             binding.itemContentLayout.alpha = 1.0f
             binding.tvTitle.setTextColor(Color.WHITE)
             binding.btnFavoriteHeart.visibility = View.GONE
+            binding.btnDownloadIptv.visibility = View.GONE
 
             // Configure List vs Grid layout dynamically
             if (isGridMode) {
@@ -505,6 +507,19 @@ class MediaAdapter(
                     }
                     IptvImageLoader.loadLogoOrPoster(ctx, item.logoUrl, binding.ivIcon, fallbackIcon, accentColor)
 
+                    if (item.contentType == IptvContentType.MOVIES && item.streamUrl.isNotBlank()) {
+                        binding.btnDownloadIptv.visibility = View.VISIBLE
+                        binding.btnDownloadIptv.imageTintList = ColorStateList.valueOf(accentColor)
+                        binding.btnDownloadIptv.background = GradientDrawable().apply {
+                            shape = GradientDrawable.OVAL
+                            setColor(Color.argb(36, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor)))
+                            setStroke(dp(ctx, 1), Color.argb(110, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor)))
+                        }
+                        binding.btnDownloadIptv.setOnClickListener {
+                            onIptvDownloadClick(item)
+                        }
+                    }
+
                     binding.root.setOnClickListener { onIptvItemClick(item) }
                     binding.root.setOnLongClickListener {
                         onIptvItemLongClick(item)
@@ -558,6 +573,18 @@ class MediaAdapter(
                     val resumeHint = if (savedEpPos > 3000L) "  •  ⏸ ${PlaybackStore.formatTime(savedEpPos)}" else ""
                     val baseSub = if (item.plot.isNotBlank()) item.plot else "S${item.seasonNumber} • E${item.episodeNumber}"
                     binding.tvSubtitle.text = "$baseSub$resumeHint"
+                    if (item.streamUrl.isNotBlank()) {
+                        binding.btnDownloadIptv.visibility = View.VISIBLE
+                        binding.btnDownloadIptv.imageTintList = ColorStateList.valueOf(accentColor)
+                        binding.btnDownloadIptv.background = GradientDrawable().apply {
+                            shape = GradientDrawable.OVAL
+                            setColor(Color.argb(36, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor)))
+                            setStroke(dp(ctx, 1), Color.argb(110, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor)))
+                        }
+                        binding.btnDownloadIptv.setOnClickListener {
+                            onIptvDownloadClick(item)
+                        }
+                    }
                     binding.root.setOnClickListener { onIptvItemClick(item) }
                     binding.root.setOnLongClickListener {
                         onIptvItemLongClick(item)
