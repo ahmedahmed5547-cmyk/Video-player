@@ -10,7 +10,10 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
+import android.hardware.display.DisplayManager
 import android.media.AudioManager
+import android.provider.Settings
+import android.widget.Toast
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -468,23 +471,26 @@ class PlayerActivity : AppCompatActivity() {
                 textSize = 20f
                 setTypeface(typeface, Typeface.BOLD)
                 setPadding(dp(8), 0, dp(2), 0)
+                visibility = if (item.isInteractive) View.VISIBLE else View.GONE
             }
 
             rowCard.addView(iconBadge)
             rowCard.addView(textCol)
             rowCard.addView(tvArrow)
 
-            rowCard.setOnTouchListener { v, event ->
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> v.animate().scaleX(0.97f).scaleY(0.97f).setDuration(85L).start()
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> v.animate().scaleX(1f).scaleY(1f).setDuration(130L).start()
+            if (item.isInteractive) {
+                rowCard.setOnTouchListener { v, event ->
+                    when (event.actionMasked) {
+                        MotionEvent.ACTION_DOWN -> v.animate().scaleX(0.97f).scaleY(0.97f).setDuration(85L).start()
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> v.animate().scaleX(1f).scaleY(1f).setDuration(130L).start()
+                    }
+                    false
                 }
-                false
-            }
 
-            rowCard.setOnClickListener {
-                dialog.dismiss()
-                item.onClick()
+                rowCard.setOnClickListener {
+                    dialog.dismiss()
+                    item.onClick()
+                }
             }
 
             cardContainer.addView(rowCard)
@@ -1101,6 +1107,7 @@ class PlayerActivity : AppCompatActivity() {
             binding.btnSubFontUp,
             binding.btnResetSubPos,
             binding.btnOrientation,
+            binding.btnCastScreen,
             binding.btnPip,
             binding.btnMorePro,
             binding.btnLock,
@@ -1210,6 +1217,11 @@ class PlayerActivity : AppCompatActivity() {
             binding.btnOrientation.text = label
             showToastIndicator(label)
             scheduleHideControls()
+        }
+
+        binding.btnCastScreen.setOnClickListener {
+            playerMenuBackStack.clear()
+            showCastScreenDialog()
         }
 
         binding.btnPip.setOnClickListener {
@@ -1902,6 +1914,10 @@ class PlayerActivity : AppCompatActivity() {
                 handler.postDelayed(sleepTimerRunnable, 60 * 60 * 1000L)
                 showToastIndicator(getString(R.string.pro_sleep_60))
             },
+            PremiumMenuItem("📺", getString(R.string.cast_screen_title), getString(R.string.cast_screen_wireless_sub), true) {
+                playerMenuBackStack.addLast { showMoreProOptionsDialog() }
+                showCastScreenDialog()
+            },
             PremiumMenuItem("🖼️", getString(R.string.pro_pip), "Floating Window") {
                 enterPipModeNow()
             }
@@ -1935,6 +1951,109 @@ class PlayerActivity : AppCompatActivity() {
             )
         }
         showPlayerPremiumMenu("🌈", getString(R.string.pro_hdr_mode), null, items)
+    }
+
+
+    private fun getConnectedExternalDisplayName(): String? {
+        return try {
+            val dm = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager ?: return null
+            val presentationDisplays = dm.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
+            if (!presentationDisplays.isNullOrEmpty()) {
+                presentationDisplays.first().name
+            } else if (dm.displays.size > 1) {
+                dm.displays.firstOrNull { it.displayId != android.view.Display.DEFAULT_DISPLAY }?.name
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun launchWirelessDisplaySettings(enterPipFirst: Boolean) {
+        if (enterPipFirst && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            enterPipModeNow()
+        }
+        Toast.makeText(this, getString(R.string.cast_opening_settings_toast), Toast.LENGTH_LONG).show()
+        val candidateActions = listOf(
+            Settings.ACTION_CAST_SETTINGS,
+            "android.settings.WIFI_DISPLAY_SETTINGS",
+            "android.settings.CAST_SETTINGS",
+            "com.samsung.wfd.LAUNCH_WFD_PICKER_DLG",
+            Settings.ACTION_WIFI_SETTINGS
+        )
+        for (action in candidateActions) {
+            try {
+                val intent = Intent(action).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(intent)
+                return
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun beamVideoToExternalCastApp() {
+        val uri = currentVideoUri ?: return
+        try {
+            val sendIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "video/*")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                putExtra("title", currentVideoTitle)
+            }
+            startActivity(Intent.createChooser(sendIntent, getString(R.string.cast_screen_title)))
+        } catch (_: Exception) {
+            launchWirelessDisplaySettings(enterPipFirst = false)
+        }
+    }
+
+    private fun showCastScreenDialog() {
+        val connectedName = getConnectedExternalDisplayName()
+        val accent = PlaybackStore.getAccentColor(this)
+        binding.btnCastScreen.imageTintList = ColorStateList.valueOf(
+            if (connectedName != null) accent else Color.WHITE
+        )
+
+        val statusSub = if (connectedName != null) {
+            "🟢 " + getString(R.string.cast_status_connected, connectedName)
+        } else {
+            getString(R.string.cast_status_ready)
+        }
+
+        val items = listOf(
+            PremiumMenuItem(
+                iconEmoji = "📺",
+                title = getString(R.string.cast_screen_wireless_title),
+                subtitle = getString(R.string.cast_screen_wireless_sub),
+                isAccentHighlighted = true,
+                onClick = {
+                    launchWirelessDisplaySettings(enterPipFirst = false)
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🖼️",
+                title = getString(R.string.cast_screen_pip_mirror_title),
+                subtitle = getString(R.string.cast_screen_pip_mirror_sub),
+                onClick = {
+                    launchWirelessDisplaySettings(enterPipFirst = true)
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "📡",
+                title = getString(R.string.cast_screen_dlna_title),
+                subtitle = getString(R.string.cast_screen_dlna_sub),
+                onClick = {
+                    beamVideoToExternalCastApp()
+                }
+            )
+        )
+
+        showPlayerPremiumMenu(
+            headerIcon = "📺",
+            title = getString(R.string.cast_screen_title),
+            subtitle = statusSub,
+            items = items
+        )
     }
 
     private fun enterPipModeNow() {

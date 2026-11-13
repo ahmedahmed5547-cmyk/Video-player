@@ -314,7 +314,7 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="iptv_fav_remove_option">Remove from Favorites 💔</string>
     <string name="iptv_last_watched_ep_badge">Last watched: %1$s</string>
     <string name="settings_hub_privacy_title">Privacy &amp; Folders</string>
-    <string name="settings_hub_appearance_title">Appearance, Layout &amp; Language</string>
+    <string name="settings_hub_appearance_title">Appearance, Theme &amp; Language</string>
     <string name="settings_hub_subtitles_playback_title">Subtitles &amp; Playback</string>
     <string name="settings_hub_updates_title">Updates &amp; GitHub Sync</string>
     <string name="settings_hub_about_title">About App</string>
@@ -334,4 +334,14 @@ Any series, movie, or channel you play will appear here automatically so you can
 • Added 280ms debounced instant search in Arabic &amp; English.</string>
     <string name="changelog_v28_0_desc">• Added bottom Private Vault tab with AndroidKeyStore Biometric &amp; PIN lock.
 • Added 2-Column Grid / List layout toggle, 7 Sort modes, and NEW video badges.</string>
+    <string name="cast_screen_title">Cast Screen to TV</string>
+    <string name="cast_screen_wireless_title">Wireless Screen Mirroring (Smart View / Miracast)</string>
+    <string name="cast_screen_wireless_sub">Connect your phone screen directly to a Smart TV or Chromecast</string>
+    <string name="cast_screen_pip_mirror_title">Cast Screen + Floating Player (PiP)</string>
+    <string name="cast_screen_pip_mirror_sub">Keep video playing in floating window while selecting your TV</string>
+    <string name="cast_screen_dlna_title">Beam Video to External TV Receiver (DLNA / Cast App)</string>
+    <string name="cast_screen_dlna_sub">Send current video or stream to Web Video Cast, LocalCast, or SmartThings</string>
+    <string name="cast_status_connected">Connected to External Display: %1$s</string>
+    <string name="cast_status_ready">Select how you want to cast to your TV</string>
+    <string name="cast_opening_settings_toast">Select your TV from the Wireless Display list</string>
 </resources>

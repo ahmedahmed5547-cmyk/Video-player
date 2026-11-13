@@ -314,7 +314,7 @@
     <string name="iptv_fav_remove_option">إزالة من المفضلة 💔</string>
     <string name="iptv_last_watched_ep_badge">آخر حلقة شاهدتها: %1$s</string>
     <string name="settings_hub_privacy_title">الخصوصية وإدارة المجلدات</string>
-    <string name="settings_hub_appearance_title">المظهر، العرض واللغة</string>
+    <string name="settings_hub_appearance_title">المظهر، الثيم واللغة</string>
     <string name="settings_hub_subtitles_playback_title">الترجمة وإعدادات التشغيل</string>
     <string name="settings_hub_updates_title">التحديثات والمزامنة (GitHub)</string>
     <string name="settings_hub_about_title">حول التطبيق (About)</string>
@@ -334,4 +334,14 @@
 • إضافة البحث اللحظي السريع باللغتين العربية والإنجليزية.</string>
     <string name="changelog_v28_0_desc">• إضافة تبويب الخزنة الخاصة (Private Vault) المحمية بالبصمة والرقم السري.
 • إضافة التبديل بين العرض الشبكي والقائمة (Grid / List) والترتيب الشامل وعلامة NEW.</string>
+    <string name="cast_screen_title">بث الشاشة للتلفزيون (Cast Screen)</string>
+    <string name="cast_screen_wireless_title">بث شاشة الهاتف لاسلكياً (Smart View / Cast)</string>
+    <string name="cast_screen_wireless_sub">ربط شاشة الهاتف مباشرة بالتلفزيون الذكي أو Chromecast</string>
+    <string name="cast_screen_pip_mirror_title">فتح إعدادات البث مع استمرار الفيديو العائم (PiP)</string>
+    <string name="cast_screen_pip_mirror_sub">يبقي الفيديو شغالاً أثناء اختيار شاشة التلفزيون</string>
+    <string name="cast_screen_dlna_title">إرسال الفيديو لتطبيق بث خارجي (DLNA / Web Video Cast)</string>
+    <string name="cast_screen_dlna_sub">إرسال الفيديو أو البث مباشرة إلى تطبيقات التلفزيون</string>
+    <string name="cast_status_connected">متصل حالياً بشاشة خارجية: %1$s</string>
+    <string name="cast_status_ready">اختر طريقة بث الفيديو إلى شاشة التلفزيون</string>
+    <string name="cast_opening_settings_toast">اختر شاشة التلفزيون من قائمة البث اللاسلكي</string>
 </resources>

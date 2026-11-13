@@ -187,7 +187,8 @@ data class PremiumMenuItem(
     val isAccentHighlighted: Boolean = false,
     val isDanger: Boolean = false,
     val sectionHeader: String? = null,
-    val onClick: () -> Unit
+    val isInteractive: Boolean = true,
+    val onClick: () -> Unit = {}
 )
 
 class MainActivity : AppCompatActivity() {
@@ -792,26 +793,29 @@ class MainActivity : AppCompatActivity() {
                 textSize = 22f
                 setTypeface(typeface, Typeface.BOLD)
                 setPadding(dp(8), 0, dp(2), 0)
+                visibility = if (item.isInteractive) View.VISIBLE else View.GONE
             }
 
             rowCard.addView(iconBadge)
             rowCard.addView(textCol)
             rowCard.addView(tvArrow)
 
-            rowCard.setOnTouchListener { v, event ->
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> v.animate().scaleX(0.96f).scaleY(0.96f).setDuration(85L).start()
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> v.animate().scaleX(1f).scaleY(1f).setDuration(150L).setInterpolator(OvershootInterpolator(1.3f)).start()
+            if (item.isInteractive) {
+                rowCard.setOnTouchListener { v, event ->
+                    when (event.actionMasked) {
+                        MotionEvent.ACTION_DOWN -> v.animate().scaleX(0.96f).scaleY(0.96f).setDuration(85L).start()
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> v.animate().scaleX(1f).scaleY(1f).setDuration(150L).setInterpolator(OvershootInterpolator(1.3f)).start()
+                    }
+                    false
                 }
-                false
-            }
 
-            rowCard.setOnClickListener {
-                val tokenBefore = fullScreenMenuRenderToken
-                val stackBefore = settingsBackStack.size
-                item.onClick()
-                if (fullScreenMenuRenderToken == tokenBefore && settingsBackStack.size <= stackBefore && settingsBackStack.isEmpty()) {
-                    closeActiveFullScreenDialogSmoothly()
+                rowCard.setOnClickListener {
+                    val tokenBefore = fullScreenMenuRenderToken
+                    val stackBefore = settingsBackStack.size
+                    item.onClick()
+                    if (fullScreenMenuRenderToken == tokenBefore && settingsBackStack.size <= stackBefore && settingsBackStack.isEmpty()) {
+                        closeActiveFullScreenDialogSmoothly()
+                    }
                 }
             }
 
@@ -2133,7 +2137,7 @@ class MainActivity : AppCompatActivity() {
                 PremiumMenuItem("📐", getString(R.string.video_detail_resolution, enrichedVideo.getResolutionLabel()), "$sizeFormatted • $durationFormatted") {
                     handleVideoSelection(enrichedVideo.uri, enrichedVideo.title)
                 },
-                PremiumMenuItem("📍", getString(R.string.video_detail_path, displayPath), null) {},
+                PremiumMenuItem("📍", getString(R.string.video_detail_path, displayPath), null, isInteractive = false),
                 PremiumMenuItem("🗑️", getString(R.string.video_menu_delete), getString(R.string.delete_action), isDanger = true) {
                     confirmAndDeleteVideo(enrichedVideo)
                 }
@@ -3041,7 +3045,12 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.theme_violet)
         )
         val currentThemeName = themeNames[PlaybackStore.getThemeIndex(this).coerceIn(0, themeNames.size - 1)]
-        val layoutSub = if (PlaybackStore.isGridLayoutEnabled(this)) getString(R.string.layout_mode_grid) else getString(R.string.layout_mode_list)
+        val langTag = PlaybackStore.getAppLanguageTag(this)
+        val langSub = when (langTag) {
+            "ar" -> getString(R.string.lang_arabic)
+            "en" -> getString(R.string.lang_english)
+            else -> getString(R.string.lang_system_default)
+        }
         val subLangs = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(" → ") { it.uppercase() }
 
         val items = listOf(
@@ -3058,7 +3067,7 @@ class MainActivity : AppCompatActivity() {
             PremiumMenuItem(
                 iconEmoji = "🎨",
                 title = getString(R.string.settings_hub_appearance_title),
-                subtitle = "$currentThemeName • $layoutSub",
+                subtitle = "$currentThemeName • $langSub",
                 onClick = {
                     pushSettingsBackStack { showProSettingsDialog(false) }
                     showSettingsAppearanceDisplayPage()
@@ -3174,7 +3183,6 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.theme_violet)
         )
         val currentThemeName = themeNames[PlaybackStore.getThemeIndex(this).coerceIn(0, themeNames.size - 1)]
-        val layoutSub = if (PlaybackStore.isGridLayoutEnabled(this)) getString(R.string.layout_mode_grid) else getString(R.string.layout_mode_list)
         val orientIdx = PlaybackStore.getDefaultOrientationIndex(this)
         val orientSub = when (orientIdx) {
             0 -> getString(R.string.orientation_auto)
@@ -3184,19 +3192,10 @@ class MainActivity : AppCompatActivity() {
 
         val items = listOf(
             PremiumMenuItem(
-                iconEmoji = "📐",
-                title = getString(R.string.sort_and_layout_title),
-                subtitle = layoutSub,
-                isAccentHighlighted = true,
-                onClick = {
-                    pushSettingsBackStack { showSettingsAppearanceDisplayPage() }
-                    showSortAndLayoutDialog()
-                }
-            ),
-            PremiumMenuItem(
                 iconEmoji = "🎨",
                 title = getString(R.string.setting_app_theme),
                 subtitle = currentThemeName,
+                isAccentHighlighted = true,
                 onClick = {
                     pushSettingsBackStack { showSettingsAppearanceDisplayPage() }
                     showThemeSelectorDialog()
@@ -3267,7 +3266,6 @@ class MainActivity : AppCompatActivity() {
                 onClick = {
                     PlaybackStore.resetSubPosition(this)
                     Toast.makeText(this, getString(R.string.sub_position_reset_toast), Toast.LENGTH_SHORT).show()
-                    showSettingsSubtitlesPlaybackPage()
                 }
             ),
             PremiumMenuItem(
@@ -3293,32 +3291,28 @@ class MainActivity : AppCompatActivity() {
         val verName = BuildConfig.VERSION_NAME
         val items = listOf(
             PremiumMenuItem(
-                iconEmoji = "👨‍💻",
-                title = getString(R.string.about_developer_label),
-                subtitle = "Ahmed M Moumen",
+                iconEmoji = "📋",
+                title = getString(R.string.about_changelog_title),
+                subtitle = getString(R.string.about_changelog_sub, verName),
                 isAccentHighlighted = true,
+                isInteractive = true,
                 onClick = {
-                    Toast.makeText(this, "Developed by Ahmed M Moumen ✨", Toast.LENGTH_SHORT).show()
-                    showAboutAppPage()
+                    pushSettingsBackStack { showAboutAppPage() }
+                    showChangelogPage()
                 }
             ),
             PremiumMenuItem(
                 iconEmoji = "🏷️",
                 title = getString(R.string.about_version_label),
                 subtitle = "Pure Video Player v$verName (64-bit LibVLC Cinema Engine)",
-                onClick = {
-                    showAboutAppPage()
-                }
+                isInteractive = false
             ),
             PremiumMenuItem(
-                iconEmoji = "📋",
-                title = getString(R.string.about_changelog_title),
-                subtitle = getString(R.string.about_changelog_sub, verName),
+                iconEmoji = "👨‍💻",
+                title = getString(R.string.about_developer_label),
+                subtitle = "Ahmed M Moumen",
                 isAccentHighlighted = true,
-                onClick = {
-                    pushSettingsBackStack { showAboutAppPage() }
-                    showChangelogPage()
-                }
+                isInteractive = false
             )
         )
 
@@ -3335,34 +3329,34 @@ class MainActivity : AppCompatActivity() {
         val items = listOf(
             PremiumMenuItem(
                 iconEmoji = "✨",
-                title = "v$verName — Performance & Stability Improvements",
+                title = "v$verName — Cast Screen & Performance Improvements",
                 subtitle = getString(R.string.changelog_v36_2_desc),
                 isAccentHighlighted = true,
-                onClick = { showChangelogPage() }
+                isInteractive = false
             ),
             PremiumMenuItem(
                 iconEmoji = "🎨",
                 title = "v36.1 — Categorized Settings & Fluid Theme Studio",
                 subtitle = getString(R.string.changelog_v36_1_desc),
-                onClick = { showChangelogPage() }
+                isInteractive = false
             ),
             PremiumMenuItem(
                 iconEmoji = "❤️",
                 title = "v34.0 — IPTV Favorites, Watch History & Back-Swipe",
                 subtitle = getString(R.string.changelog_v34_0_desc),
-                onClick = { showChangelogPage() }
+                isInteractive = false
             ),
             PremiumMenuItem(
                 iconEmoji = "📺",
                 title = "v30.0 — Integrated IPTV Hub (Xtream Codes & M3U)",
                 subtitle = getString(R.string.changelog_v30_0_desc),
-                onClick = { showChangelogPage() }
+                isInteractive = false
             ),
             PremiumMenuItem(
                 iconEmoji = "🛡️",
                 title = "v28.0 — Private Vault, Grid/List Layout & Smart Sort",
                 subtitle = getString(R.string.changelog_v28_0_desc),
-                onClick = { showChangelogPage() }
+                isInteractive = false
             )
         )
 
@@ -5395,7 +5389,7 @@ class MainActivity : AppCompatActivity() {
                     iconEmoji = "📝",
                     title = getString(R.string.iptv_movie_story_label),
                     subtitle = movie.plot,
-                    onClick = {}
+                    isInteractive = false
                 )
             )
         }
