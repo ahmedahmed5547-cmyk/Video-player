@@ -224,6 +224,7 @@ class MainActivity : AppCompatActivity() {
     private var activeFullScreenHost: FrameLayout? = null
     private var activeFullScreenCardView: View? = null
     private var fullScreenMenuRenderToken: Int = 0
+    private var isFullScreenDialogClosing: Boolean = false
 
     // Instant Debounced Search StateFlow (280ms debounce + distinctUntilChanged + flatMapLatest)
     private val searchQueryFlow = MutableStateFlow("")
@@ -476,6 +477,7 @@ class MainActivity : AppCompatActivity() {
         val dialog = activeFullScreenDialog
         val cardView = activeFullScreenCardView
         if (dialog == null || !dialog.isShowing) {
+            isFullScreenDialogClosing = false
             activeFullScreenDialog = null
             activeFullScreenHost = null
             activeFullScreenCardView = null
@@ -483,6 +485,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (cardView == null) {
+            isFullScreenDialogClosing = false
             isNavigatingToSubDialog = true
             runCatching { dialog.dismiss() }
             isNavigatingToSubDialog = false
@@ -492,6 +495,8 @@ class MainActivity : AppCompatActivity() {
             onFinished()
             return
         }
+        val closeToken = fullScreenMenuRenderToken
+        isFullScreenDialogClosing = true
         cardView.animate().cancel()
         cardView.animate()
             .alpha(0f)
@@ -501,6 +506,10 @@ class MainActivity : AppCompatActivity() {
             .setDuration(135L)
             .setInterpolator(DecelerateInterpolator())
             .withEndAction {
+                if (!isFullScreenDialogClosing || fullScreenMenuRenderToken != closeToken) {
+                    return@withEndAction
+                }
+                isFullScreenDialogClosing = false
                 isNavigatingToSubDialog = true
                 if (dialog.isShowing) {
                     runCatching { dialog.dismiss() }
@@ -531,6 +540,8 @@ class MainActivity : AppCompatActivity() {
         animatedRows: List<View>,
         surfaceColor: Int
     ) {
+        activeFullScreenCardView?.animate()?.cancel()
+        isFullScreenDialogClosing = false
         fullScreenMenuRenderToken++
         activeFullScreenCardView = cardContainer
 
@@ -1120,6 +1131,7 @@ class MainActivity : AppCompatActivity() {
      * Dedicated strictly to locking/unlocking the folder with Password & Fingerprint + Changing Password.
      */
     private fun showFolderLockMenu(folder: VideoFolder) {
+        settingsBackStack.clear()
         val isLocked = PlaybackStore.isFolderLocked(this, folder.name)
         val statusSubtitle = if (isLocked) {
             getString(R.string.folder_locked_badge, folder.videos.size)
@@ -2067,6 +2079,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showVideoLongPressMenu(video: VideoItem) {
+        settingsBackStack.clear()
         val sizeMb = String.format(Locale.US, "%.1f MB", video.size / (1024.0 * 1024.0))
         val items = listOf(
             PremiumMenuItem(
@@ -2080,7 +2093,10 @@ class MainActivity : AppCompatActivity() {
                 iconEmoji = "ℹ️",
                 title = getString(R.string.video_menu_details),
                 subtitle = video.getResolutionLabel(),
-                onClick = { showVideoDetailsDialog(video) }
+                onClick = {
+                    pushSettingsBackStack { showVideoLongPressMenu(video) }
+                    showVideoDetailsDialog(video)
+                }
             ),
             PremiumMenuItem(
                 iconEmoji = "🗑️",
@@ -2132,13 +2148,16 @@ class MainActivity : AppCompatActivity() {
 
             val items = listOf(
                 PremiumMenuItem("🎬", getString(R.string.video_detail_name, enrichedVideo.title), enrichedVideo.folderName, true) {
+                    settingsBackStack.clear()
                     handleVideoSelection(enrichedVideo.uri, enrichedVideo.title)
                 },
                 PremiumMenuItem("📐", getString(R.string.video_detail_resolution, enrichedVideo.getResolutionLabel()), "$sizeFormatted • $durationFormatted") {
+                    settingsBackStack.clear()
                     handleVideoSelection(enrichedVideo.uri, enrichedVideo.title)
                 },
                 PremiumMenuItem("📍", getString(R.string.video_detail_path, displayPath), null, isInteractive = false),
                 PremiumMenuItem("🗑️", getString(R.string.video_menu_delete), getString(R.string.delete_action), isDanger = true) {
+                    settingsBackStack.clear()
                     confirmAndDeleteVideo(enrichedVideo)
                 }
             )
@@ -4815,6 +4834,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             is IptvStreamItem -> {
+                settingsBackStack.clear()
                 // Long press on a Series, Movie, or Channel allows quick Favorite toggle or Category Reclassification!
                 val isFav = IptvRepository.isFavoriteStream(this, item.sourceId, item.id)
                 val favTitle = if (isFav) getString(R.string.iptv_fav_remove_option) else getString(R.string.iptv_fav_add_option)
@@ -5204,6 +5224,8 @@ class MainActivity : AppCompatActivity() {
         username: String = "",
         passwordPlain: String = ""
     ) {
+        settingsBackStack.clear()
+        closeActiveFullScreenDialogSmoothly()
         iptvSyncJob?.cancel()
         binding.iptvLoadingOverlay.visibility = View.VISIBLE
         binding.tvIptvLoadingStatus.text = getString(R.string.iptv_loading_data)
@@ -5380,6 +5402,7 @@ class MainActivity : AppCompatActivity() {
                     val msgRes = if (nowFav) R.string.iptv_fav_added_toast else R.string.iptv_fav_removed_toast
                     Toast.makeText(this, getString(msgRes, movie.title), Toast.LENGTH_SHORT).show()
                     renderIptvCurrentLevel()
+                    showIptvMovieDetailsDialog(movie)
                 }
             )
         )
@@ -5492,6 +5515,7 @@ class MainActivity : AppCompatActivity() {
                     IptvRepository.setCategoryOverride(this, src.id, categoryName, targetType)
                     activeIptvSource = IptvRepository.getSources(this).find { it.id == src.id }
                     Toast.makeText(this, "✅ $categoryName → $label", Toast.LENGTH_SHORT).show()
+                    settingsBackStack.clear()
                     renderIptvCurrentLevel()
                 }
             )

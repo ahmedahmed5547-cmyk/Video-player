@@ -1236,6 +1236,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         binding.btnSpeed.setOnClickListener {
+            playerMenuBackStack.clear()
             showSpeedDialog()
         }
 
@@ -1245,6 +1246,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         binding.btnAudioTrack.setOnClickListener {
+            playerMenuBackStack.clear()
             showAudioTracksDialog()
         }
 
@@ -1945,6 +1947,7 @@ class PlayerActivity : AppCompatActivity() {
                 subtitle = sub,
                 isAccentHighlighted = (idx == current),
                 onClick = {
+                    playerMenuBackStack.clear()
                     PlaybackStore.setHdrModeIndex(this, idx)
                     showToastIndicator("$emoji $title")
                 }
@@ -2027,6 +2030,7 @@ class PlayerActivity : AppCompatActivity() {
                 subtitle = getString(R.string.cast_screen_wireless_sub),
                 isAccentHighlighted = true,
                 onClick = {
+                    playerMenuBackStack.clear()
                     launchWirelessDisplaySettings(enterPipFirst = false)
                 }
             ),
@@ -2035,6 +2039,7 @@ class PlayerActivity : AppCompatActivity() {
                 title = getString(R.string.cast_screen_pip_mirror_title),
                 subtitle = getString(R.string.cast_screen_pip_mirror_sub),
                 onClick = {
+                    playerMenuBackStack.clear()
                     launchWirelessDisplaySettings(enterPipFirst = true)
                 }
             ),
@@ -2043,6 +2048,7 @@ class PlayerActivity : AppCompatActivity() {
                 title = getString(R.string.cast_screen_dlna_title),
                 subtitle = getString(R.string.cast_screen_dlna_sub),
                 onClick = {
+                    playerMenuBackStack.clear()
                     beamVideoToExternalCastApp()
                 }
             )
