@@ -11,4 +11,4 @@
 
 ## 👨‍💻 Developer
 - **Ahmed M Moumen**
-- **Current Version**: `v37.0`
+- **Current Version**: `v37.1`

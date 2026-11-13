@@ -44,7 +44,7 @@
             android:maxLines="1"
             android:text="@string/folders_title"
             android:textAlignment="viewStart"
-            android:textColor="#FFFFFF"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="18sp"
             android:textStyle="bold" />
 

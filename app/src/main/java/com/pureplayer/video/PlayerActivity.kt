@@ -341,6 +341,9 @@ class PlayerActivity : AppCompatActivity() {
         val accent = PlaybackStore.getAccentColor(this)
         val surface = PlaybackStore.getSurfaceColor(this)
         val bg = PlaybackStore.getBackgroundColor(this)
+        val isLight = PlaybackStore.isLightThemeActive(this)
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
+        val secondaryText = PlaybackStore.getSecondaryTextColor(this)
 
         val outerScroll = ScrollView(this).apply {
             isVerticalScrollBarEnabled = false
@@ -353,7 +356,7 @@ class PlayerActivity : AppCompatActivity() {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = dp(28).toFloat()
                 setColor(surface)
-                setStroke(dp(1), Color.argb(105, Color.red(accent), Color.green(accent), Color.blue(accent)))
+                setStroke(dp(1), Color.argb(115, Color.red(accent), Color.green(accent), Color.blue(accent)))
             }
         }
         outerScroll.addView(cardContainer)
@@ -398,7 +401,7 @@ class PlayerActivity : AppCompatActivity() {
 
         val tvTitle = TextView(this).apply {
             text = title
-            setTextColor(Color.WHITE)
+            setTextColor(primaryText)
             textSize = 17f
             setTypeface(typeface, Typeface.BOLD)
             maxLines = 1
@@ -423,7 +426,7 @@ class PlayerActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
                 bottomMargin = dp(10)
             }
-            setBackgroundColor(Color.parseColor("#22FFFFFF"))
+            setBackgroundColor(if (isLight) Color.parseColor("#CBD5E1") else Color.parseColor("#22FFFFFF"))
         }
         cardContainer.addView(divider)
 
@@ -454,8 +457,8 @@ class PlayerActivity : AppCompatActivity() {
                 }
                 val strokeC = when {
                     item.isDanger -> Color.parseColor("#55F43F5E")
-                    item.isAccentHighlighted -> Color.argb(130, Color.red(accent), Color.green(accent), Color.blue(accent))
-                    else -> Color.parseColor("#1FFFFFFF")
+                    item.isAccentHighlighted -> Color.argb(145, Color.red(accent), Color.green(accent), Color.blue(accent))
+                    else -> if (isLight) Color.parseColor("#CBD5E1") else Color.parseColor("#1FFFFFFF")
                 }
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
@@ -491,7 +494,7 @@ class PlayerActivity : AppCompatActivity() {
 
             val tvItemTitle = TextView(this).apply {
                 text = item.title
-                setTextColor(if (item.isDanger) Color.parseColor("#FDA4AF") else Color.WHITE)
+                setTextColor(if (item.isDanger) Color.parseColor("#E11D48") else primaryText)
                 textSize = 14.5f
                 setTypeface(typeface, Typeface.BOLD)
             }
@@ -500,7 +503,7 @@ class PlayerActivity : AppCompatActivity() {
             if (!item.subtitle.isNullOrBlank()) {
                 val tvItemSub = TextView(this).apply {
                     text = item.subtitle
-                    setTextColor(if (item.isAccentHighlighted) accent else Color.parseColor("#94A3B8"))
+                    setTextColor(if (item.isAccentHighlighted) accent else secondaryText)
                     textSize = 11.5f
                     setPadding(0, dp(2), 0, 0)
                 }
@@ -541,7 +544,7 @@ class PlayerActivity : AppCompatActivity() {
         val btnClose = TextView(this).apply {
             text = getString(R.string.close)
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#CBD5E1"))
+            setTextColor(primaryText)
             textSize = 14f
             setTypeface(typeface, Typeface.BOLD)
             setPadding(0, dp(10), 0, dp(10))
@@ -553,7 +556,7 @@ class PlayerActivity : AppCompatActivity() {
             }
             background = GradientDrawable().apply {
                 cornerRadius = dp(13).toFloat()
-                setColor(Color.parseColor("#18FFFFFF"))
+                setColor(if (isLight) Color.parseColor("#E2E8F0") else Color.parseColor("#18FFFFFF"))
             }
             setOnClickListener {
                 dialog.dismiss()
@@ -1787,9 +1790,11 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
 
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
+        val secondaryText = PlaybackStore.getSecondaryTextColor(this)
         val tvTitle = TextView(this).apply {
             text = "🔍  ${getString(R.string.sub_menu_web_search)}"
-            setTextColor(Color.WHITE)
+            setTextColor(primaryText)
             textSize = 17f
             setTypeface(typeface, Typeface.BOLD)
             setPadding(0, 0, 0, dp(12))
@@ -1797,8 +1802,8 @@ class PlayerActivity : AppCompatActivity() {
 
         val input = EditText(this).apply {
             setText(defaultClean)
-            setTextColor(Color.WHITE)
-            setHintTextColor(Color.parseColor("#64748B"))
+            setTextColor(primaryText)
+            setHintTextColor(secondaryText)
             setPadding(dp(16), dp(14), dp(16), dp(14))
             setSingleLine(true)
             background = GradientDrawable().apply {
@@ -1988,10 +1993,16 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showSubtitleLiveStyleDialog() {
-        val scroll = ScrollView(this)
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val accent = PlaybackStore.getAccentColor(this)
+        val scroll = ScrollView(this).apply {
+            setBackgroundColor(surface)
+        }
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 24, 48, 20)
+            setBackgroundColor(surface)
         }
         scroll.addView(container)
 
@@ -2038,6 +2049,7 @@ class PlayerActivity : AppCompatActivity() {
 
         val tvSizeLabel = TextView(this).apply {
             text = getString(R.string.style_size_label, currentSize.toInt())
+            setTextColor(primaryText)
             setPadding(0, 12, 0, 4)
         }
         val sizeSeek = SeekBar(this).apply {
@@ -2056,6 +2068,7 @@ class PlayerActivity : AppCompatActivity() {
 
         val tvBgOpacityLabel = TextView(this).apply {
             text = getString(R.string.style_bg_opacity_label, currentBgOpacity)
+            setTextColor(primaryText)
             setPadding(0, 12, 0, 4)
         }
         val bgOpacitySeek = SeekBar(this).apply {
@@ -2074,6 +2087,7 @@ class PlayerActivity : AppCompatActivity() {
 
         val tvTextOpacityLabel = TextView(this).apply {
             text = "شفافية نص الترجمة (Text Opacity): $currentTextOpacity%"
+            setTextColor(primaryText)
             setPadding(0, 12, 0, 4)
         }
         val textOpacitySeek = SeekBar(this).apply {
@@ -2092,6 +2106,7 @@ class PlayerActivity : AppCompatActivity() {
 
         val tvOutlineLabel = TextView(this).apply {
             text = getString(R.string.style_outline_label, currentOutline.toInt())
+            setTextColor(primaryText)
             setPadding(0, 12, 0, 4)
         }
         val outlineSeek = SeekBar(this).apply {
@@ -2110,6 +2125,7 @@ class PlayerActivity : AppCompatActivity() {
 
         val tvColorLabel = TextView(this).apply {
             text = getString(R.string.style_color_label)
+            setTextColor(primaryText)
             setPadding(0, 12, 0, 6)
         }
 
@@ -2126,6 +2142,8 @@ class PlayerActivity : AppCompatActivity() {
             val rb = RadioButton(this).apply {
                 id = View.generateViewId()
                 text = label
+                setTextColor(primaryText)
+                buttonTintList = ColorStateList.valueOf(accent)
                 isChecked = (idx == selectedColorIdx)
                 setOnClickListener {
                     selectedColorIdx = idx

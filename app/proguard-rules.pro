@@ -1,13 +1,27 @@
-# Pure Video Player R8 Optimization & Protection Rules
+# Pure Video Player R8 Release Optimization, Log Stripping & Anti-Reverse-Engineering Rules
 -ignorewarnings
 -dontwarn org.videolan.**
+-dontwarn androidx.media3.**
+-dontwarn com.google.android.exoplayer2.**
 -dontwarn kotlinx.coroutines.**
 -dontwarn androidx.**
 -dontwarn com.google.android.material.**
 
-# Keep LibVLC JNI engine classes, interfaces, and native callbacks intact
+# Strip all Debug, Verbose, and Info logs in Release builds for security and smaller APK size
+-assumenosideeffects class android.util.Log {
+    public static boolean isLoggable(java.lang.String, int);
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}
+
+# Keep LibVLC & ExoPlayer/Media3 JNI engine classes, interfaces, and native callbacks intact
 -keep class org.videolan.** { *; }
 -keep interface org.videolan.** { *; }
+-keep class androidx.media3.** { *; }
+-keep interface androidx.media3.** { *; }
+-keep class com.google.android.exoplayer2.** { *; }
+-keep interface com.google.android.exoplayer2.** { *; }
 
 # Keep JNI native methods
 -keepclasseswithmembernames,includedescriptorclasses class * {

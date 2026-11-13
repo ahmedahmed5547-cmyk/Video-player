@@ -922,6 +922,9 @@ class MainActivity : AppCompatActivity() {
         binding.etSearchVideos.setTextColor(primaryText)
         binding.etSearchVideos.setHintTextColor(secondaryText)
         binding.tvIptvStatusSubtitle.setTextColor(secondaryText)
+        binding.tvAddIptvBarLabel.setTextColor(primaryText)
+        binding.btnClearSearch.imageTintList = ColorStateList.valueOf(primaryText)
+        binding.iptvHeaderBar.setBackgroundColor(surface)
 
         runCatching {
             WindowInsetsControllerCompat(window, binding.root).let { controller ->
@@ -1324,8 +1327,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stylePremiumInputBox(editText: EditText, bg: Int, accent: Int) {
-        editText.setTextColor(Color.WHITE)
-        editText.setHintTextColor(Color.parseColor("#64748B"))
+        editText.setTextColor(PlaybackStore.getPrimaryTextColor(this))
+        editText.setHintTextColor(PlaybackStore.getSecondaryTextColor(this))
         editText.background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = dp(14).toFloat()
@@ -1356,7 +1359,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvTitle = TextView(this).apply {
             text = getString(R.string.privacy_unlock_title)
-            setTextColor(Color.WHITE)
+            setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
             textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
         }
@@ -1459,7 +1462,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvTitle = TextView(this).apply {
             text = getString(R.string.privacy_setup_title)
-            setTextColor(Color.WHITE)
+            setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
             textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
         }
@@ -1551,7 +1554,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvTitle = TextView(this).apply {
             text = getString(R.string.privacy_change_pin_title)
-            setTextColor(Color.WHITE)
+            setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
             textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
             setPadding(0, 0, 0, dp(14))
@@ -1662,7 +1665,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvTitle = TextView(this).apply {
             text = getString(R.string.privacy_remove_pin_title)
-            setTextColor(Color.WHITE)
+            setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
             textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
         }
@@ -1705,7 +1708,7 @@ class MainActivity : AppCompatActivity() {
 
         val btnDelete = TextView(this).apply {
             text = getString(R.string.privacy_remove_pin_action)
-            setTextColor(Color.WHITE)
+            setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
             textSize = 14.5f
             setTypeface(typeface, Typeface.BOLD)
             setPadding(dp(20), dp(10), dp(20), dp(10))
@@ -1839,7 +1842,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvTitle = TextView(this).apply {
             text = "$headerIcon  $title"
-            setTextColor(Color.WHITE)
+            setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
             textSize = 17.5f
             setTypeface(typeface, Typeface.BOLD)
         }
@@ -1888,7 +1891,7 @@ class MainActivity : AppCompatActivity() {
 
             val tvName = TextView(this).apply {
                 text = folder.name
-                setTextColor(Color.WHITE)
+                setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
                 textSize = 15f
                 setTypeface(typeface, Typeface.BOLD)
             }
@@ -2301,7 +2304,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvHeader = TextView(this).apply {
             text = "⏱️  " + getString(R.string.resume_dialog_title)
-            setTextColor(Color.WHITE)
+            setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
             textSize = 17.5f
             setTypeface(typeface, Typeface.BOLD)
         }
@@ -2364,7 +2367,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 val t1 = TextView(this@MainActivity).apply {
                     text = mainText
-                    setTextColor(Color.WHITE)
+                    setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
                     textSize = 15f
                     setTypeface(typeface, Typeface.BOLD)
                 }
@@ -3772,10 +3775,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSubtitleStyleDialog() {
-        val scroll = ScrollView(this)
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val accent = PlaybackStore.getAccentColor(this)
+        val scroll = ScrollView(this).apply {
+            setBackgroundColor(surface)
+        }
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 28, 48, 24)
+            setBackgroundColor(surface)
         }
         scroll.addView(container)
 
@@ -3821,6 +3830,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvSizeLabel = TextView(this).apply {
             text = getString(R.string.style_size_label, currentSize.toInt())
+            setTextColor(primaryText)
             setPadding(0, 14, 0, 4)
         }
         val sizeSeek = SeekBar(this).apply {
@@ -3839,6 +3849,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvBgOpacityLabel = TextView(this).apply {
             text = getString(R.string.style_bg_opacity_label, currentBgOpacity)
+            setTextColor(primaryText)
             setPadding(0, 14, 0, 4)
         }
         val bgOpacitySeek = SeekBar(this).apply {
@@ -3857,6 +3868,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvTextOpacityLabel = TextView(this).apply {
             text = "شفافية نص الترجمة (Text Opacity): $currentTextOpacity%"
+            setTextColor(primaryText)
             setPadding(0, 14, 0, 4)
         }
         val textOpacitySeek = SeekBar(this).apply {
@@ -3875,6 +3887,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvOutlineLabel = TextView(this).apply {
             text = getString(R.string.style_outline_label, currentOutline.toInt())
+            setTextColor(primaryText)
             setPadding(0, 14, 0, 4)
         }
         val outlineSeek = SeekBar(this).apply {
@@ -3893,6 +3906,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvColorLabel = TextView(this).apply {
             text = getString(R.string.style_color_label)
+            setTextColor(primaryText)
             setPadding(0, 14, 0, 6)
         }
 
@@ -3909,6 +3923,8 @@ class MainActivity : AppCompatActivity() {
             val rb = RadioButton(this).apply {
                 id = View.generateViewId()
                 text = label
+                setTextColor(primaryText)
+                buttonTintList = ColorStateList.valueOf(accent)
                 isChecked = (idx == selectedColorIdx)
                 setOnClickListener {
                     selectedColorIdx = idx
@@ -4462,7 +4478,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvTitle = TextView(this).apply {
             text = getString(R.string.update_repo_setup_title)
-            setTextColor(Color.WHITE)
+            setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
             textSize = 17.5f
             setTypeface(typeface, Typeface.BOLD)
         }
@@ -4689,7 +4705,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvTitle = TextView(this).apply {
             text = getString(R.string.update_downloading_title)
-            setTextColor(Color.WHITE)
+            setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
             textSize = 17f
             setTypeface(typeface, Typeface.BOLD)
         }
@@ -5341,7 +5357,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvTitle = TextView(this).apply {
             text = "🔗  " + getString(R.string.iptv_add_m3u_url_option)
-            setTextColor(Color.WHITE)
+            setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
             textSize = 17f
             setTypeface(typeface, Typeface.BOLD)
             setPadding(0, 0, 0, dp(12))
@@ -5456,7 +5472,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvTitle = TextView(this).apply {
             text = "📡  " + getString(R.string.iptv_add_xtream_option)
-            setTextColor(Color.WHITE)
+            setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
             textSize = 17f
             setTypeface(typeface, Typeface.BOLD)
             setPadding(0, 0, 0, dp(10))
