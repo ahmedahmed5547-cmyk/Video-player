@@ -185,13 +185,13 @@
     <string name="settings_cat_subtitles">💬 الترجمة والتنسيق</string>
     <string name="settings_cat_updates">🚀 التحديثات المباشرة من GITHUB</string>
     <string name="update_check_option_title">🔄 التحقق من وجود تحديث (Check for Update)</string>
-    <string name="update_check_option_sub">الإصدار الحالي: v%1$d.0 • تنزيل وتثبيت أحدث نسخة من GitHub</string>
+    <string name="update_check_option_sub">الإصدار الحالي: v%1$s • تنزيل وتثبيت أحدث نسخة من GitHub</string>
     <string name="update_repo_setup_title">🚀 ربط مستودع GitHub الخاص بك</string>
     <string name="update_repo_setup_desc">اكتب اسم حسابك والمستودع (مثال: username/Video-player) أو الصق رابط مستودعك في GitHub لمرة واحدة فقط:</string>
     <string name="update_repo_invalid_toast">⚠️ يرجى كتابة اسم الحساب والمستودع بشكل صحيح</string>
     <string name="update_checking_toast">🔍 جاري فحص التحديثات في GitHub (%1$s)...</string>
-    <string name="update_status_new_available">🎉 يتوفر تحديث جديد: v%1$d.0 (النسخة الحالية: v%2$d.0)</string>
-    <string name="update_status_up_to_date">✅ لديك أحدث نسخة مثبتة بالفعل (v%1$d.0)</string>
+    <string name="update_status_new_available">🎉 يتوفر تحديث جديد: v%1$s (النسخة الحالية: v%2$s)</string>
+    <string name="update_status_up_to_date">✅ لديك أحدث نسخة مثبتة بالفعل (v%1$s)</string>
     <string name="update_download_direct_btn">⬇️ تنزيل وتثبيت التحديث مباشرة الآن</string>
     <string name="update_open_actions_btn">🌐 فتح صفحة آخر بناء في GitHub Actions</string>
     <string name="update_change_repo_btn">⚙️ تعديل اسم مستودع GitHub (%1$s)</string>
@@ -296,7 +296,7 @@
     <string name="resume_mode_always_resume">الاستئناف تلقائياً دائماً من حيث توقفت دون سؤال</string>
     <string name="resume_mode_always_restart">البدء من الأول (00:00) تلقائياً دائماً دون سؤال</string>
     <string name="settings_cat_developer">👨‍💻 مطور التطبيق ومعلومات الإصدار</string>
-    <string name="developer_credit_subtitle">مطور التطبيق • النسخة النهائية الاحترافية (v%1$d)</string>
+    <string name="developer_credit_subtitle">مطور التطبيق • النسخة النهائية الاحترافية (v%1$s)</string>
     <string name="iptv_show_password_toggle">إظهار كلمة المرور للتأكد من صحتها</string>
     <string name="press_back_again_to_exit">اسحب للخلف مرة أخرى للخروج من التطبيق</string>
     <string name="iptv_subtab_all">📂 التصنيفات</string>

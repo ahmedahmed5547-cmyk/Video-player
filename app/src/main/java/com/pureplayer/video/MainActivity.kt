@@ -2940,7 +2940,7 @@ class MainActivity : AppCompatActivity() {
             PremiumMenuItem(
                 iconEmoji = "🚀",
                 title = getString(R.string.settings_hub_updates_title),
-                subtitle = "v${BuildConfig.VERSION_CODE} • GitHub Auto-Updater",
+                subtitle = "v${BuildConfig.VERSION_NAME} • GitHub Auto-Updater",
                 onClick = {
                     pushSettingsBackStack { showProSettingsDialog(false) }
                     openGitHubUpdaterFlow()
@@ -2949,7 +2949,7 @@ class MainActivity : AppCompatActivity() {
             PremiumMenuItem(
                 iconEmoji = "👨‍💻",
                 title = "Ahmed M Moumen",
-                subtitle = getString(R.string.developer_credit_subtitle, BuildConfig.VERSION_CODE),
+                subtitle = getString(R.string.developer_credit_subtitle, BuildConfig.VERSION_NAME),
                 isAccentHighlighted = true,
                 onClick = {
                     Toast.makeText(this, "Developed by Ahmed M Moumen ✨", Toast.LENGTH_SHORT).show()
@@ -4037,17 +4037,23 @@ class MainActivity : AppCompatActivity() {
                     }
                 } catch (_: Exception) {}
 
-                Triple(remoteVersionCode, directApkUrl ?: "https://github.com/$repoSlug/releases/latest/download/PureVideoPlayer.apk", latestActionsUrl)
+                Pair(
+                    Pair(remoteVersionCode, remoteVersionName.ifBlank { "$remoteVersionCode.0" }),
+                    Pair(directApkUrl ?: "https://github.com/$repoSlug/releases/latest/download/PureVideoPlayer.apk", latestActionsUrl)
+                )
             }
 
             if (isFinishing || isDestroyed) return@launch
-            val (remoteCode, apkDownloadUrl, actionsRunUrl) = result
+            val (versionPair, urlPair) = result
+            val (remoteCode, remoteName) = versionPair
+            val (apkDownloadUrl, actionsRunUrl) = urlPair
             val currentCode = BuildConfig.VERSION_CODE
+            val currentName = BuildConfig.VERSION_NAME
 
             val statusSubtitle = when {
-                remoteCode > currentCode -> getString(R.string.update_status_new_available, remoteCode, currentCode)
-                remoteCode == currentCode -> getString(R.string.update_status_up_to_date, currentCode)
-                else -> "GitHub: $repoSlug (v$currentCode)"
+                remoteCode > currentCode -> getString(R.string.update_status_new_available, remoteName, currentName)
+                remoteCode == currentCode -> getString(R.string.update_status_up_to_date, currentName)
+                else -> "GitHub: $repoSlug (v$currentName)"
             }
 
             val items = listOf(
