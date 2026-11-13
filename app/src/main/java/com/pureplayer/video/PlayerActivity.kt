@@ -517,7 +517,20 @@ class PlayerActivity : AppCompatActivity() {
             popPlayerMenuBackStack()
         }
 
+        dialog.window?.setDimAmount(0.58f)
         dialog.show()
+        cardContainer.alpha = 0f
+        cardContainer.translationY = dp(24).toFloat()
+        cardContainer.scaleX = 0.94f
+        cardContainer.scaleY = 0.94f
+        cardContainer.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(220L)
+            .setInterpolator(DecelerateInterpolator(1.6f))
+            .start()
     }
 
     /**

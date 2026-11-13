@@ -1,5 +1,9 @@
 package com.pureplayer.video
 
+import android.animation.ArgbEvaluator
+import android.animation.ValueAnimator
+import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.Manifest
 import android.app.Activity
 import android.app.RecoverableSecurityException
@@ -230,6 +234,9 @@ class MainActivity : AppCompatActivity() {
     // 0 = All / Categories, 1 = Favorites ❤️, 2 = Continue Watching / History ⏱️
     private var iptvSectionSubTab = 0
     private var lastBackExitPressMs = 0L
+    private var currentAnimatedBgColor = Color.parseColor("#090D16")
+    private var currentAnimatedSurfaceColor = Color.parseColor("#131C2E")
+    private var currentAnimatedAccentColor = Color.parseColor("#38BDF8")
 
     // Supports Android 14+ "Allow Limited Access" (READ_MEDIA_VISUAL_USER_SELECTED) as well as Full Access!
     private val multiPermissionLauncher = registerForActivityResult(
@@ -411,6 +418,56 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun animateDialogCardEntrance(cardView: View, staggeredRows: List<View> = emptyList()) {
+        cardView.alpha = 0f
+        cardView.translationY = dp(26).toFloat()
+        cardView.scaleX = 0.94f
+        cardView.scaleY = 0.94f
+        cardView.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(240L)
+            .setInterpolator(DecelerateInterpolator(1.7f))
+            .start()
+
+        val rowInterp = DecelerateInterpolator(1.5f)
+        staggeredRows.forEachIndexed { idx, row ->
+            row.alpha = 0f
+            row.translationY = dp(14).toFloat()
+            row.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setStartDelay((idx.coerceAtMost(10) * 22L) + 45L)
+                .setDuration(210L)
+                .setInterpolator(rowInterp)
+                .start()
+        }
+    }
+
+    private fun dismissDialogSmoothly(dialog: AlertDialog, cardView: View, onFinished: () -> Unit = {}) {
+        cardView.animate().cancel()
+        cardView.animate()
+            .alpha(0f)
+            .translationY(dp(18).toFloat())
+            .scaleX(0.95f)
+            .scaleY(0.95f)
+            .setDuration(135L)
+            .setInterpolator(DecelerateInterpolator())
+            .withEndAction {
+                if (dialog.isShowing) {
+                    dialog.dismiss()
+                }
+                onFinished()
+            }
+            .start()
+    }
+
+    /**
+     * Premium UI Engine: Builds a sleek, floating, theme-harmonious card popup dialog
+     * with fluid spring entrance, staggered row cascade, and smooth exit transitions!
+     */
     private fun showPremiumMenuDialog(
         headerIcon: String,
         title: String,
@@ -437,7 +494,6 @@ class MainActivity : AppCompatActivity() {
         }
         outerScroll.addView(cardContainer)
 
-        // Glowing top drag/accent pill
         val topPill = View(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(44), dp(4)).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
@@ -450,7 +506,6 @@ class MainActivity : AppCompatActivity() {
         }
         cardContainer.addView(topPill)
 
-        // Header Row (Icon Badge + Title & Subtitle)
         val headerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -500,7 +555,6 @@ class MainActivity : AppCompatActivity() {
         headerRow.addView(headerTextCol)
         cardContainer.addView(headerRow)
 
-        // Subtle Divider
         val divider = View(this).apply {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
                 bottomMargin = dp(12)
@@ -514,8 +568,10 @@ class MainActivity : AppCompatActivity() {
             .create()
 
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.setDimAmount(0.62f)
 
-        // Add each option as a sleek interactive mini-card (with optional organized category header)
+        val animatedRows = mutableListOf<View>()
+
         for (item in items) {
             if (!item.sectionHeader.isNullOrBlank()) {
                 val tvSec = TextView(this).apply {
@@ -526,6 +582,7 @@ class MainActivity : AppCompatActivity() {
                     setPadding(dp(6), dp(10), dp(6), dp(6))
                 }
                 cardContainer.addView(tvSec)
+                animatedRows.add(tvSec)
             }
             val rowCard = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -606,23 +663,24 @@ class MainActivity : AppCompatActivity() {
 
             rowCard.setOnTouchListener { v, event ->
                 when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> v.animate().scaleX(0.97f).scaleY(0.97f).setDuration(90L).start()
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> v.animate().scaleX(1f).scaleY(1f).setDuration(140L).start()
+                    MotionEvent.ACTION_DOWN -> v.animate().scaleX(0.96f).scaleY(0.96f).setDuration(85L).start()
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> v.animate().scaleX(1f).scaleY(1f).setDuration(150L).setInterpolator(OvershootInterpolator(1.3f)).start()
                 }
                 false
             }
 
             rowCard.setOnClickListener {
                 isNavigatingToSubDialog = true
-                dialog.dismiss()
-                isNavigatingToSubDialog = false
-                item.onClick()
+                dismissDialogSmoothly(dialog, cardContainer) {
+                    isNavigatingToSubDialog = false
+                    item.onClick()
+                }
             }
 
             cardContainer.addView(rowCard)
+            animatedRows.add(rowCard)
         }
 
-        // Sleek Back / Close Button at bottom (returns to parent Settings menu if in sub-setting!)
         val hasParentInStack = settingsBackStack.isNotEmpty()
         val btnClose = TextView(this).apply {
             text = if (hasParentInStack) getString(R.string.back_to_previous_menu) else getString(R.string.close)
@@ -643,9 +701,10 @@ class MainActivity : AppCompatActivity() {
             }
             setOnClickListener {
                 isNavigatingToSubDialog = true
-                dialog.dismiss()
-                isNavigatingToSubDialog = false
-                popSettingsBackStack()
+                dismissDialogSmoothly(dialog, cardContainer) {
+                    isNavigatingToSubDialog = false
+                    popSettingsBackStack()
+                }
             }
         }
         cardContainer.addView(btnClose)
@@ -657,25 +716,58 @@ class MainActivity : AppCompatActivity() {
         }
 
         dialog.show()
+        animateDialogCardEntrance(cardContainer, animatedRows)
     }
 
-    private fun applyUserTheme() {
+    private fun applyUserTheme(animated: Boolean = false) {
         val accent = PlaybackStore.getAccentColor(this)
         val bg = PlaybackStore.getBackgroundColor(this)
         val surface = PlaybackStore.getSurfaceColor(this)
 
-        binding.mainRoot.setBackgroundColor(bg)
-        binding.topBar.setBackgroundColor(surface)
-        binding.bottomNavBar.setBackgroundColor(surface)
-        binding.searchBarContainer.setBackgroundColor(surface)
-        window.statusBarColor = surface
-        window.navigationBarColor = surface
-        binding.btnTopMenu.imageTintList = ColorStateList.valueOf(accent)
-        binding.btnToggleSearch.imageTintList = ColorStateList.valueOf(accent)
+        if (animated) {
+            val fromBg = currentAnimatedBgColor
+            val fromSurface = currentAnimatedSurfaceColor
+            val fromAccent = currentAnimatedAccentColor
+            val eval = ArgbEvaluator()
+            ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 360L
+                interpolator = DecelerateInterpolator()
+                addUpdateListener { anim ->
+                    val f = anim.animatedFraction
+                    val curBg = eval.evaluate(f, fromBg, bg) as Int
+                    val curSurf = eval.evaluate(f, fromSurface, surface) as Int
+                    val curAcc = eval.evaluate(f, fromAccent, accent) as Int
+                    binding.mainRoot.setBackgroundColor(curBg)
+                    binding.topBar.setBackgroundColor(curSurf)
+                    binding.bottomNavBar.setBackgroundColor(curSurf)
+                    binding.searchBarContainer.setBackgroundColor(curSurf)
+                    window.statusBarColor = curSurf
+                    window.navigationBarColor = curSurf
+                    binding.btnTopMenu.imageTintList = ColorStateList.valueOf(curAcc)
+                    binding.btnToggleSearch.imageTintList = ColorStateList.valueOf(curAcc)
+                    binding.fabResumeLast.backgroundTintList = ColorStateList.valueOf(curAcc)
+                }
+                start()
+            }
+        } else {
+            binding.mainRoot.setBackgroundColor(bg)
+            binding.topBar.setBackgroundColor(surface)
+            binding.bottomNavBar.setBackgroundColor(surface)
+            binding.searchBarContainer.setBackgroundColor(surface)
+            window.statusBarColor = surface
+            window.navigationBarColor = surface
+            binding.btnTopMenu.imageTintList = ColorStateList.valueOf(accent)
+            binding.btnToggleSearch.imageTintList = ColorStateList.valueOf(accent)
+            binding.fabResumeLast.backgroundTintList = ColorStateList.valueOf(accent)
+        }
+
+        currentAnimatedBgColor = bg
+        currentAnimatedSurfaceColor = surface
+        currentAnimatedAccentColor = accent
+
         binding.btnBackFolder.imageTintList = ColorStateList.valueOf(accent)
         binding.ivAddIptvPlus.imageTintList = ColorStateList.valueOf(accent)
         binding.iptvProgressBar.indeterminateTintList = ColorStateList.valueOf(accent)
-        binding.fabResumeLast.backgroundTintList = ColorStateList.valueOf(accent)
         binding.fabResumeLast.imageTintList = ColorStateList.valueOf(Color.parseColor("#090D16"))
 
         val topActionButtons = listOf(
@@ -2258,6 +2350,9 @@ class MainActivity : AppCompatActivity() {
                 else -> false
             }
         }
+        anchor.animate().rotationBy(90f).setDuration(180L).withEndAction {
+            anchor.rotation = 0f
+        }.start()
         popup.show()
     }
 
@@ -2785,6 +2880,11 @@ class MainActivity : AppCompatActivity() {
     /**
      * Premium Settings Menu: Styled with sleek cards, emoji badges, and live status subtitles!
      */
+    /**
+     * Clean, Uncluttered 2-Level Settings Hub:
+     * Root screen shows only 4 clean Category Cards + Developer Credit.
+     * Tapping any category opens its dedicated sub-page with smooth staggered animation & full Back-Stack support!
+     */
     private fun showProSettingsDialog(clearStack: Boolean = false) {
         if (clearStack) {
             settingsBackStack.clear()
@@ -2797,19 +2897,6 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.privacy_settings_status_unset)
         }
 
-        val filterMode = PlaybackStore.getFolderFilterMode(this)
-        val filterSub = when (filterMode) {
-            1 -> getString(R.string.folder_picker_saved_toast, PlaybackStore.getAllowedFolders(this).size)
-            2 -> getString(R.string.folder_mode_all_videos_flat)
-            else -> getString(R.string.folder_mode_all)
-        }
-        val langTag = PlaybackStore.getAppLanguageTag(this)
-        val langSub = when (langTag) {
-            "ar" -> getString(R.string.lang_arabic)
-            "en" -> getString(R.string.lang_english)
-            else -> getString(R.string.lang_system_default)
-        }
-        val subLangs = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(" → ") { it.uppercase() }
         val themeNames = arrayOf(
             getString(R.string.theme_cyber_blue),
             getString(R.string.theme_amoled_gold),
@@ -2818,30 +2905,101 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.theme_violet)
         )
         val currentThemeName = themeNames[PlaybackStore.getThemeIndex(this).coerceIn(0, themeNames.size - 1)]
-        val subSize = PlaybackStore.getSubSizeSp(this).toInt()
-        val subBgOpacity = PlaybackStore.getSubBgOpacityPct(this)
-        val orientIdx = PlaybackStore.getDefaultOrientationIndex(this)
-        val orientSub = when (orientIdx) {
-            0 -> getString(R.string.orientation_auto)
-            2 -> getString(R.string.orientation_portrait)
-            else -> getString(R.string.orientation_landscape)
+        val layoutSub = if (PlaybackStore.isGridLayoutEnabled(this)) getString(R.string.layout_mode_grid) else getString(R.string.layout_mode_list)
+        val subLangs = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(" → ") { it.uppercase() }
+
+        val items = listOf(
+            PremiumMenuItem(
+                iconEmoji = "🛡️",
+                title = getString(R.string.settings_hub_privacy_title),
+                subtitle = privacySub,
+                isAccentHighlighted = true,
+                onClick = {
+                    pushSettingsBackStack { showProSettingsDialog(false) }
+                    showSettingsPrivacyFoldersPage()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🎨",
+                title = getString(R.string.settings_hub_appearance_title),
+                subtitle = "$currentThemeName • $layoutSub",
+                onClick = {
+                    pushSettingsBackStack { showProSettingsDialog(false) }
+                    showSettingsAppearanceDisplayPage()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "💬",
+                title = getString(R.string.settings_hub_subtitles_playback_title),
+                subtitle = subLangs,
+                onClick = {
+                    pushSettingsBackStack { showProSettingsDialog(false) }
+                    showSettingsSubtitlesPlaybackPage()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🚀",
+                title = getString(R.string.settings_hub_updates_title),
+                subtitle = "v${BuildConfig.VERSION_CODE} • GitHub Auto-Updater",
+                onClick = {
+                    pushSettingsBackStack { showProSettingsDialog(false) }
+                    openGitHubUpdaterFlow()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "👨‍💻",
+                title = "Ahmed M Moumen",
+                subtitle = getString(R.string.developer_credit_subtitle, BuildConfig.VERSION_CODE),
+                isAccentHighlighted = true,
+                onClick = {
+                    Toast.makeText(this, "Developed by Ahmed M Moumen ✨", Toast.LENGTH_SHORT).show()
+                    showProSettingsDialog(false)
+                }
+            )
+        )
+
+        showPremiumMenuDialog(
+            headerIcon = "⚙️",
+            title = getString(R.string.settings_header),
+            subtitle = "Pure Video Player Premium",
+            items = items
+        )
+    }
+
+    private fun showSettingsPrivacyFoldersPage() {
+        val hasPin = PlaybackStore.hasPrivacyPin(this)
+        val lockedCount = PlaybackStore.getLockedFolders(this).size
+        val privacySub = if (hasPin) {
+            getString(R.string.privacy_settings_status_active, lockedCount)
+        } else {
+            getString(R.string.privacy_settings_status_unset)
+        }
+        val filterMode = PlaybackStore.getFolderFilterMode(this)
+        val filterSub = when (filterMode) {
+            1 -> getString(R.string.folder_picker_saved_toast, PlaybackStore.getAllowedFolders(this).size)
+            2 -> getString(R.string.folder_mode_all_videos_flat)
+            else -> getString(R.string.folder_mode_all)
         }
 
         val items = mutableListOf(
-            // Category 1: Privacy & Folders
             PremiumMenuItem(
                 iconEmoji = "🔒",
                 title = getString(R.string.setting_privacy_section),
                 subtitle = privacySub,
                 isAccentHighlighted = true,
-                sectionHeader = getString(R.string.settings_cat_privacy_folders),
-                onClick = { pushSettingsBackStack { showProSettingsDialog(false) }; openPrivacyControlSection() }
+                onClick = {
+                    pushSettingsBackStack { showSettingsPrivacyFoldersPage() }
+                    openPrivacyControlSection()
+                }
             ),
             PremiumMenuItem(
                 iconEmoji = "📂",
                 title = getString(R.string.setting_folder_visibility),
                 subtitle = filterSub,
-                onClick = { pushSettingsBackStack { showProSettingsDialog(false) }; showFolderVisibilityModeDialog() }
+                onClick = {
+                    pushSettingsBackStack { showSettingsPrivacyFoldersPage() }
+                    showFolderVisibilityModeDialog()
+                }
             )
         )
 
@@ -2857,109 +3015,140 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        val layoutSub = if (PlaybackStore.isGridLayoutEnabled(this)) getString(R.string.layout_mode_grid) else getString(R.string.layout_mode_list)
-
-        // Category 2: Appearance, Language & Display
-        items.addAll(
-            listOf(
-                PremiumMenuItem(
-                    iconEmoji = "📐",
-                    title = getString(R.string.sort_and_layout_title),
-                    subtitle = layoutSub,
-                    isAccentHighlighted = true,
-                    sectionHeader = getString(R.string.settings_cat_appearance_display),
-                    onClick = { pushSettingsBackStack { showProSettingsDialog(false) }; showSortAndLayoutDialog() }
-                ),
-                PremiumMenuItem(
-                    iconEmoji = "🎨",
-                    title = getString(R.string.setting_app_theme),
-                    subtitle = currentThemeName,
-                    onClick = { pushSettingsBackStack { showProSettingsDialog(false) }; showThemeSelectorDialog() }
-                ),
-                PremiumMenuItem(
-                    iconEmoji = "🌐",
-                    title = getString(R.string.setting_app_language),
-                    subtitle = langSub,
-                    onClick = { pushSettingsBackStack { showProSettingsDialog(false) }; showAppLanguageDialog() }
-                ),
-                PremiumMenuItem(
-                    iconEmoji = "🔄",
-                    title = getString(R.string.setting_default_orientation),
-                    subtitle = orientSub,
-                    onClick = { pushSettingsBackStack { showProSettingsDialog(false) }; showDefaultOrientationDialog() }
-                )
-            )
+        showPremiumMenuDialog(
+            headerIcon = "🛡️",
+            title = getString(R.string.settings_hub_privacy_title),
+            subtitle = privacySub,
+            items = items
         )
+    }
 
-        // Category 3: Subtitles & Sync
-        items.addAll(
-            listOf(
-                PremiumMenuItem(
-                    iconEmoji = "🔤",
-                    title = getString(R.string.setting_subtitle_style),
-                    subtitle = "${subSize}sp • ${getString(R.string.style_bg_opacity_label, subBgOpacity)}",
-                    sectionHeader = getString(R.string.settings_cat_subtitles),
-                    onClick = { pushSettingsBackStack { showProSettingsDialog(false) }; showSubtitleStyleDialog() }
-                ),
-                PremiumMenuItem(
-                    iconEmoji = "💬",
-                    title = getString(R.string.setting_subtitle_languages),
-                    subtitle = subLangs,
-                    onClick = { pushSettingsBackStack { showProSettingsDialog(false) }; showSubtitleLanguagePriorityDialog() }
-                ),
-                PremiumMenuItem(
-                    iconEmoji = "🎯",
-                    title = getString(R.string.setting_reset_sub_position),
-                    subtitle = getString(R.string.sub_position_reset_toast),
-                    onClick = {
-                        PlaybackStore.resetSubPosition(this)
-                        Toast.makeText(this, getString(R.string.sub_position_reset_toast), Toast.LENGTH_SHORT).show()
-                    }
-                ),
-                PremiumMenuItem(
-                    iconEmoji = "⏯️",
-                    title = getString(R.string.setting_resume_behavior_title),
-                    subtitle = when (PlaybackStore.getResumeAskMode(this)) {
-                        1 -> getString(R.string.resume_mode_always_resume)
-                        2 -> getString(R.string.resume_mode_always_restart)
-                        else -> getString(R.string.resume_mode_ask_always)
-                    },
-                    onClick = {
-                        pushSettingsBackStack { showProSettingsDialog(false) }
-                        showResumeBehaviorSettingsDialog()
-                    }
-                ),
-                // Category 4: Updates & GitHub Auto-Download
-                PremiumMenuItem(
-                    iconEmoji = "🔄",
-                    title = getString(R.string.update_check_option_title),
-                    subtitle = getString(R.string.update_check_option_sub, BuildConfig.VERSION_CODE),
-                    isAccentHighlighted = true,
-                    sectionHeader = getString(R.string.settings_cat_updates),
-                    onClick = {
-                        pushSettingsBackStack { showProSettingsDialog(false) }
-                        openGitHubUpdaterFlow()
-                    }
-                ),
-                // Category 5: Developer Signature at the very end of Settings
-                PremiumMenuItem(
-                    iconEmoji = "👨‍💻",
-                    title = "Ahmed M Moumen",
-                    subtitle = getString(R.string.developer_credit_subtitle, BuildConfig.VERSION_CODE),
-                    isAccentHighlighted = true,
-                    sectionHeader = getString(R.string.settings_cat_developer),
-                    onClick = {
-                        Toast.makeText(this, "Developed by Ahmed M Moumen ✨", Toast.LENGTH_SHORT).show()
-                        showProSettingsDialog(false)
-                    }
-                )
+    private fun showSettingsAppearanceDisplayPage() {
+        val langTag = PlaybackStore.getAppLanguageTag(this)
+        val langSub = when (langTag) {
+            "ar" -> getString(R.string.lang_arabic)
+            "en" -> getString(R.string.lang_english)
+            else -> getString(R.string.lang_system_default)
+        }
+        val themeNames = arrayOf(
+            getString(R.string.theme_cyber_blue),
+            getString(R.string.theme_amoled_gold),
+            getString(R.string.theme_emerald),
+            getString(R.string.theme_crimson),
+            getString(R.string.theme_violet)
+        )
+        val currentThemeName = themeNames[PlaybackStore.getThemeIndex(this).coerceIn(0, themeNames.size - 1)]
+        val layoutSub = if (PlaybackStore.isGridLayoutEnabled(this)) getString(R.string.layout_mode_grid) else getString(R.string.layout_mode_list)
+        val orientIdx = PlaybackStore.getDefaultOrientationIndex(this)
+        val orientSub = when (orientIdx) {
+            0 -> getString(R.string.orientation_auto)
+            2 -> getString(R.string.orientation_portrait)
+            else -> getString(R.string.orientation_landscape)
+        }
+
+        val items = listOf(
+            PremiumMenuItem(
+                iconEmoji = "📐",
+                title = getString(R.string.sort_and_layout_title),
+                subtitle = layoutSub,
+                isAccentHighlighted = true,
+                onClick = {
+                    pushSettingsBackStack { showSettingsAppearanceDisplayPage() }
+                    showSortAndLayoutDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🎨",
+                title = getString(R.string.setting_app_theme),
+                subtitle = currentThemeName,
+                onClick = {
+                    pushSettingsBackStack { showSettingsAppearanceDisplayPage() }
+                    showThemeSelectorDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🌐",
+                title = getString(R.string.setting_app_language),
+                subtitle = langSub,
+                onClick = {
+                    pushSettingsBackStack { showSettingsAppearanceDisplayPage() }
+                    showAppLanguageDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🔄",
+                title = getString(R.string.setting_default_orientation),
+                subtitle = orientSub,
+                onClick = {
+                    pushSettingsBackStack { showSettingsAppearanceDisplayPage() }
+                    showDefaultOrientationDialog()
+                }
             )
         )
 
         showPremiumMenuDialog(
-            headerIcon = "⚙️",
-            title = getString(R.string.settings_header),
-            subtitle = "Pure Video Player Premium",
+            headerIcon = "🎨",
+            title = getString(R.string.settings_hub_appearance_title),
+            subtitle = "$currentThemeName • $langSub",
+            items = items
+        )
+    }
+
+    private fun showSettingsSubtitlesPlaybackPage() {
+        val subLangs = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(" → ") { it.uppercase() }
+        val subSize = PlaybackStore.getSubSizeSp(this).toInt()
+        val subBgOpacity = PlaybackStore.getSubBgOpacityPct(this)
+        val resumeSub = when (PlaybackStore.getResumeAskMode(this)) {
+            1 -> getString(R.string.resume_mode_always_resume)
+            2 -> getString(R.string.resume_mode_always_restart)
+            else -> getString(R.string.resume_mode_ask_always)
+        }
+
+        val items = listOf(
+            PremiumMenuItem(
+                iconEmoji = "🔤",
+                title = getString(R.string.setting_subtitle_style),
+                subtitle = "${subSize}sp • ${getString(R.string.style_bg_opacity_label, subBgOpacity)}",
+                isAccentHighlighted = true,
+                onClick = {
+                    pushSettingsBackStack { showSettingsSubtitlesPlaybackPage() }
+                    showSubtitleStyleDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "💬",
+                title = getString(R.string.setting_subtitle_languages),
+                subtitle = subLangs,
+                onClick = {
+                    pushSettingsBackStack { showSettingsSubtitlesPlaybackPage() }
+                    showSubtitleLanguagePriorityDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🎯",
+                title = getString(R.string.setting_reset_sub_position),
+                subtitle = getString(R.string.sub_position_reset_toast),
+                onClick = {
+                    PlaybackStore.resetSubPosition(this)
+                    Toast.makeText(this, getString(R.string.sub_position_reset_toast), Toast.LENGTH_SHORT).show()
+                    showSettingsSubtitlesPlaybackPage()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "⏯️",
+                title = getString(R.string.setting_resume_behavior_title),
+                subtitle = resumeSub,
+                onClick = {
+                    pushSettingsBackStack { showSettingsSubtitlesPlaybackPage() }
+                    showResumeBehaviorSettingsDialog()
+                }
+            )
+        )
+
+        showPremiumMenuDialog(
+            headerIcon = "💬",
+            title = getString(R.string.settings_hub_subtitles_playback_title),
+            subtitle = subLangs,
             items = items
         )
     }
@@ -3023,28 +3212,206 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showThemeSelectorDialog() {
-        val current = PlaybackStore.getThemeIndex(this)
+        var selectedIdx = PlaybackStore.getThemeIndex(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+        val initialAccent = PlaybackStore.getAccentColor(this)
+
+        data class ThemeOption(val emoji: String, val name: String, val accentHex: String, val bgHex: String)
         val themes = listOf(
-            Triple("💎", getString(R.string.theme_cyber_blue), "#38BDF8"),
-            Triple("✨", getString(R.string.theme_amoled_gold), "#F59E0B"),
-            Triple("🌿", getString(R.string.theme_emerald), "#10B981"),
-            Triple("🔥", getString(R.string.theme_crimson), "#F43F5E"),
-            Triple("🔮", getString(R.string.theme_violet), "#A855F7")
+            ThemeOption("💎", getString(R.string.theme_cyber_blue), "#38BDF8", "#090D16"),
+            ThemeOption("✨", getString(R.string.theme_amoled_gold), "#F59E0B", "#000000"),
+            ThemeOption("🌿", getString(R.string.theme_emerald), "#10B981", "#090D16"),
+            ThemeOption("🔥", getString(R.string.theme_crimson), "#F43F5E", "#090D16"),
+            ThemeOption("🔮", getString(R.string.theme_violet), "#A855F7", "#090D16")
         )
-        val items = themes.mapIndexed { idx, (emoji, name, hex) ->
-            PremiumMenuItem(
-                iconEmoji = emoji,
-                title = name,
-                subtitle = hex,
-                isAccentHighlighted = (idx == current),
-                onClick = {
-                    PlaybackStore.setThemeIndex(this, idx)
-                    applyUserTheme()
+
+        val outerScroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false }
+        val cardContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(16), dp(20), dp(20))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(28).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(110, Color.red(initialAccent), Color.green(initialAccent), Color.blue(initialAccent)))
+            }
+        }
+        outerScroll.addView(cardContainer)
+
+        val topPill = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(44), dp(4)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(14)
+            }
+            background = GradientDrawable().apply {
+                cornerRadius = dp(4).toFloat()
+                setColor(initialAccent)
+            }
+        }
+        cardContainer.addView(topPill)
+
+        val tvTitle = TextView(this).apply {
+            text = "🎨  " + getString(R.string.theme_dialog_title)
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(4), 0, dp(4), dp(12))
+        }
+        cardContainer.addView(tvTitle)
+
+        val dialog = AlertDialog.Builder(this).setView(outerScroll).create()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.setDimAmount(0.62f)
+
+        val rowViews = mutableListOf<LinearLayout>()
+        val checkViews = mutableListOf<TextView>()
+
+        fun refreshVisualSelection(activeIdx: Int) {
+            val activeAccent = Color.parseColor(themes[activeIdx].accentHex)
+            (topPill.background as? GradientDrawable)?.setColor(activeAccent)
+            (cardContainer.background as? GradientDrawable)?.setStroke(
+                dp(1),
+                Color.argb(135, Color.red(activeAccent), Color.green(activeAccent), Color.blue(activeAccent))
+            )
+
+            themes.forEachIndexed { idx, opt ->
+                val isSelected = (idx == activeIdx)
+                val row = rowViews[idx]
+                val check = checkViews[idx]
+                val optColor = Color.parseColor(opt.accentHex)
+
+                row.background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dp(16).toFloat()
+                    setColor(if (isSelected) Color.argb(38, Color.red(optColor), Color.green(optColor), Color.blue(optColor)) else bg)
+                    setStroke(dp(if (isSelected) 2 else 1), if (isSelected) optColor else Color.parseColor("#22FFFFFF"))
+                }
+                check.text = if (isSelected) "✓" else ""
+                check.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(if (isSelected) optColor else Color.parseColor("#18FFFFFF"))
+                }
+                if (isSelected) {
+                    row.animate().scaleX(1.02f).scaleY(1.02f).setDuration(180L).setInterpolator(OvershootInterpolator(1.6f)).start()
+                    check.scaleX = 0.5f
+                    check.scaleY = 0.5f
+                    check.animate().scaleX(1f).scaleY(1f).setDuration(220L).setInterpolator(OvershootInterpolator(2.0f)).start()
+                } else {
+                    row.animate().scaleX(1f).scaleY(1f).setDuration(140L).start()
+                }
+            }
+        }
+
+        val animatedItems = mutableListOf<View>()
+        themes.forEachIndexed { idx, opt ->
+            val optAccent = Color.parseColor(opt.accentHex)
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dp(10)
+                }
+            }
+
+            // Live Color Swatch Circle
+            val swatchCircle = TextView(this).apply {
+                text = opt.emoji
+                textSize = 17f
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginEnd = dp(12) }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(Color.parseColor(opt.bgHex))
+                    setStroke(dp(3), optAccent)
+                }
+            }
+
+            val textCol = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            val tvName = TextView(this).apply {
+                text = opt.name
+                setTextColor(Color.WHITE)
+                textSize = 15f
+                setTypeface(typeface, Typeface.BOLD)
+            }
+            val tvHex = TextView(this).apply {
+                text = opt.accentHex
+                setTextColor(optAccent)
+                textSize = 12f
+                setPadding(0, dp(2), 0, 0)
+            }
+            textCol.addView(tvName)
+            textCol.addView(tvHex)
+
+            val tvCheck = TextView(this).apply {
+                gravity = Gravity.CENTER
+                setTextColor(Color.parseColor("#090D16"))
+                textSize = 14f
+                setTypeface(typeface, Typeface.BOLD)
+                layoutParams = LinearLayout.LayoutParams(dp(26), dp(26))
+            }
+
+            row.addView(swatchCircle)
+            row.addView(textCol)
+            row.addView(tvCheck)
+
+            row.setOnClickListener {
+                selectedIdx = idx
+                refreshVisualSelection(idx)
+                PlaybackStore.setThemeIndex(this, idx)
+                applyUserTheme(animated = true)
+            }
+
+            rowViews.add(row)
+            checkViews.add(tvCheck)
+            cardContainer.addView(row)
+            animatedItems.add(row)
+        }
+
+        refreshVisualSelection(selectedIdx)
+
+        val btnBack = TextView(this).apply {
+            text = if (settingsBackStack.isNotEmpty()) getString(R.string.back_to_previous_menu) else getString(R.string.close)
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#CBD5E1"))
+            textSize = 14.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, dp(12), 0, dp(12))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(4)
+            }
+            background = GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(Color.parseColor("#18FFFFFF"))
+            }
+            setOnClickListener {
+                isNavigatingToSubDialog = true
+                dismissDialogSmoothly(dialog, cardContainer) {
+                    isNavigatingToSubDialog = false
                     popSettingsBackStack()
                 }
-            )
+            }
         }
-        showPremiumMenuDialog("🎨", getString(R.string.theme_dialog_title), null, items)
+        cardContainer.addView(btnBack)
+
+        dialog.setOnCancelListener {
+            if (!isNavigatingToSubDialog) {
+                popSettingsBackStack()
+            }
+        }
+
+        dialog.show()
+        animateDialogCardEntrance(cardContainer, animatedItems)
     }
 
     private fun showSubtitleStyleDialog() {

@@ -313,4 +313,8 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="iptv_fav_add_option">Add to Favorites ❤️</string>
     <string name="iptv_fav_remove_option">Remove from Favorites 💔</string>
     <string name="iptv_last_watched_ep_badge">Last watched: %1$s</string>
+    <string name="settings_hub_privacy_title">Privacy &amp; Folders</string>
+    <string name="settings_hub_appearance_title">Appearance, Layout &amp; Language</string>
+    <string name="settings_hub_subtitles_playback_title">Subtitles &amp; Playback</string>
+    <string name="settings_hub_updates_title">Updates &amp; GitHub Sync</string>
 </resources>

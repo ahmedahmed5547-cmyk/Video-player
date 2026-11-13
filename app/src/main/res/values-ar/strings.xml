@@ -313,4 +313,8 @@
     <string name="iptv_fav_add_option">إضافة إلى المفضلة ❤️</string>
     <string name="iptv_fav_remove_option">إزالة من المفضلة 💔</string>
     <string name="iptv_last_watched_ep_badge">آخر حلقة شاهدتها: %1$s</string>
+    <string name="settings_hub_privacy_title">الخصوصية وإدارة المجلدات</string>
+    <string name="settings_hub_appearance_title">المظهر، العرض واللغة</string>
+    <string name="settings_hub_subtitles_playback_title">الترجمة وإعدادات التشغيل</string>
+    <string name="settings_hub_updates_title">التحديثات والمزامنة (GitHub)</string>
 </resources>
