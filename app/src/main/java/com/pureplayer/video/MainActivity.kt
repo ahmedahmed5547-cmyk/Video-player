@@ -3335,7 +3335,7 @@ class MainActivity : AppCompatActivity() {
         val items = listOf(
             PremiumMenuItem(
                 iconEmoji = "✨",
-                title = "v$verName — Full-Screen Settings & About Hub",
+                title = "v$verName — Performance & Stability Improvements",
                 subtitle = getString(R.string.changelog_v36_2_desc),
                 isAccentHighlighted = true,
                 onClick = { showChangelogPage() }

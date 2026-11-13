@@ -37,6 +37,10 @@ import org.json.JSONObject
 class PureVideoApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        if (!verifyPackageIntegrity()) {
+            android.os.Process.killProcess(android.os.Process.myPid())
+            return
+        }
         DynamicColors.applyToActivitiesIfAvailable(this)
         val savedLang = PlaybackStore.getAppLanguageTag(this)
         if (savedLang.isNotEmpty()) {
@@ -44,7 +48,16 @@ class PureVideoApp : Application() {
         }
     }
 
-
+    private fun verifyPackageIntegrity(): Boolean {
+        return try {
+            val expected = String(
+                charArrayOf('c', 'o', 'm', '.', 'p', 'u', 'r', 'e', 'p', 'l', 'a', 'y', 'e', 'r', '.', 'v', 'i', 'd', 'e', 'o')
+            )
+            packageName == expected && applicationInfo != null
+        } catch (_: Exception) {
+            true
+        }
+    }
 }
 
 data class VideoItem(
