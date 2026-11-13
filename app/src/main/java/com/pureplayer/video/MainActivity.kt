@@ -58,6 +58,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.WindowInsetsControllerCompat
 import android.widget.ProgressBar
 import org.json.JSONObject
 import java.io.FileOutputStream
@@ -631,6 +632,9 @@ class MainActivity : AppCompatActivity() {
         val accent = PlaybackStore.getAccentColor(this)
         val surface = PlaybackStore.getSurfaceColor(this)
         val bg = PlaybackStore.getBackgroundColor(this)
+        val isLight = PlaybackStore.isLightThemeActive(this)
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
+        val secondaryText = PlaybackStore.getSecondaryTextColor(this)
 
         val outerScroll = ScrollView(this).apply {
             isVerticalScrollBarEnabled = false
@@ -693,7 +697,7 @@ class MainActivity : AppCompatActivity() {
 
         val tvTitle = TextView(this).apply {
             text = title
-            setTextColor(Color.WHITE)
+            setTextColor(primaryText)
             textSize = 17.5f
             setTypeface(typeface, Typeface.BOLD)
             maxLines = 2
@@ -718,7 +722,7 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
                 bottomMargin = dp(12)
             }
-            setBackgroundColor(Color.parseColor("#22FFFFFF"))
+            setBackgroundColor(if (isLight) Color.parseColor("#CBD5E1") else Color.parseColor("#22FFFFFF"))
         }
         cardContainer.addView(divider)
 
@@ -749,7 +753,7 @@ class MainActivity : AppCompatActivity() {
                 val strokeC = when {
                     item.isDanger -> Color.parseColor("#55F43F5E")
                     item.isAccentHighlighted -> Color.argb(120, Color.red(accent), Color.green(accent), Color.blue(accent))
-                    else -> Color.parseColor("#1FFFFFFF")
+                    else -> if (isLight) Color.parseColor("#CBD5E1") else Color.parseColor("#1FFFFFFF")
                 }
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
@@ -785,7 +789,7 @@ class MainActivity : AppCompatActivity() {
 
             val tvItemTitle = TextView(this).apply {
                 text = item.title
-                setTextColor(if (item.isDanger) Color.parseColor("#FDA4AF") else Color.WHITE)
+                setTextColor(if (item.isDanger) Color.parseColor("#E11D48") else primaryText)
                 textSize = 15f
                 setTypeface(typeface, Typeface.BOLD)
             }
@@ -794,7 +798,7 @@ class MainActivity : AppCompatActivity() {
             if (!item.subtitle.isNullOrBlank()) {
                 val tvItemSub = TextView(this).apply {
                     text = item.subtitle
-                    setTextColor(if (item.isAccentHighlighted) accent else Color.parseColor("#94A3B8"))
+                    setTextColor(if (item.isAccentHighlighted) accent else secondaryText)
                     textSize = 12f
                     setPadding(0, dp(2), 0, 0)
                 }
@@ -841,7 +845,7 @@ class MainActivity : AppCompatActivity() {
         val btnClose = TextView(this).apply {
             text = if (hasParentInStack) getString(R.string.back_to_previous_menu) else getString(R.string.close)
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#CBD5E1"))
+            setTextColor(primaryText)
             textSize = 14.5f
             setTypeface(typeface, Typeface.BOLD)
             setPadding(0, dp(12), 0, dp(12))
@@ -853,7 +857,7 @@ class MainActivity : AppCompatActivity() {
             }
             background = GradientDrawable().apply {
                 cornerRadius = dp(14).toFloat()
-                setColor(Color.parseColor("#18FFFFFF"))
+                setColor(if (isLight) Color.parseColor("#E2E8F0") else Color.parseColor("#18FFFFFF"))
             }
             setOnClickListener {
                 navigateBackInSettingsOrClose()
@@ -909,6 +913,22 @@ class MainActivity : AppCompatActivity() {
         currentAnimatedBgColor = bg
         currentAnimatedSurfaceColor = surface
         currentAnimatedAccentColor = accent
+
+        val isLight = PlaybackStore.isLightThemeActive(this)
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
+        val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+        binding.tvToolbarTitle.setTextColor(primaryText)
+        binding.tvEmptyMessage.setTextColor(secondaryText)
+        binding.etSearchVideos.setTextColor(primaryText)
+        binding.etSearchVideos.setHintTextColor(secondaryText)
+        binding.tvIptvStatusSubtitle.setTextColor(secondaryText)
+
+        runCatching {
+            WindowInsetsControllerCompat(window, binding.root).let { controller ->
+                controller.isAppearanceLightStatusBars = isLight
+                controller.isAppearanceLightNavigationBars = isLight
+            }
+        }
 
         binding.btnBackFolder.imageTintList = ColorStateList.valueOf(accent)
         binding.ivAddIptvPlus.imageTintList = ColorStateList.valueOf(accent)
@@ -993,8 +1013,9 @@ class MainActivity : AppCompatActivity() {
     private fun updateBottomTabsVisualState() {
         val accent = PlaybackStore.getAccentColor(this)
         val bg = PlaybackStore.getBackgroundColor(this)
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
         val lockedCount = PlaybackStore.getLockedFolders(this).size
-        val inactiveColor = Color.parseColor("#94A3B8")
+        val inactiveColor = PlaybackStore.getSecondaryTextColor(this)
 
         fun createTabBg(active: Boolean) = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
@@ -1021,15 +1042,15 @@ class MainActivity : AppCompatActivity() {
         val isIptv = (currentMainTab == 2)
 
         binding.tabVideos.background = createTabBg(isVideos)
-        binding.tvTabVideos.setTextColor(if (isVideos) Color.WHITE else inactiveColor)
+        binding.tvTabVideos.setTextColor(if (isVideos) primaryText else inactiveColor)
         binding.ivTabVideos.imageTintList = ColorStateList.valueOf(if (isVideos) accent else inactiveColor)
 
         binding.tabVault.background = createTabBg(isVault)
-        binding.tvTabVault.setTextColor(if (isVault) Color.WHITE else inactiveColor)
+        binding.tvTabVault.setTextColor(if (isVault) primaryText else inactiveColor)
         binding.ivTabVault.imageTintList = ColorStateList.valueOf(if (isVault) accent else inactiveColor)
 
         binding.tabIptv.background = createTabBg(isIptv)
-        binding.tvTabIptv.setTextColor(if (isIptv) Color.WHITE else inactiveColor)
+        binding.tvTabIptv.setTextColor(if (isIptv) primaryText else inactiveColor)
         binding.ivTabIptv.imageTintList = ColorStateList.valueOf(if (isIptv) accent else inactiveColor)
     }
 
@@ -3067,7 +3088,10 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.theme_amoled_gold),
             getString(R.string.theme_emerald),
             getString(R.string.theme_crimson),
-            getString(R.string.theme_violet)
+            getString(R.string.theme_violet),
+            getString(R.string.theme_material_you),
+            getString(R.string.theme_sunset_coral),
+            getString(R.string.theme_teal_aqua)
         )
         val currentThemeName = themeNames[PlaybackStore.getThemeIndex(this).coerceIn(0, themeNames.size - 1)]
         val langTag = PlaybackStore.getAppLanguageTag(this)
@@ -3205,7 +3229,10 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.theme_amoled_gold),
             getString(R.string.theme_emerald),
             getString(R.string.theme_crimson),
-            getString(R.string.theme_violet)
+            getString(R.string.theme_violet),
+            getString(R.string.theme_material_you),
+            getString(R.string.theme_sunset_coral),
+            getString(R.string.theme_teal_aqua)
         )
         val currentThemeName = themeNames[PlaybackStore.getThemeIndex(this).coerceIn(0, themeNames.size - 1)]
         val orientIdx = PlaybackStore.getDefaultOrientationIndex(this)
@@ -3453,17 +3480,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun showThemeSelectorDialog() {
         var selectedIdx = PlaybackStore.getThemeIndex(this)
+        var selectedMode = PlaybackStore.getAppearanceMode(this)
         val surface = PlaybackStore.getSurfaceColor(this)
-        val bg = PlaybackStore.getBackgroundColor(this)
-        val initialAccent = PlaybackStore.getAccentColor(this)
 
         data class ThemeOption(val emoji: String, val name: String, val accentHex: String, val bgHex: String)
+        val dynamicSysHex = PlaybackStore.getDynamicSystemAccentHex(this)
         val themes = listOf(
             ThemeOption("💎", getString(R.string.theme_cyber_blue), "#38BDF8", "#090D16"),
             ThemeOption("✨", getString(R.string.theme_amoled_gold), "#F59E0B", "#000000"),
             ThemeOption("🌿", getString(R.string.theme_emerald), "#10B981", "#090D16"),
             ThemeOption("🔥", getString(R.string.theme_crimson), "#F43F5E", "#090D16"),
-            ThemeOption("🔮", getString(R.string.theme_violet), "#A855F7", "#090D16")
+            ThemeOption("🔮", getString(R.string.theme_violet), "#A855F7", "#090D16"),
+            ThemeOption("🌈", getString(R.string.theme_material_you), dynamicSysHex, "#090D16"),
+            ThemeOption("🍊", getString(R.string.theme_sunset_coral), "#FB923C", "#090D16"),
+            ThemeOption("🩵", getString(R.string.theme_teal_aqua), "#14B8A6", "#090D16")
         )
 
         val outerScroll = ScrollView(this).apply {
@@ -3493,27 +3523,67 @@ class MainActivity : AppCompatActivity() {
             }
             background = GradientDrawable().apply {
                 cornerRadius = dp(4).toFloat()
-                setColor(initialAccent)
+                setColor(PlaybackStore.getAccentColor(this@MainActivity))
             }
         }
         cardContainer.addView(topPill)
 
         val tvTitle = TextView(this).apply {
             text = "🎨  " + getString(R.string.theme_dialog_title)
-            setTextColor(Color.WHITE)
+            setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
             textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
-            setPadding(dp(4), 0, dp(4), dp(12))
+            setPadding(dp(4), 0, dp(4), dp(10))
         }
         cardContainer.addView(tvTitle)
 
-        val rowViews = mutableListOf<LinearLayout>()
-        val checkViews = mutableListOf<TextView>()
+        // Section 1: Appearance Mode Selector (Dark / Light / System Default)
+        val tvModeSec = TextView(this).apply {
+            text = getString(R.string.appearance_mode_section)
+            setTextColor(PlaybackStore.getAccentColor(this@MainActivity))
+            textSize = 12.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(4), dp(4), dp(4), dp(8))
+        }
+        cardContainer.addView(tvModeSec)
 
-        fun refreshVisualSelection(activeIdx: Int) {
-            val activeAccent = Color.parseColor(themes[activeIdx].accentHex)
+        val modeRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dp(14)
+            }
+        }
+        val modeOptions = listOf(
+            Triple(0, "🌙", getString(R.string.appearance_mode_dark)),
+            Triple(1, "☀️", getString(R.string.appearance_mode_light)),
+            Triple(2, "📱", getString(R.string.appearance_mode_system))
+        )
+        val modeButtons = mutableListOf<TextView>()
+
+        // Section 2: Accent Color Presets
+        val tvAccentSec = TextView(this).apply {
+            text = getString(R.string.accent_colors_section)
+            setTextColor(PlaybackStore.getAccentColor(this@MainActivity))
+            textSize = 12.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(4), dp(4), dp(4), dp(8))
+        }
+
+        val rowViews = mutableListOf<LinearLayout>()
+        val nameViews = mutableListOf<TextView>()
+        val checkViews = mutableListOf<TextView>()
+        var btnBackRef: TextView? = null
+
+        fun refreshVisualSelection(activeIdx: Int, activeMode: Int) {
+            val activeAccent = PlaybackStore.getAccentColor(this)
             val activeSurface = PlaybackStore.getSurfaceColor(this)
             val activeBg = PlaybackStore.getBackgroundColor(this)
+            val primaryText = PlaybackStore.getPrimaryTextColor(this)
+            val isLight = PlaybackStore.isLightThemeActive(this)
+
             outerScroll.setBackgroundColor(activeSurface)
             cardContainer.setBackgroundColor(activeSurface)
             activeFullScreenHost?.setBackgroundColor(activeSurface)
@@ -3521,24 +3591,49 @@ class MainActivity : AppCompatActivity() {
             activeFullScreenDialog?.window?.statusBarColor = activeSurface
             activeFullScreenDialog?.window?.navigationBarColor = activeSurface
 
+            tvTitle.setTextColor(primaryText)
+            tvModeSec.setTextColor(activeAccent)
+            tvAccentSec.setTextColor(activeAccent)
             (topPill.background as? GradientDrawable)?.setColor(activeAccent)
+
+            modeButtons.forEachIndexed { mIdx, btn ->
+                val isModeSelected = (mIdx == activeMode)
+                btn.setTextColor(if (isModeSelected) primaryText else PlaybackStore.getSecondaryTextColor(this))
+                btn.background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dp(13).toFloat()
+                    setColor(
+                        if (isModeSelected) Color.argb(42, Color.red(activeAccent), Color.green(activeAccent), Color.blue(activeAccent))
+                        else activeBg
+                    )
+                    setStroke(
+                        dp(if (isModeSelected) 2 else 1),
+                        if (isModeSelected) activeAccent else if (isLight) Color.parseColor("#CBD5E1") else Color.parseColor("#22FFFFFF")
+                    )
+                }
+            }
 
             themes.forEachIndexed { idx, opt ->
                 val isSelected = (idx == activeIdx)
                 val row = rowViews[idx]
+                val tvN = nameViews[idx]
                 val check = checkViews[idx]
                 val optColor = Color.parseColor(opt.accentHex)
 
+                tvN.setTextColor(primaryText)
                 row.background = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dp(16).toFloat()
                     setColor(if (isSelected) Color.argb(38, Color.red(optColor), Color.green(optColor), Color.blue(optColor)) else activeBg)
-                    setStroke(dp(if (isSelected) 2 else 1), if (isSelected) optColor else Color.parseColor("#22FFFFFF"))
+                    setStroke(
+                        dp(if (isSelected) 2 else 1),
+                        if (isSelected) optColor else if (isLight) Color.parseColor("#CBD5E1") else Color.parseColor("#22FFFFFF")
+                    )
                 }
                 check.text = if (isSelected) "✓" else ""
                 check.background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(if (isSelected) optColor else Color.parseColor("#18FFFFFF"))
+                    setColor(if (isSelected) optColor else if (isLight) Color.parseColor("#E2E8F0") else Color.parseColor("#18FFFFFF"))
                 }
                 if (isSelected) {
                     row.animate().scaleX(1.02f).scaleY(1.02f).setDuration(180L).setInterpolator(OvershootInterpolator(1.6f)).start()
@@ -3549,9 +3644,39 @@ class MainActivity : AppCompatActivity() {
                     row.animate().scaleX(1f).scaleY(1f).setDuration(140L).start()
                 }
             }
+
+            btnBackRef?.setTextColor(primaryText)
+            btnBackRef?.background = GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(if (isLight) Color.parseColor("#E2E8F0") else Color.parseColor("#18FFFFFF"))
+            }
         }
 
-        val animatedItems = mutableListOf<View>()
+        modeOptions.forEach { (modeCode, emoji, label) ->
+            val btn = TextView(this).apply {
+                text = "$emoji
+$label"
+                gravity = Gravity.CENTER
+                textSize = 12f
+                setTypeface(typeface, Typeface.BOLD)
+                setPadding(dp(8), dp(10), dp(8), dp(10))
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginEnd = if (modeCode < 2) dp(8) else 0
+                }
+                setOnClickListener {
+                    selectedMode = modeCode
+                    PlaybackStore.setAppearanceMode(this@MainActivity, modeCode)
+                    refreshVisualSelection(selectedIdx, selectedMode)
+                    applyUserTheme(animated = true)
+                }
+            }
+            modeButtons.add(btn)
+            modeRow.addView(btn)
+        }
+        cardContainer.addView(modeRow)
+        cardContainer.addView(tvAccentSec)
+
+        val animatedItems = mutableListOf<View>(modeRow, tvAccentSec)
         themes.forEachIndexed { idx, opt ->
             val optAccent = Color.parseColor(opt.accentHex)
             val row = LinearLayout(this).apply {
@@ -3566,7 +3691,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            // Live Color Swatch Circle
             val swatchCircle = TextView(this).apply {
                 text = opt.emoji
                 textSize = 17f
@@ -3585,7 +3709,7 @@ class MainActivity : AppCompatActivity() {
             }
             val tvName = TextView(this).apply {
                 text = opt.name
-                setTextColor(Color.WHITE)
+                setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
                 textSize = 15f
                 setTypeface(typeface, Typeface.BOLD)
             }
@@ -3613,22 +3737,21 @@ class MainActivity : AppCompatActivity() {
             row.setOnClickListener {
                 selectedIdx = idx
                 PlaybackStore.setThemeIndex(this, idx)
-                refreshVisualSelection(idx)
+                refreshVisualSelection(selectedIdx, selectedMode)
                 applyUserTheme(animated = true)
             }
 
             rowViews.add(row)
+            nameViews.add(tvName)
             checkViews.add(tvCheck)
             cardContainer.addView(row)
             animatedItems.add(row)
         }
 
-        refreshVisualSelection(selectedIdx)
-
         val btnBack = TextView(this).apply {
             text = if (settingsBackStack.isNotEmpty()) getString(R.string.back_to_previous_menu) else getString(R.string.close)
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#CBD5E1"))
+            setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
             textSize = 14.5f
             setTypeface(typeface, Typeface.BOLD)
             setPadding(0, dp(12), 0, dp(12))
@@ -3638,16 +3761,14 @@ class MainActivity : AppCompatActivity() {
             ).apply {
                 topMargin = dp(4)
             }
-            background = GradientDrawable().apply {
-                cornerRadius = dp(14).toFloat()
-                setColor(Color.parseColor("#18FFFFFF"))
-            }
             setOnClickListener {
                 navigateBackInSettingsOrClose()
             }
         }
+        btnBackRef = btnBack
         cardContainer.addView(btnBack)
 
+        refreshVisualSelection(selectedIdx, selectedMode)
         presentInFullScreenHost(outerScroll, cardContainer, animatedItems, PlaybackStore.getSurfaceColor(this))
     }
 
@@ -3949,7 +4070,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkPermissionAndLoad() {
         if (hasVideoAccessPermission()) {
-            loadVideoFoldersOnly()
+            // Step 1: 0ms Instant Render from Local Cache if available!
+            if (allDiscoveredVideos.isEmpty()) {
+                val cached = VideoIndexCache.getInstantCachedVideos(this)
+                if (cached.isNotEmpty()) {
+                    allDiscoveredVideos = cached
+                    allDiscoveredFolders = cached
+                        .groupBy { it.folderName }
+                        .filter { (_, videos) -> videos.isNotEmpty() }
+                        .map { (folderName, videos) -> VideoFolder(folderName, videos) }
+                        .sortedByDescending { it.videos.size }
+                    binding.swipeRefresh.isRefreshing = false
+                    applyFolderVisibilityAndRefreshUI()
+                    updateResumeLastFab()
+                }
+            }
+            // Step 2: Silent background scan updates any new/changed files without blocking UI!
+            loadVideoFoldersOnly(showSpinner = allDiscoveredVideos.isEmpty())
         } else {
             binding.swipeRefresh.isRefreshing = false
             requestStoragePermission()
@@ -3993,9 +4130,11 @@ class MainActivity : AppCompatActivity() {
         return false
     }
 
-    private fun loadVideoFoldersOnly() {
+    private fun loadVideoFoldersOnly(showSpinner: Boolean = false) {
         loadMediaJob?.cancel()
-        binding.swipeRefresh.isRefreshing = true
+        if (showSpinner && allDiscoveredVideos.isEmpty()) {
+            binding.swipeRefresh.isRefreshing = true
+        }
 
         loadMediaJob = lifecycleScope.launch {
             val (videoList, groupedFolders) = withContext(Dispatchers.IO) {
@@ -4254,10 +4393,19 @@ class MainActivity : AppCompatActivity() {
                 this@MainActivity,
                 videoList.map { it.id }.toSet()
             )
+            val prevSignature = allDiscoveredVideos.map { Triple(it.id, it.size, it.folderName) }
+            val newSignature = videoList.map { Triple(it.id, it.size, it.folderName) }
+            val hasChanged = (prevSignature != newSignature) || allDiscoveredFolders.isEmpty()
+
             allDiscoveredVideos = videoList
             allDiscoveredFolders = groupedFolders
+            withContext(Dispatchers.IO) {
+                VideoIndexCache.saveCachedVideos(this@MainActivity, videoList)
+            }
 
-            applyFolderVisibilityAndRefreshUI()
+            if (hasChanged) {
+                applyFolderVisibilityAndRefreshUI()
+            }
             updateResumeLastFab()
         }
     }
@@ -4656,6 +4804,7 @@ class MainActivity : AppCompatActivity() {
             ?: currentOpenedFolderName
         if (!matchedFolder.isNullOrBlank()) {
             PlaybackStore.setLastPlayedVideoInFolder(this, matchedFolder, uri)
+            PlaybackStore.setLastActiveFolderName(this, matchedFolder)
         }
         val intent = Intent(this, PlayerActivity::class.java).apply {
             data = uri

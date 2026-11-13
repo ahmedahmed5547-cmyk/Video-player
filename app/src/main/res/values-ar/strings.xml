@@ -351,4 +351,13 @@
     <string name="iptv_download_completed_toast">✅ اكتمل التحميل في مجلد Movies/PureVideoPlayer: %1$s</string>
     <string name="iptv_download_failed_toast">⚠️ تعذر بدء التحميل المباشر لهذا الرابط</string>
     <string name="iptv_episode_play_option">تشغيل الحلقة الآن</string>
+    <string name="appearance_mode_section">وضع المظهر (داكن / فاتح / تلقائي)</string>
+    <string name="appearance_mode_dark">الوضع الداكن (OLED)</string>
+    <string name="appearance_mode_light">الوضع الفاتح (Light)</string>
+    <string name="appearance_mode_system">تلقائي حسب النظام</string>
+    <string name="accent_colors_section">الألوان الديناميكية المميزة (Accent Colors)</string>
+    <string name="theme_material_you">ألوان النظام الديناميكية (Material You)</string>
+    <string name="theme_sunset_coral">مرجاني مشرق (Sunset Coral)</string>
+    <string name="theme_teal_aqua">فيروزي نقي (Teal Aqua)</string>
+    <string name="active_folder_badge">📌 نشط</string>
 </resources>

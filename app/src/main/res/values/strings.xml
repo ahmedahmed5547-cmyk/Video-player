@@ -351,4 +351,13 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="iptv_download_completed_toast">✅ Download saved to Movies/PureVideoPlayer: %1$s</string>
     <string name="iptv_download_failed_toast">⚠️ Could not start download for this stream</string>
     <string name="iptv_episode_play_option">Play Episode Now</string>
+    <string name="appearance_mode_section">Appearance Mode (Dark / Light / System)</string>
+    <string name="appearance_mode_dark">Dark Mode (OLED)</string>
+    <string name="appearance_mode_light">Light Mode</string>
+    <string name="appearance_mode_system">System Default</string>
+    <string name="accent_colors_section">Dynamic Accent Color Palette</string>
+    <string name="theme_material_you">Material You (Dynamic System Color)</string>
+    <string name="theme_sunset_coral">Sunset Coral</string>
+    <string name="theme_teal_aqua">Teal Aqua</string>
+    <string name="active_folder_badge">📌 Active</string>
 </resources>

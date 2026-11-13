@@ -1,7 +1,12 @@
 package com.pureplayer.video
 
 import android.app.Application
+import android.content.ContentUris
 import android.content.Context
+import android.content.res.Configuration
+import android.os.Build
+import android.provider.MediaStore
+import androidx.core.content.ContextCompat
 import android.graphics.Color
 import android.graphics.Typeface
 import android.net.ConnectivityManager
@@ -111,6 +116,8 @@ object PlaybackStore {
     private const val KEY_APP_LANG_TAG = "app_language_tag"
     private const val KEY_SUB_LANGS_CSV = "preferred_sub_langs_csv"
     private const val KEY_THEME_INDEX = "app_theme_index"
+    private const val KEY_APPEARANCE_MODE = "app_appearance_mode_v1"
+    private const val KEY_LAST_ACTIVE_FOLDER = "last_active_folder_name_v1"
     private const val KEY_SUB_SIZE_SP = "sub_size_sp"
     private const val KEY_SUB_COLOR_IDX = "sub_color_index"
     private const val KEY_SUB_BG_OPACITY = "sub_bg_opacity_pct"
@@ -202,22 +209,62 @@ object PlaybackStore {
         prefs(context).edit().putString(KEY_SUB_LANGS_CSV, clean.joinToString(",")).apply()
     }
 
-    fun getThemeIndex(context: Context): Int = prefs(context).getInt(KEY_THEME_INDEX, 0)
+    // 0 = Dark Mode (Default), 1 = Light Mode, 2 = System Default
+    fun getAppearanceMode(context: Context): Int = prefs(context).getInt(KEY_APPEARANCE_MODE, 0).coerceIn(0, 2)
+
+    fun setAppearanceMode(context: Context, mode: Int) {
+        prefs(context).edit().putInt(KEY_APPEARANCE_MODE, mode.coerceIn(0, 2)).apply()
+    }
+
+    fun isLightThemeActive(context: Context): Boolean {
+        return when (getAppearanceMode(context)) {
+            1 -> true
+            2 -> {
+                val nightMask = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+                nightMask != Configuration.UI_MODE_NIGHT_YES
+            }
+            else -> false
+        }
+    }
+
+    fun getThemeIndex(context: Context): Int = prefs(context).getInt(KEY_THEME_INDEX, 0).coerceIn(0, 7)
     fun setThemeIndex(context: Context, index: Int) {
-        prefs(context).edit().putInt(KEY_THEME_INDEX, index).apply()
+        prefs(context).edit().putInt(KEY_THEME_INDEX, index.coerceIn(0, 7)).apply()
+    }
+
+    fun getDynamicSystemAccentHex(context: Context): String {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                val resId = if (isLightThemeActive(context)) {
+                    android.R.color.system_accent1_600
+                } else {
+                    android.R.color.system_accent1_300
+                }
+                val c = ContextCompat.getColor(context, resId)
+                return String.format(Locale.US, "#%06X", 0xFFFFFF and c)
+            } catch (_: Exception) {}
+        }
+        return if (isLightThemeActive(context)) "#4F46E5" else "#818CF8"
     }
 
     fun getAccentColor(context: Context): Int {
+        val isLight = isLightThemeActive(context)
         return when (getThemeIndex(context)) {
-            1 -> Color.parseColor("#F59E0B")
-            2 -> Color.parseColor("#10B981")
-            3 -> Color.parseColor("#F43F5E")
-            4 -> Color.parseColor("#A855F7")
-            else -> Color.parseColor("#38BDF8")
+            1 -> Color.parseColor(if (isLight) "#D97706" else "#F59E0B")
+            2 -> Color.parseColor(if (isLight) "#059669" else "#10B981")
+            3 -> Color.parseColor(if (isLight) "#E11D48" else "#F43F5E")
+            4 -> Color.parseColor(if (isLight) "#7C3AED" else "#A855F7")
+            5 -> Color.parseColor(getDynamicSystemAccentHex(context))
+            6 -> Color.parseColor(if (isLight) "#EA580C" else "#FB923C")
+            7 -> Color.parseColor(if (isLight) "#0D9488" else "#14B8A6")
+            else -> Color.parseColor(if (isLight) "#0284C7" else "#38BDF8")
         }
     }
 
     fun getBackgroundColor(context: Context): Int {
+        if (isLightThemeActive(context)) {
+            return Color.parseColor("#F1F5F9")
+        }
         return when (getThemeIndex(context)) {
             1 -> Color.parseColor("#000000")
             else -> Color.parseColor("#090D16")
@@ -225,9 +272,30 @@ object PlaybackStore {
     }
 
     fun getSurfaceColor(context: Context): Int {
+        if (isLightThemeActive(context)) {
+            return Color.parseColor("#FFFFFF")
+        }
         return when (getThemeIndex(context)) {
             1 -> Color.parseColor("#111111")
             else -> Color.parseColor("#131C2E")
+        }
+    }
+
+    fun getPrimaryTextColor(context: Context): Int {
+        return if (isLightThemeActive(context)) Color.parseColor("#0F172A") else Color.WHITE
+    }
+
+    fun getSecondaryTextColor(context: Context): Int {
+        return if (isLightThemeActive(context)) Color.parseColor("#475569") else Color.parseColor("#94A3B8")
+    }
+
+    fun getLastActiveFolderName(context: Context): String? {
+        return prefs(context).getString(KEY_LAST_ACTIVE_FOLDER, null)
+    }
+
+    fun setLastActiveFolderName(context: Context, folderName: String) {
+        if (folderName.isNotBlank()) {
+            prefs(context).edit().putString(KEY_LAST_ACTIVE_FOLDER, folderName).apply()
         }
     }
 
@@ -1249,5 +1317,75 @@ object SubtitleSearchEngine {
         val net = cm.activeNetwork ?: return false
         val caps = cm.getNetworkCapabilities(net) ?: return false
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+}
+
+
+/**
+ * High-Speed Local Disk + Memory Video Index Cache for 0ms Instant Folder Loading on App Launch.
+ */
+object VideoIndexCache {
+    private const val CACHE_FILE_NAME = "video_media_index_cache_v1.json"
+
+    @Volatile
+    private var memoryVideos: List<VideoItem>? = null
+
+    fun getInstantCachedVideos(context: Context): List<VideoItem> {
+        memoryVideos?.let { if (it.isNotEmpty()) return it }
+        return try {
+            val file = File(context.filesDir, CACHE_FILE_NAME)
+            if (!file.exists() || file.length() <= 2L) return emptyList()
+            val arr = JSONArray(file.readText(Charsets.UTF_8))
+            val result = ArrayList<VideoItem>(arr.length())
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val id = obj.optLong("i", 0L)
+                val title = obj.optString("t", "")
+                val uriStr = obj.optString("u", "")
+                if (title.isEmpty() || uriStr.isEmpty()) continue
+                result.add(
+                    VideoItem(
+                        id = id,
+                        title = title,
+                        uri = Uri.parse(uriStr),
+                        duration = obj.optLong("d", 0L),
+                        size = obj.optLong("s", 0L),
+                        folderName = obj.optString("f", "Videos"),
+                        width = obj.optInt("w", 0),
+                        height = obj.optInt("h", 0),
+                        path = obj.optString("p", ""),
+                        dateAddedSec = obj.optLong("a", 0L)
+                    )
+                )
+            }
+            memoryVideos = result
+            result
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveCachedVideos(context: Context, videos: List<VideoItem>) {
+        memoryVideos = videos
+        try {
+            val arr = JSONArray()
+            for (v in videos) {
+                val obj = JSONObject().apply {
+                    put("i", v.id)
+                    put("t", v.title)
+                    put("u", v.uri.toString())
+                    put("d", v.duration)
+                    put("s", v.size)
+                    put("f", v.folderName)
+                    put("w", v.width)
+                    put("h", v.height)
+                    put("p", v.path)
+                    put("a", v.dateAddedSec)
+                }
+                arr.put(obj)
+            }
+            val file = File(context.filesDir, CACHE_FILE_NAME)
+            file.writeText(arr.toString(), Charsets.UTF_8)
+        } catch (_: Exception) {}
     }
 }

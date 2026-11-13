@@ -230,9 +230,13 @@ class MediaAdapter(
             val ctx = binding.root.context
             val accentColor = PlaybackStore.getAccentColor(ctx)
             val surfaceColor = PlaybackStore.getSurfaceColor(ctx)
+            val isLight = PlaybackStore.isLightThemeActive(ctx)
+            val primaryText = PlaybackStore.getPrimaryTextColor(ctx)
+            val secondaryText = PlaybackStore.getSecondaryTextColor(ctx)
             binding.root.setCardBackgroundColor(surfaceColor)
             binding.itemContentLayout.alpha = 1.0f
-            binding.tvTitle.setTextColor(Color.WHITE)
+            binding.tvTitle.setTextColor(primaryText)
+            binding.tvSubtitle.setTextColor(secondaryText)
             binding.btnFavoriteHeart.visibility = View.GONE
             binding.btnDownloadIptv.visibility = View.GONE
 
@@ -267,10 +271,10 @@ class MediaAdapter(
             }
 
             // Smooth rounded thumbnail container & card border
-            binding.root.strokeColor = Color.argb(42, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
+            binding.root.strokeColor = Color.argb(if (isLight) 75 else 42, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
             binding.thumbContainer.background = GradientDrawable().apply {
                 cornerRadius = dp(ctx, 13).toFloat()
-                setColor(Color.parseColor("#0B111E"))
+                setColor(if (isLight) Color.parseColor("#E2E8F0") else Color.parseColor("#0B111E"))
             }
             binding.thumbContainer.clipToOutline = true
 
@@ -287,9 +291,22 @@ class MediaAdapter(
             when (item) {
                 is VideoFolder -> {
                     binding.tvDurationBadge.visibility = View.GONE
-                    binding.tvNewBadge.text = "NEW"
+                    val isLastActiveFolder = (PlaybackStore.getLastActiveFolderName(ctx) == item.name)
                     val hasNewInFolder = item.videos.any { PlaybackStore.isVideoNewBadgeVisible(ctx, it) }
-                    binding.tvNewBadge.visibility = if (hasNewInFolder) View.VISIBLE else View.GONE
+                    if (isLastActiveFolder) {
+                        binding.root.strokeColor = accentColor
+                        binding.tvNewBadge.background = GradientDrawable().apply {
+                            cornerRadius = dp(ctx, 6).toFloat()
+                            setColor(accentColor)
+                        }
+                        binding.tvNewBadge.text = ctx.getString(R.string.active_folder_badge)
+                        binding.tvNewBadge.visibility = View.VISIBLE
+                    } else if (hasNewInFolder) {
+                        binding.tvNewBadge.text = "NEW"
+                        binding.tvNewBadge.visibility = View.VISIBLE
+                    } else {
+                        binding.tvNewBadge.visibility = View.GONE
+                    }
 
                     binding.ivIcon.tag = null
                     binding.ivIcon.alpha = 1f
@@ -317,9 +334,9 @@ class MediaAdapter(
 
                     if (isLastPlayedInFolder) {
                         // Dimmed / muted appearance for the last played video in this specific folder!
-                        binding.itemContentLayout.alpha = 0.48f
-                        binding.tvTitle.setTextColor(Color.parseColor("#94A3B8"))
-                        binding.root.setCardBackgroundColor(Color.parseColor("#0D1320"))
+                        binding.itemContentLayout.alpha = 0.52f
+                        binding.tvTitle.setTextColor(secondaryText)
+                        binding.root.setCardBackgroundColor(if (isLight) Color.parseColor("#E2E8F0") else Color.parseColor("#0D1320"))
                         binding.root.strokeColor = Color.argb(115, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
                         binding.tvNewBadge.background = GradientDrawable().apply {
                             cornerRadius = dp(ctx, 6).toFloat()

@@ -261,6 +261,10 @@ class PlayerActivity : AppCompatActivity() {
         val options = arrayListOf(
             "--avcodec-skiploopfilter", "0",
             "--avcodec-threads", "0",
+            "--avcodec-fast",
+            "--file-caching=150",
+            "--live-caching=300",
+            "--network-caching=900",
             "--tone-mapping=$toneMapAlgo",
             "--subsdec-encoding", "UTF-8",
             "--freetype-rel-fontsize", "18"
@@ -305,9 +309,16 @@ class PlayerActivity : AppCompatActivity() {
 
         val targetUri = currentVideoUri
         if (targetUri != null && isSafeExternalOrMediaUri(targetUri)) {
+            if (targetUri.scheme == "file") {
+                targetUri.path?.let { p ->
+                    File(p).parentFile?.name?.let { fName ->
+                        PlaybackStore.setLastActiveFolderName(this, fName)
+                    }
+                }
+            }
+            startVideoPlaybackSafely(targetUri)
             binding.vlcVideoLayout.post {
                 restoreSubtitlePositionFromPercentage()
-                startVideoPlaybackSafely(targetUri)
             }
         } else {
             finish()
@@ -997,13 +1008,23 @@ class PlayerActivity : AppCompatActivity() {
 
             if (scheme.startsWith("http") || scheme == "rtsp" || scheme == "rtmp" || scheme == "mms") {
                 binding.playerLoadingBar.visibility = View.VISIBLE
-                media.addOption(":network-caching=2500")
+                media.addOption(":network-caching=900")
                 media.addOption(":http-reconnect")
                 val ua = externalUserAgent ?: "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
                 media.addOption(":http-user-agent=$ua")
                 if (!externalHttpReferer.isNullOrEmpty()) {
                     media.addOption(":http-referrer=$externalHttpReferer")
                 }
+            } else {
+                media.addOption(":file-caching=150")
+            }
+
+            // Pre-seek at demuxer level BEFORE decoding frame 0 -> eliminates the 2-second black screen on resume!
+            if (!hasAppliedInitialSeek && pendingStartPositionMs > 0L) {
+                val startSec = String.format(Locale.US, "%.2f", pendingStartPositionMs / 1000.0)
+                media.addOption(":start-time=$startSec")
+                hasAppliedInitialSeek = true
+                showToastIndicator(getString(R.string.resume_from_format, formatTime(pendingStartPositionMs)))
             }
 
             media.setHWDecoderEnabled(true, false)
