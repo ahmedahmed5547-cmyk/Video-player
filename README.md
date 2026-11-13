@@ -1,21 +1,14 @@
-# مشغل الفيديو النقي (PureVideoPlayer) — شبيه MX Player المبسط
+# 🎬 Pure Video Player
 
-مشروع تطبيق أندرويد كامل بلغة **Kotlin** مبني على محرك **LibVLC** الرسمي لتشغيل كافة صيغ الفيديو والترجمة بدون إعلانات أو إضافات غير ضرورية.
+**Pure Video Player** is a modern, ad-free Cinema & IPTV media player for Android built with Kotlin and powered by the 64-bit LibVLC engine.
 
-## المميزات المبرمجة داخل التطبيق
-* **تشغيل كل الصيغ والترميزات**: يدعم `MKV`, `MP4`, `AVI`, `FLV`, `MOV`, `TS`, `WEBM` وترميزات `H.264`, `H.265 / HEVC`, `VP9`, `AV1`، بالإضافة إلى صيغ الصوت المحيطي `AC3`, `EAC3`, `DTS`, `AAC`, `FLAC`.
-* **دعم كامل للترجمة العربية**: تشغيل ملفات الترجمة المدمجة والخارجية (`SRT`, `ASS`, `SSA`, `SUB`) مع ترميز `UTF-8` لعرض الحروف العربية بشكل سليم تماماً.
-* **إيماءات لمس ذكية مطابقة لـ MX Player**:
-  * السحب عمودياً في النصف الأيمن: رفع وخفض الصوت.
-  * السحب عمودياً في النصف الأيسر: رفع وخفض إضاءة الشاشة.
-  * السحب أفقياً: تقديم وتأخير الفيديو بسلاسة.
-  * النقر المزدوج يميناً أو يساراً: تقديم أو تأخير 10 ثوانٍ.
-* **قفل الشاشة أثناء المشاهدة (Kids / Touch Lock)**: زر قفل لمنع اللمس بالخطأ أثناء مشاهدة الفيديو.
-* **التحكم في السرعة وأبعاد الشاشة**: تسريع أو إبطاء العرض (`0.5x` إلى `2.0x`) وتبديل الأبعاد (`تلقائي`, `ملء الشاشة`, `16:9`, `4:3`).
+## ✨ Key Features
+- **📁 Smart Video Folders & Media Layout**: Switch seamlessly between Detailed List View and 2-Column Cinema Grid View with comprehensive sorting (Date, Name, Size, Duration) and `NEW` video badges.
+- **🛡️ Private Vault**: Hardware-backed `AndroidKeyStore` Biometric & PIN folder protection. Locked folders move automatically into the Private Vault tab.
+- **📺 Integrated IPTV Hub (Xtream Codes & M3U/M3U8)**: Supports Live TV, Movies, Series (Seasons & Episodes), and Radio with interactive Favorites (`❤️`) and Continue Watching (`⏱️`) sub-tabs.
+- **💬 Multi-Source Automatic Subtitle Search & Live Styling**: Instant subtitle search across 5 providers with live size, opacity, outline, and drag/pinch positioning.
+- **🎨 Fluid Theme Studio & Full-Screen Settings**: Smooth staggered animations and live color morphing across 5 cinema themes.
 
-## كيف تحصل على ملف APK لتثبيته على هاتفك بدون أي برامج على جهازك؟
-تم تزويد المشروع بملف بناء سحابي تلقائي (`.github/workflows/build_apk.yml`) عبر **GitHub Actions**:
-1. أنشئ حساباً مجانياً على موقع GitHub ثم أنشئ مستودعاً جديداً (New Repository).
-2. ارفع محتويات هذا الملف المضغوط داخل المستودع.
-3. ادخل إلى تبويب **Actions** في أعلى المستودع، وستجد أن GitHub يقوم ببناء ملف الـ `APK` لك تلقائياً خلال دقيقتين.
-4. بعد انتهاء البناء، اضغط على العملية المكتملة وحمّل ملف **`PureVideoPlayer-APK`** وثبته مباشرة على هاتفك الأندرويد.
+## 👨‍💻 Developer
+- **Ahmed M Moumen**
+- **Current Version**: `v36.2`

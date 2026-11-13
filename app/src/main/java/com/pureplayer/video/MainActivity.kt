@@ -36,6 +36,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.CheckBox
 import android.widget.EditText
@@ -480,17 +481,22 @@ class MainActivity : AppCompatActivity() {
 
         val outerScroll = ScrollView(this).apply {
             isVerticalScrollBarEnabled = false
+            isFillViewport = true
+            setBackgroundColor(surface)
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
         }
 
         val cardContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(16), dp(20), dp(20))
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dp(28).toFloat()
-                setColor(surface)
-                setStroke(dp(1), Color.argb(95, Color.red(accent), Color.green(accent), Color.blue(accent)))
-            }
+            setPadding(dp(20), dp(22), dp(20), dp(28))
+            setBackgroundColor(surface)
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
         }
         outerScroll.addView(cardContainer)
 
@@ -563,12 +569,13 @@ class MainActivity : AppCompatActivity() {
         }
         cardContainer.addView(divider)
 
-        val dialog = AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this, R.style.Theme_PureVideoPlayer_FullScreenDialog)
             .setView(outerScroll)
             .create()
 
-        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        dialog.window?.setDimAmount(0.62f)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(surface))
+        dialog.window?.statusBarColor = surface
+        dialog.window?.navigationBarColor = surface
 
         val animatedRows = mutableListOf<View>()
 
@@ -716,6 +723,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         dialog.show()
+        dialog.window?.setLayout(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT
+        )
         animateDialogCardEntrance(cardContainer, animatedRows)
     }
 
@@ -2947,13 +2958,13 @@ class MainActivity : AppCompatActivity() {
                 }
             ),
             PremiumMenuItem(
-                iconEmoji = "👨‍💻",
-                title = "Ahmed M Moumen",
-                subtitle = getString(R.string.developer_credit_subtitle, BuildConfig.VERSION_NAME),
+                iconEmoji = "ℹ️",
+                title = getString(R.string.settings_hub_about_title),
+                subtitle = getString(R.string.settings_hub_about_sub, BuildConfig.VERSION_NAME),
                 isAccentHighlighted = true,
                 onClick = {
-                    Toast.makeText(this, "Developed by Ahmed M Moumen ✨", Toast.LENGTH_SHORT).show()
-                    showProSettingsDialog(false)
+                    pushSettingsBackStack { showProSettingsDialog(false) }
+                    showAboutAppPage()
                 }
             )
         )
@@ -3153,6 +3164,91 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    private fun showAboutAppPage() {
+        val verName = BuildConfig.VERSION_NAME
+        val items = listOf(
+            PremiumMenuItem(
+                iconEmoji = "👨‍💻",
+                title = getString(R.string.about_developer_label),
+                subtitle = "Ahmed M Moumen",
+                isAccentHighlighted = true,
+                onClick = {
+                    Toast.makeText(this, "Developed by Ahmed M Moumen ✨", Toast.LENGTH_SHORT).show()
+                    showAboutAppPage()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🏷️",
+                title = getString(R.string.about_version_label),
+                subtitle = "Pure Video Player v$verName (64-bit LibVLC Cinema Engine)",
+                onClick = {
+                    showAboutAppPage()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "📋",
+                title = getString(R.string.about_changelog_title),
+                subtitle = getString(R.string.about_changelog_sub, verName),
+                isAccentHighlighted = true,
+                onClick = {
+                    pushSettingsBackStack { showAboutAppPage() }
+                    showChangelogPage()
+                }
+            )
+        )
+
+        showPremiumMenuDialog(
+            headerIcon = "ℹ️",
+            title = getString(R.string.settings_hub_about_title),
+            subtitle = "Pure Video Player • v$verName",
+            items = items
+        )
+    }
+
+    private fun showChangelogPage() {
+        val verName = BuildConfig.VERSION_NAME
+        val items = listOf(
+            PremiumMenuItem(
+                iconEmoji = "✨",
+                title = "v$verName — Full-Screen Settings & About Hub",
+                subtitle = getString(R.string.changelog_v36_2_desc),
+                isAccentHighlighted = true,
+                onClick = { showChangelogPage() }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🎨",
+                title = "v36.1 — Categorized Settings & Fluid Theme Studio",
+                subtitle = getString(R.string.changelog_v36_1_desc),
+                onClick = { showChangelogPage() }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "❤️",
+                title = "v34.0 — IPTV Favorites, Watch History & Back-Swipe",
+                subtitle = getString(R.string.changelog_v34_0_desc),
+                onClick = { showChangelogPage() }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "📺",
+                title = "v30.0 — Integrated IPTV Hub (Xtream Codes & M3U)",
+                subtitle = getString(R.string.changelog_v30_0_desc),
+                onClick = { showChangelogPage() }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🛡️",
+                title = "v28.0 — Private Vault, Grid/List Layout & Smart Sort",
+                subtitle = getString(R.string.changelog_v28_0_desc),
+                onClick = { showChangelogPage() }
+            )
+        )
+
+        showPremiumMenuDialog(
+            headerIcon = "📋",
+            title = getString(R.string.about_changelog_title),
+            subtitle = "Pure Video Player • Ahmed M Moumen",
+            items = items
+        )
+    }
+
     private fun showAppLanguageDialog() {
         val currentTag = PlaybackStore.getAppLanguageTag(this)
         val items = listOf(
@@ -3226,16 +3322,23 @@ class MainActivity : AppCompatActivity() {
             ThemeOption("🔮", getString(R.string.theme_violet), "#A855F7", "#090D16")
         )
 
-        val outerScroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false }
+        val outerScroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            isFillViewport = true
+            setBackgroundColor(surface)
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
         val cardContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(16), dp(20), dp(20))
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dp(28).toFloat()
-                setColor(surface)
-                setStroke(dp(1), Color.argb(110, Color.red(initialAccent), Color.green(initialAccent), Color.blue(initialAccent)))
-            }
+            setPadding(dp(20), dp(22), dp(20), dp(28))
+            setBackgroundColor(surface)
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
         }
         outerScroll.addView(cardContainer)
 
@@ -3260,9 +3363,10 @@ class MainActivity : AppCompatActivity() {
         }
         cardContainer.addView(tvTitle)
 
-        val dialog = AlertDialog.Builder(this).setView(outerScroll).create()
-        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        dialog.window?.setDimAmount(0.62f)
+        val dialog = AlertDialog.Builder(this, R.style.Theme_PureVideoPlayer_FullScreenDialog).setView(outerScroll).create()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(surface))
+        dialog.window?.statusBarColor = surface
+        dialog.window?.navigationBarColor = surface
 
         val rowViews = mutableListOf<LinearLayout>()
         val checkViews = mutableListOf<TextView>()
@@ -3411,6 +3515,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         dialog.show()
+        dialog.window?.setLayout(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT
+        )
         animateDialogCardEntrance(cardContainer, animatedItems)
     }
 

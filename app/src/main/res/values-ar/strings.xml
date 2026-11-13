@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">مشغل الفيديو النقي</string>
+    <string name="app_name">Pure Video Player</string>
     <string name="folders_title">مجلدات الفيديو</string>
     <string name="back">رجوع</string>
     <string name="close">إغلاق</string>
@@ -317,4 +317,21 @@
     <string name="settings_hub_appearance_title">المظهر، العرض واللغة</string>
     <string name="settings_hub_subtitles_playback_title">الترجمة وإعدادات التشغيل</string>
     <string name="settings_hub_updates_title">التحديثات والمزامنة (GitHub)</string>
+    <string name="settings_hub_about_title">حول التطبيق (About)</string>
+    <string name="settings_hub_about_sub">المطور: Ahmed M Moumen • الإصدار v%1$s • سجل التغييرات</string>
+    <string name="about_developer_label">مطور التطبيق (Developer)</string>
+    <string name="about_version_label">رقم الإصدار (Version)</string>
+    <string name="about_changelog_title">سجل التحديثات والتغييرات (Changelog)</string>
+    <string name="about_changelog_sub">استعراض كافة المميزات والإضافات الجديدة في الإصدار v%1$s</string>
+    <string name="changelog_v36_2_desc">• تحويل قوائم الإعدادات والأقسام الفرعية إلى شاشة كاملة بنفس الأنيميشن الانسيابي.
+• إضافة قسم (حول التطبيق / About) ويضم اسم المطور Ahmed M Moumen ورقم الإصدار وسجل التغييرات.
+• توحيد اسم وهوية المشروع إلى Pure Video Player.</string>
+    <string name="changelog_v36_1_desc">• إعادة هيكلة الإعدادات في 4 أقسام رئيسية منظمة بدون ازدحام.
+• إضافة استوديو الثيمات التفاعلي مع دوائر الألوان الحية وتدرج الألوان المتحرك.</string>
+    <string name="changelog_v34_0_desc">• إضافة تبويبات المفضلة (❤️) وأُكمل مشاهدته (⏱️) وزر القلب المباشر داخل قسم IPTV.
+• تحسين إيماءة السحب للخلف (Back Swipe) للتنقل المتدرج.</string>
+    <string name="changelog_v30_0_desc">• إضافة نظام IPTV متكامل يدعم حسابات Xtream Codes وروابط وملفات M3U/M3U8.
+• إضافة البحث اللحظي السريع باللغتين العربية والإنجليزية.</string>
+    <string name="changelog_v28_0_desc">• إضافة تبويب الخزنة الخاصة (Private Vault) المحمية بالبصمة والرقم السري.
+• إضافة التبديل بين العرض الشبكي والقائمة (Grid / List) والترتيب الشامل وعلامة NEW.</string>
 </resources>

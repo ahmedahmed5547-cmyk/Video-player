@@ -317,4 +317,21 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="settings_hub_appearance_title">Appearance, Layout &amp; Language</string>
     <string name="settings_hub_subtitles_playback_title">Subtitles &amp; Playback</string>
     <string name="settings_hub_updates_title">Updates &amp; GitHub Sync</string>
+    <string name="settings_hub_about_title">About App</string>
+    <string name="settings_hub_about_sub">Developer: Ahmed M Moumen • v%1$s • Changelog</string>
+    <string name="about_developer_label">Developer</string>
+    <string name="about_version_label">App Version</string>
+    <string name="about_changelog_title">Changelog (What\'s New)</string>
+    <string name="about_changelog_sub">View full release notes &amp; new features in v%1$s</string>
+    <string name="changelog_v36_2_desc">• Upgraded Settings &amp; sub-menus to Full-Screen layout with fluid staggered animations.
+• Added dedicated About section with Developer credit (Ahmed M Moumen), Version info, and bilingual Changelog.
+• Standardized project branding to Pure Video Player.</string>
+    <string name="changelog_v36_1_desc">• Reorganized Settings into clean 2-level categories.
+• Added interactive Visual Theme Studio with live color swatches and 360ms smooth color morphing.</string>
+    <string name="changelog_v34_0_desc">• Added Favorites (❤️) and Continue Watching (⏱️) sub-tabs inside IPTV Series, Movies &amp; Live TV.
+• Improved phone edge Back-Swipe navigation across all folders and IPTV screens.</string>
+    <string name="changelog_v30_0_desc">• Added complete IPTV Smarters Hub supporting Xtream Codes API and M3U/M3U8 playlists.
+• Added 280ms debounced instant search in Arabic &amp; English.</string>
+    <string name="changelog_v28_0_desc">• Added bottom Private Vault tab with AndroidKeyStore Biometric &amp; PIN lock.
+• Added 2-Column Grid / List layout toggle, 7 Sort modes, and NEW video badges.</string>
 </resources>
