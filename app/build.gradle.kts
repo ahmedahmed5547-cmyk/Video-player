@@ -19,12 +19,12 @@ android {
         applicationId = "com.pureplayer.video"
         minSdk = 24
         targetSdk = 34
-        versionCode = 53
-        versionName = "37.7"
+        versionCode = 54
+        versionName = "37.8"
 
         resourceConfigurations += listOf("en", "ar", "fr", "es", "de", "tr", "ru", "pt", "it", "hi", "ur", "id", "zh", "ja", "ko")
 
-        // Strip unused 32-bit & emulator native libs -> Reduces APK size by ~75% while keeping 100% 64-bit Flagship speed!
+        // Strip unused 32-bit & emulator native libs -> Reduces APK/AAB size by ~75% while keeping 100% 64-bit Flagship speed!
         ndk {
             abiFilters.add("arm64-v8a")
         }
@@ -38,7 +38,14 @@ android {
         buildConfigField("String", "SUBDL_API_KEY", "\"$subdlKey\"")
     }
 
-    // Persistent Signing Key so every future update installs cleanly as an Update without package conflicts!
+    // Keep all 15 languages inside the Google Play AAB bundle so in-app language switching works seamlessly
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
+
+    // Persistent Upload & Release Signing Key (pureplayer.keystore) for Google Play Console AAB & APK updates
     signingConfigs {
         getByName("debug") {
             val ksFile = file("pureplayer.keystore")
@@ -104,6 +111,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // LibVLC Official 64-bit Engine: Filtered to arm64-v8a only for ultra-slim APK size
+    // LibVLC Official 64-bit Engine: Filtered to arm64-v8a only for ultra-slim APK/AAB size
     implementation("org.videolan.android:libvlc-all:3.6.3")
 }
