@@ -216,6 +216,10 @@ object PlaybackStore {
         prefs(context).edit().putString(KEY_SUB_LANGS_CSV, clean.joinToString(",")).apply()
     }
 
+    const val APPEARANCE_DARK = 0
+    const val APPEARANCE_LIGHT = 1
+    const val APPEARANCE_SYSTEM = 2
+
     // 0 = Dark Mode (Default), 1 = Light Mode, 2 = System Default
     fun getAppearanceMode(context: Context): Int = prefs(context).getInt(KEY_APPEARANCE_MODE, 0).coerceIn(0, 2)
 
