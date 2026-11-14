@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Only included in the 'github' distribution flavor for the built-in self-updater -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+</manifest>

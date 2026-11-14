@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="8dp"
+    android:layout_marginTop="6dp"
+    android:layout_marginEnd="8dp"
+    android:layout_marginBottom="6dp"
+    app:cardBackgroundColor="#131C2E"
+    app:cardCornerRadius="18dp"
+    app:cardElevation="3dp"
+    app:strokeColor="#1E293B"
+    app:strokeWidth="1dp">
+
+    <LinearLayout
+        android:id="@+id/itemContentLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="12dp">
+
+        <FrameLayout
+            android:id="@+id/thumbContainer"
+            android:layout_width="116dp"
+            android:layout_height="68dp">
+
+            <ImageView
+                android:id="@+id/ivIcon"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#0B111E"
+                android:scaleType="centerCrop"
+                android:src="@drawable/ic_play_modern" />
+
+            <!-- Subtle "NEW" or Type Badge -->
+            <TextView
+                android:id="@+id/tvNewBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|start"
+                android:layout_margin="4dp"
+                android:background="#E610B981"
+                android:paddingStart="6dp"
+                android:paddingTop="1dp"
+                android:paddingEnd="6dp"
+                android:paddingBottom="1dp"
+                android:text="NEW"
+                android:textColor="#FFFFFF"
+                android:textSize="9.5sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- Interactive Heart Button on Movies, Series, Live Channels -->
+            <ImageButton
+                android:id="@+id/btnFavoriteHeart"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="top|end"
+                android:layout_margin="4dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="@string/iptv_subtab_favorites"
+                android:padding="4dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_heart_outline"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tvDurationBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:layout_margin="4dp"
+                android:background="#CC000000"
+                android:paddingStart="6dp"
+                android:paddingTop="2dp"
+                android:paddingEnd="6dp"
+                android:paddingBottom="2dp"
+                android:text="00:00"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:id="@+id/textContainer"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="?android:attr/textColorSecondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/btnDownloadIptv"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_marginStart="8dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/iptv_download_btn"
+            android:padding="7dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_download_modern"
+            android:visibility="gone" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

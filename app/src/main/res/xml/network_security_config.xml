@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+        Cleartext HTTP traffic is permitted here because many user-supplied IPTV M3U/Xtream
+        servers and local LAN media streams operate over plain HTTP (http://) without TLS.
+        All app preferences, vault PINs, and credentials remain encrypted locally via AndroidKeyStore / PBKDF2.
+    -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

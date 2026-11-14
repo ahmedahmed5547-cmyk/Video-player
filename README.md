@@ -1,14 +1,19 @@
-# 🎬 Pure Video Player
+# Pure Video Player (`com.pureplayer.video`)
 
-**Pure Video Player** is a modern, ad-free Cinema & IPTV media player for Android built with Kotlin and powered by the 64-bit LibVLC engine.
+Flagship 4K Cinema & IPTV Media Player for Android (`minSdk 24` / `targetSdk 34`), built with Kotlin and LibVLC (`arm64-v8a`).
 
-## ✨ Key Features
-- **📁 Smart Video Folders & Media Layout**: Switch seamlessly between Detailed List View and 2-Column Cinema Grid View with comprehensive sorting (Date, Name, Size, Duration) and `NEW` video badges.
-- **🛡️ Private Vault**: Hardware-backed `AndroidKeyStore` Biometric & PIN folder protection. Locked folders move automatically into the Private Vault tab.
-- **📺 Integrated IPTV Hub (Xtream Codes & M3U/M3U8)**: Supports Live TV, Movies, Series (Seasons & Episodes), and Radio with interactive Favorites (`❤️`) and Continue Watching (`⏱️`) sub-tabs.
-- **💬 Multi-Source Automatic Subtitle Search & Live Styling**: Instant subtitle search across 5 providers with live size, opacity, outline, and drag/pinch positioning.
-- **🎨 Fluid Theme Studio & Full-Screen Settings**: Smooth staggered animations and live color morphing across 5 cinema themes.
+## Key Capabilities
+- **Video Engine:** `HW+` / `HW` / `SW` live decoder switcher, HDR10/HLG tonemapping, YouTube-style Auto-PiP with instant audio stop on close, and split long-press gestures.
+- **Audio Studio:** 7 acoustic sound profiles + 5-Band Graphic Equalizer & Pre-Amp Gain.
+- **Subtitles:** Online subtitle search across 15 world languages, draggable & pinch-to-zoom overlay, and millisecond sync.
+- **IPTV Suite:** Xtream Codes API & M3U/M3U8 parser backed by indexed SQLite (`pure_video_iptv.db`), Favorites, Recent History, and Offline VOD Download.
+- **Privacy & Themes:** `PBKDF2WithHmacSHA256` + `AndroidKeyStore` Biometric Private Vault, Light/Dark/System themes, and 8 dynamic Material You palettes.
 
-## 👨‍💻 Developer
+## Build Flavors & Secrets Setup
+- **`play` flavor** (`bundlePlayRelease`): Google Play Console AAB bundle without `REQUEST_INSTALL_PACKAGES` and without the in-app updater.
+- **`github` flavor** (`assembleGithubRelease`): Direct-install Release APK with built-in GitHub updater.
+- **GitHub Secrets (Recommended):** Configure `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, and `KEY_PASSWORD` in repository Settings -> Secrets and variables -> Actions. Never commit `.keystore` files or `local.properties`.
+
+## Developer
 - **Ahmed M Moumen**
-- **Current Version**: `v37.5`
+- **Current Version:** `v38.01` (`versionCode = 57`)

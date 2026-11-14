@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <exclude domain="sharedpref" path="pure_video_playback_store.xml" />
+    <exclude domain="sharedpref" path="pure_player_iptv_store_v1.xml" />
+    <exclude domain="file" path="iptv_cache" />
+    <exclude domain="database" path="pure_video_iptv.db" />
+        <exclude domain="database" path="pure_video_iptv_room.db" />
+</full-backup-content>

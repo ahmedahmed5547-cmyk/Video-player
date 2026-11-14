@@ -1,0 +1,19 @@
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+bin/
+gen/
+out/
+build/
+.gradle/
+local.properties
+# *.keystore (kept for zero-config GitHub build)
+# *.jks
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
