@@ -118,6 +118,9 @@ object PlaybackStore {
     private const val KEY_THEME_INDEX = "app_theme_index"
     private const val KEY_APPEARANCE_MODE = "app_appearance_mode_v1"
     private const val KEY_LAST_ACTIVE_FOLDER = "last_active_folder_name_v1"
+    private const val KEY_AUDIO_PRESET_MODE = "audio_eq_preset_mode_v1"
+    private const val KEY_AUDIO_PREAMP_DB = "audio_eq_preamp_db_v1"
+    private const val KEY_AUDIO_BANDS_CSV = "audio_eq_5bands_csv_v1"
     private const val KEY_SUB_SIZE_SP = "sub_size_sp"
     private const val KEY_SUB_COLOR_IDX = "sub_color_index"
     private const val KEY_SUB_BG_OPACITY = "sub_bg_opacity_pct"
@@ -298,6 +301,76 @@ object PlaybackStore {
             prefs(context).edit().putString(KEY_LAST_ACTIVE_FOLDER, folderName).apply()
         }
     }
+
+    // Audio Preset Modes:
+    // 0 = Standard (Flat), 1 = Cinematic, 2 = Concert Hall, 3 = Voice Clarity,
+    // 4 = Deep Bass, 5 = Live Stadium, 6 = Night Mode, 7 = Custom Manual EQ
+    fun getAudioPresetMode(context: Context): Int =
+        prefs(context).getInt(KEY_AUDIO_PRESET_MODE, 0).coerceIn(0, 7)
+
+    fun setAudioPresetMode(context: Context, mode: Int) {
+        val clamped = mode.coerceIn(0, 7)
+        val editor = prefs(context).edit().putInt(KEY_AUDIO_PRESET_MODE, clamped)
+        if (clamped != 7) {
+            val (preAmp, bands) = getPresetCurveForMode(clamped)
+            editor.putFloat(KEY_AUDIO_PREAMP_DB, preAmp)
+            editor.putString(KEY_AUDIO_BANDS_CSV, bands.joinToString(","))
+        }
+        editor.apply()
+    }
+
+    fun getPresetCurveForMode(mode: Int): Pair<Float, FloatArray> {
+        return when (mode) {
+            1 -> Pair(2.5f, floatArrayOf(6.0f, 4.5f, -1.0f, 3.5f, 5.0f))   // Cinematic Surround
+            2 -> Pair(1.5f, floatArrayOf(3.5f, 3.0f, 1.5f, 2.5f, 4.5f))    // Concert Hall
+            3 -> Pair(3.0f, floatArrayOf(-3.0f, -1.5f, 4.0f, 7.5f, 3.0f))  // Voice & Dialogue Clarity
+            4 -> Pair(2.0f, floatArrayOf(8.5f, 6.5f, 0.0f, 1.5f, 2.0f))    // Deep Bass Boost
+            5 -> Pair(2.5f, floatArrayOf(3.0f, 2.0f, 3.5f, 5.0f, 4.0f))    // Live Stadium
+            6 -> Pair(4.0f, floatArrayOf(-5.0f, -2.5f, 3.5f, 6.0f, -1.0f)) // Night Comfort Mode
+            else -> Pair(0.0f, floatArrayOf(0.0f, 0.0f, 0.0f, 0.0f, 0.0f)) // Standard (Flat)
+        }
+    }
+
+    fun getAudioPreAmpDb(context: Context): Float =
+        prefs(context).getFloat(KEY_AUDIO_PREAMP_DB, 0.0f).coerceIn(-10.0f, 12.0f)
+
+    fun setAudioPreAmpDb(context: Context, db: Float) {
+        prefs(context).edit()
+            .putFloat(KEY_AUDIO_PREAMP_DB, db.coerceIn(-10.0f, 12.0f))
+            .putInt(KEY_AUDIO_PRESET_MODE, 7)
+            .apply()
+    }
+
+    fun getAudioEqBandsDb(context: Context): FloatArray {
+        val raw = prefs(context).getString(KEY_AUDIO_BANDS_CSV, null)
+        if (raw.isNullOrBlank()) {
+            return getPresetCurveForMode(getAudioPresetMode(context)).second
+        }
+        val parts = raw.split(",").mapNotNull { it.trim().toFloatOrNull() }
+        return if (parts.size == 5) {
+            FloatArray(5) { idx -> parts[idx].coerceIn(-15.0f, 15.0f) }
+        } else {
+            getPresetCurveForMode(getAudioPresetMode(context)).second
+        }
+    }
+
+    fun setAudioEqBandsDb(context: Context, bands: FloatArray, preAmpDb: Float) {
+        val safeBands = FloatArray(5) { idx -> (bands.getOrNull(idx) ?: 0f).coerceIn(-15.0f, 15.0f) }
+        prefs(context).edit()
+            .putString(KEY_AUDIO_BANDS_CSV, safeBands.joinToString(","))
+            .putFloat(KEY_AUDIO_PREAMP_DB, preAmpDb.coerceIn(-10.0f, 12.0f))
+            .putInt(KEY_AUDIO_PRESET_MODE, 7)
+            .apply()
+    }
+
+    fun resetAudioEqualizerToStandard(context: Context) {
+        prefs(context).edit()
+            .putInt(KEY_AUDIO_PRESET_MODE, 0)
+            .putFloat(KEY_AUDIO_PREAMP_DB, 0.0f)
+            .putString(KEY_AUDIO_BANDS_CSV, "0.0,0.0,0.0,0.0,0.0")
+            .apply()
+    }
+
 
     fun getSubSizeSp(context: Context): Float =
         prefs(context).getFloat(KEY_SUB_SIZE_SP, 22f).coerceIn(12f, 46f)

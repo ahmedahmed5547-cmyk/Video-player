@@ -3135,6 +3135,16 @@ class MainActivity : AppCompatActivity() {
                 }
             ),
             PremiumMenuItem(
+                iconEmoji = "🔊",
+                title = getString(R.string.settings_hub_audio_title),
+                subtitle = getAudioModeDisplayName(PlaybackStore.getAudioPresetMode(this)),
+                isAccentHighlighted = true,
+                onClick = {
+                    pushSettingsBackStack { showProSettingsDialog(false) }
+                    showSettingsAudioEqualizerPage()
+                }
+            ),
+            PremiumMenuItem(
                 iconEmoji = "🚀",
                 title = getString(R.string.settings_hub_updates_title),
                 subtitle = "v${BuildConfig.VERSION_NAME} • GitHub Auto-Updater",
@@ -3340,6 +3350,302 @@ class MainActivity : AppCompatActivity() {
             subtitle = subLangs,
             items = items
         )
+    }
+
+    private fun getAudioModeDisplayName(mode: Int): String {
+        return when (mode) {
+            1 -> "🎬 " + getString(R.string.audio_mode_cinematic)
+            2 -> "🏛️ " + getString(R.string.audio_mode_hall)
+            3 -> "🗣️ " + getString(R.string.audio_mode_voice)
+            4 -> "🎸 " + getString(R.string.audio_mode_bass)
+            5 -> "🏟️ " + getString(R.string.audio_mode_stadium)
+            6 -> "🌙 " + getString(R.string.audio_mode_night)
+            7 -> "🎛️ " + getString(R.string.audio_mode_custom)
+            else -> "🎵 " + getString(R.string.audio_mode_standard)
+        }
+    }
+
+    private fun showSettingsAudioEqualizerPage() {
+        val currentMode = PlaybackStore.getAudioPresetMode(this)
+        val modeLabel = getAudioModeDisplayName(currentMode)
+        val preAmp = PlaybackStore.getAudioPreAmpDb(this)
+        val bands = PlaybackStore.getAudioEqBandsDb(this)
+        val eqSummary = String.format(
+            Locale.US,
+            "Pre-Amp: %+.1fdB • [60Hz: %+.0f | 230Hz: %+.0f | 910Hz: %+.0f | 3.6kHz: %+.0f | 14kHz: %+.0f]",
+            preAmp, bands[0], bands[1], bands[2], bands[3], bands[4]
+        )
+
+        val items = listOf(
+            PremiumMenuItem(
+                iconEmoji = "🎭",
+                title = getString(R.string.audio_preset_section_title),
+                subtitle = modeLabel,
+                isAccentHighlighted = true,
+                onClick = {
+                    pushSettingsBackStack { showSettingsAudioEqualizerPage() }
+                    showAudioSoundModesPage()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🎚️",
+                title = getString(R.string.audio_eq_customizer_title),
+                subtitle = eqSummary,
+                isAccentHighlighted = (currentMode == 7),
+                onClick = {
+                    pushSettingsBackStack { showSettingsAudioEqualizerPage() }
+                    showGraphicEqualizerDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🔄",
+                title = getString(R.string.audio_reset_default_title),
+                subtitle = getString(R.string.audio_reset_default_sub),
+                onClick = {
+                    PlaybackStore.resetAudioEqualizerToStandard(this)
+                    Toast.makeText(this, getString(R.string.audio_reset_toast), Toast.LENGTH_SHORT).show()
+                    showSettingsAudioEqualizerPage()
+                }
+            )
+        )
+
+        showPremiumMenuDialog(
+            headerIcon = "🔊",
+            title = getString(R.string.settings_hub_audio_title),
+            subtitle = modeLabel,
+            items = items
+        )
+    }
+
+    private fun showAudioSoundModesPage() {
+        val activeMode = PlaybackStore.getAudioPresetMode(this)
+        val modes = listOf(
+            Triple(0, "🎵", Pair(getString(R.string.audio_mode_standard), getString(R.string.audio_mode_standard_sub))),
+            Triple(1, "🎬", Pair(getString(R.string.audio_mode_cinematic), getString(R.string.audio_mode_cinematic_sub))),
+            Triple(2, "🏛️", Pair(getString(R.string.audio_mode_hall), getString(R.string.audio_mode_hall_sub))),
+            Triple(3, "🗣️", Pair(getString(R.string.audio_mode_voice), getString(R.string.audio_mode_voice_sub))),
+            Triple(4, "🎸", Pair(getString(R.string.audio_mode_bass), getString(R.string.audio_mode_bass_sub))),
+            Triple(5, "🏟️", Pair(getString(R.string.audio_mode_stadium), getString(R.string.audio_mode_stadium_sub))),
+            Triple(6, "🌙", Pair(getString(R.string.audio_mode_night), getString(R.string.audio_mode_night_sub))),
+            Triple(7, "🎛️", Pair(getString(R.string.audio_mode_custom), getString(R.string.audio_mode_custom_sub)))
+        )
+
+        val items = modes.map { (modeIdx, emoji, texts) ->
+            val isSelected = (modeIdx == activeMode)
+            val subText = if (isSelected) "✅ ${getString(R.string.active_mode_badge)} • ${texts.second}" else texts.second
+            PremiumMenuItem(
+                iconEmoji = emoji,
+                title = texts.first,
+                subtitle = subText,
+                isAccentHighlighted = isSelected,
+                onClick = {
+                    if (modeIdx == 7) {
+                        showGraphicEqualizerDialog()
+                    } else {
+                        PlaybackStore.setAudioPresetMode(this, modeIdx)
+                        Toast.makeText(
+                            this,
+                            getString(R.string.audio_mode_applied_toast, texts.first),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        popSettingsBackStack()
+                    }
+                }
+            )
+        }
+
+        showPremiumMenuDialog(
+            headerIcon = "🎭",
+            title = getString(R.string.audio_preset_section_title),
+            subtitle = getAudioModeDisplayName(activeMode),
+            items = items
+        )
+    }
+
+    private fun showGraphicEqualizerDialog() {
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
+        val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+        val accent = PlaybackStore.getAccentColor(this)
+        val isLight = PlaybackStore.isLightThemeActive(this)
+
+        var currentPreAmp = PlaybackStore.getAudioPreAmpDb(this)
+        val currentBands = PlaybackStore.getAudioEqBandsDb(this).copyOf()
+
+        val outerScroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+        }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(18), dp(20), dp(18))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(26).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(115, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+        outerScroll.addView(container)
+
+        val tvHeader = TextView(this).apply {
+            text = "🎚️  " + getString(R.string.audio_eq_customizer_title)
+            setTextColor(primaryText)
+            textSize = 17f
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        val tvSub = TextView(this).apply {
+            text = getString(R.string.audio_eq_customizer_sub)
+            setTextColor(secondaryText)
+            textSize = 12f
+            setPadding(0, dp(4), 0, dp(12))
+        }
+        container.addView(tvHeader)
+        container.addView(tvSub)
+
+        fun formatDb(v: Float): String = String.format(Locale.US, "%+.1f", v)
+
+        // Pre-Amp Slider (-10dB to +12dB -> range 220 steps of 0.1dB)
+        val tvPreAmp = TextView(this).apply {
+            text = getString(R.string.audio_eq_preamp_label, formatDb(currentPreAmp))
+            setTextColor(accent)
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, dp(6), 0, dp(4))
+        }
+        val seekPreAmp = SeekBar(this).apply {
+            max = 220
+            progress = ((currentPreAmp + 10f) * 10f).toInt().coerceIn(0, 220)
+            progressTintList = ColorStateList.valueOf(accent)
+            thumbTintList = ColorStateList.valueOf(accent)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                    currentPreAmp = -10f + (p / 10f)
+                    tvPreAmp.text = getString(R.string.audio_eq_preamp_label, formatDb(currentPreAmp))
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        }
+        container.addView(tvPreAmp)
+        container.addView(seekPreAmp)
+
+        val bandResIds = intArrayOf(
+            R.string.audio_eq_band_60,
+            R.string.audio_eq_band_230,
+            R.string.audio_eq_band_910,
+            R.string.audio_eq_band_3600,
+            R.string.audio_eq_band_14000
+        )
+
+        val bandLabels = ArrayList<TextView>(5)
+        val bandSeeks = ArrayList<SeekBar>(5)
+
+        for (idx in 0 until 5) {
+            val rowCard = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dp(7)
+                }
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(13).toFloat()
+                    setColor(bg)
+                    setStroke(dp(1), if (isLight) Color.parseColor("#CBD5E1") else Color.parseColor("#1FFFFFFF"))
+                }
+            }
+            val lbl = TextView(this).apply {
+                text = getString(bandResIds[idx], formatDb(currentBands[idx]))
+                setTextColor(primaryText)
+                textSize = 12.5f
+                setTypeface(typeface, Typeface.BOLD)
+            }
+            val sb = SeekBar(this).apply {
+                max = 300
+                progress = ((currentBands[idx] + 15f) * 10f).toInt().coerceIn(0, 300)
+                progressTintList = ColorStateList.valueOf(accent)
+                thumbTintList = ColorStateList.valueOf(accent)
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                        currentBands[idx] = -15f + (p / 10f)
+                        lbl.text = getString(bandResIds[idx], formatDb(currentBands[idx]))
+                    }
+                    override fun onStartTrackingTouch(s: SeekBar?) {}
+                    override fun onStopTrackingTouch(s: SeekBar?) {}
+                })
+            }
+            bandLabels.add(lbl)
+            bandSeeks.add(sb)
+            rowCard.addView(lbl)
+            rowCard.addView(sb)
+            container.addView(rowCard)
+        }
+
+        val dialog = AlertDialog.Builder(this).setView(outerScroll).create()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        val actionsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, dp(14), 0, 0)
+        }
+
+        val btnReset = TextView(this).apply {
+            text = getString(R.string.reset)
+            setTextColor(accent)
+            textSize = 13.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setOnClickListener {
+                currentPreAmp = 0f
+                seekPreAmp.progress = 100
+                for (i in 0 until 5) {
+                    currentBands[i] = 0f
+                    bandSeeks[i].progress = 150
+                }
+            }
+        }
+
+        val btnCancel = TextView(this).apply {
+            text = getString(R.string.cancel)
+            setTextColor(secondaryText)
+            textSize = 14f
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+        }
+        bindSubDialogBackNavigation(dialog, btnCancel)
+
+        val btnSave = TextView(this).apply {
+            text = getString(R.string.save)
+            setTextColor(Color.parseColor("#090D16"))
+            textSize = 14.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(22), dp(10), dp(22), dp(10))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(accent)
+            }
+            setOnClickListener {
+                isNavigatingToSubDialog = true
+                dialog.dismiss()
+                isNavigatingToSubDialog = false
+                PlaybackStore.setAudioEqBandsDb(this@MainActivity, currentBands, currentPreAmp)
+                Toast.makeText(
+                    this@MainActivity,
+                    getString(R.string.audio_mode_applied_toast, getString(R.string.audio_mode_custom)),
+                    Toast.LENGTH_SHORT
+                ).show()
+                popSettingsBackStack()
+            }
+        }
+
+        actionsRow.addView(btnReset)
+        actionsRow.addView(btnCancel)
+        actionsRow.addView(btnSave)
+        container.addView(actionsRow)
+        dialog.show()
     }
 
     private fun showAboutAppPage() {

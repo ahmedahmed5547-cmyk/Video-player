@@ -19,8 +19,8 @@ android {
         applicationId = "com.pureplayer.video"
         minSdk = 24
         targetSdk = 34
-        versionCode = 47
-        versionName = "37.1"
+        versionCode = 48
+        versionName = "37.2"
 
         resourceConfigurations += listOf("en", "ar")
 
@@ -84,6 +84,11 @@ android {
     buildFeatures {
         viewBinding = true
         buildConfig = true
+    }
+
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 }
 

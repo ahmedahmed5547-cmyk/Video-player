@@ -279,6 +279,7 @@ class PlayerActivity : AppCompatActivity() {
                     binding.playerLoadingBar.visibility = View.GONE
                     binding.btnPlayPause.setImageResource(R.drawable.ic_pause_modern)
                     updateMediaSessionPlaybackState(isPlaying = true)
+                    applyAudioEqualizerFromStore()
                     if (externalSubtitleCues.isNotEmpty()) {
                         mediaPlayer.spuTrack = -1
                     }
@@ -2195,6 +2196,9 @@ class PlayerActivity : AppCompatActivity() {
             PremiumMenuItem("🎯", getString(R.string.pro_reset_sub_pos), getString(R.string.sub_position_reset_toast)) {
                 resetSubtitlePositionNow()
             },
+            PremiumMenuItem("🎛️", getString(R.string.settings_hub_audio_title), getPlayerAudioModeName(PlaybackStore.getAudioPresetMode(this)), true) {
+                playerMenuBackStack.addLast { showMoreProOptionsDialog() }; showPlayerSoundModesDialog()
+            },
             PremiumMenuItem("🌈", getString(R.string.pro_hdr_mode), "HDR10 / HLG Tonemapping") {
                 playerMenuBackStack.addLast { showMoreProOptionsDialog() }; showHdrModeSelectorDialog()
             },
@@ -2374,27 +2378,103 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun showAudioTracksDialog() {
-        val audioTracks = mediaPlayer.audioTracks ?: emptyArray()
-        if (audioTracks.isEmpty()) {
-            showToastIndicator(getString(R.string.toast_no_extra_audio))
-            return
+    private fun getPlayerAudioModeName(mode: Int): String {
+        return when (mode) {
+            1 -> "🎬 " + getString(R.string.audio_mode_cinematic)
+            2 -> "🏛️ " + getString(R.string.audio_mode_hall)
+            3 -> "🗣️ " + getString(R.string.audio_mode_voice)
+            4 -> "🎸 " + getString(R.string.audio_mode_bass)
+            5 -> "🏟️ " + getString(R.string.audio_mode_stadium)
+            6 -> "🌙 " + getString(R.string.audio_mode_night)
+            7 -> "🎛️ " + getString(R.string.audio_mode_custom)
+            else -> "🎵 " + getString(R.string.audio_mode_standard)
         }
-        val activeTrack = mediaPlayer.audioTrack
-        val items = audioTracks.map { track ->
-            val tName = track.name ?: "Track ${track.id}"
+    }
+
+    private fun applyAudioEqualizerFromStore() {
+        if (!::mediaPlayer.isInitialized) return
+        try {
+            val mode = PlaybackStore.getAudioPresetMode(this)
+            val preAmp = PlaybackStore.getAudioPreAmpDb(this)
+            val bands5 = PlaybackStore.getAudioEqBandsDb(this)
+            val isAllFlat = (mode == 0 && preAmp == 0f && bands5.all { it == 0f })
+            if (isAllFlat) {
+                mediaPlayer.setEqualizer(null)
+                return
+            }
+            val eq = MediaPlayer.Equalizer.create()
+            eq.setPreAmp(preAmp)
+            // Map 5 user bands (60Hz, 230Hz, 910Hz, 3.6kHz, 14kHz) across LibVLC's 10 internal bands (0..9)
+            for (b in 0 until 5) {
+                val gain = bands5[b].coerceIn(-20f, 20f)
+                eq.setAmp(b * 2, gain)
+                eq.setAmp(b * 2 + 1, gain)
+            }
+            mediaPlayer.setEqualizer(eq)
+        } catch (_: Exception) {}
+    }
+
+    private fun showPlayerSoundModesDialog() {
+        val activeMode = PlaybackStore.getAudioPresetMode(this)
+        val modes = listOf(
+            Triple(0, "🎵", Pair(getString(R.string.audio_mode_standard), getString(R.string.audio_mode_standard_sub))),
+            Triple(1, "🎬", Pair(getString(R.string.audio_mode_cinematic), getString(R.string.audio_mode_cinematic_sub))),
+            Triple(2, "🏛️", Pair(getString(R.string.audio_mode_hall), getString(R.string.audio_mode_hall_sub))),
+            Triple(3, "🗣️", Pair(getString(R.string.audio_mode_voice), getString(R.string.audio_mode_voice_sub))),
+            Triple(4, "🎸", Pair(getString(R.string.audio_mode_bass), getString(R.string.audio_mode_bass_sub))),
+            Triple(5, "🏟️", Pair(getString(R.string.audio_mode_stadium), getString(R.string.audio_mode_stadium_sub))),
+            Triple(6, "🌙", Pair(getString(R.string.audio_mode_night), getString(R.string.audio_mode_night_sub)))
+        )
+        val items = modes.map { (modeIdx, emoji, texts) ->
+            val isSel = (modeIdx == activeMode)
             PremiumMenuItem(
-                iconEmoji = "🔊",
-                title = tName,
-                subtitle = if (track.id == activeTrack) "✅ Active Audio Track" else "Audio Track #${track.id}",
-                isAccentHighlighted = (track.id == activeTrack),
+                iconEmoji = emoji,
+                title = texts.first,
+                subtitle = texts.second,
+                isAccentHighlighted = isSel,
                 onClick = {
-                    mediaPlayer.audioTrack = track.id
-                    showToastIndicator("🔊 $tName")
+                    playerMenuBackStack.clear()
+                    PlaybackStore.setAudioPresetMode(this, modeIdx)
+                    applyAudioEqualizerFromStore()
+                    showToastIndicator("$emoji ${texts.first}")
                 }
             )
         }
-        showPlayerPremiumMenu("🔊", getString(R.string.audio_tracks), null, items)
+        showPlayerPremiumMenu("🎛️", getString(R.string.settings_hub_audio_title), getPlayerAudioModeName(activeMode), items)
+    }
+
+    private fun showAudioTracksDialog() {
+        val audioTracks = mediaPlayer.audioTracks ?: emptyArray()
+        val activeTrack = mediaPlayer.audioTrack
+        val activeModeName = getPlayerAudioModeName(PlaybackStore.getAudioPresetMode(this))
+        val items = mutableListOf(
+            PremiumMenuItem(
+                iconEmoji = "🎛️",
+                title = getString(R.string.audio_preset_section_title),
+                subtitle = activeModeName,
+                isAccentHighlighted = true,
+                onClick = {
+                    playerMenuBackStack.addLast { showAudioTracksDialog() }
+                    showPlayerSoundModesDialog()
+                }
+            )
+        )
+        for (track in audioTracks) {
+            val tName = track.name ?: "Track ${track.id}"
+            items.add(
+                PremiumMenuItem(
+                    iconEmoji = "🔊",
+                    title = tName,
+                    subtitle = if (track.id == activeTrack) "✅ Active Audio Track" else "Audio Track #${track.id}",
+                    isAccentHighlighted = (track.id == activeTrack),
+                    onClick = {
+                        mediaPlayer.audioTrack = track.id
+                        showToastIndicator("🔊 $tName")
+                    }
+                )
+            )
+        }
+        showPlayerPremiumMenu("🔊", getString(R.string.audio_tracks), activeModeName, items)
     }
 
     private fun showSpeedDialog() {
