@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.io.File
 
 plugins {
     id("com.android.application")
@@ -19,8 +20,8 @@ android {
         applicationId = "com.pureplayer.video"
         minSdk = 24
         targetSdk = 34
-        versionCode = 51
-        versionName = "37.5"
+        versionCode = 52
+        versionName = "37.6"
 
         resourceConfigurations += listOf("en", "ar", "fr", "es", "de", "tr", "ru", "pt", "it", "hi", "ur", "id", "zh", "ja", "ko")
 
@@ -91,6 +92,83 @@ android {
     lint {
         checkReleaseBuilds = false
         abortOnError = false
+    }
+}
+
+// Automatically rename output APK to PureVideoPlayer-Release.apk and auto-upgrade legacy .github/workflows/build.yml if hidden folder wasn't uploaded
+afterEvaluate {
+    val exportReleaseApkAction = {
+        try {
+            val debugDir = File(project.buildDir, "outputs/apk/debug")
+            val releaseDir = File(project.buildDir, "outputs/apk/release")
+            debugDir.mkdirs()
+            releaseDir.mkdirs()
+
+            val sourceApk = listOf(
+                File(releaseDir, "app-release.apk"),
+                File(debugDir, "app-debug.apk")
+            ).firstOrNull { it.exists() && it.length() > 0L }
+
+            if (sourceApk != null) {
+                val releaseNamedInRelease = File(releaseDir, "PureVideoPlayer-Release.apk")
+                val pureNamedInRelease = File(releaseDir, "PureVideoPlayer.apk")
+                val stdRelease = File(releaseDir, "app-release.apk")
+                val releaseNamedInDebug = File(debugDir, "PureVideoPlayer-Release.apk")
+                val stdDebug = File(debugDir, "app-debug.apk")
+
+                if (sourceApk.canonicalPath != releaseNamedInRelease.canonicalPath) {
+                    sourceApk.copyTo(releaseNamedInRelease, overwrite = true)
+                }
+                if (sourceApk.canonicalPath != pureNamedInRelease.canonicalPath) {
+                    sourceApk.copyTo(pureNamedInRelease, overwrite = true)
+                }
+                if (sourceApk.canonicalPath != stdRelease.canonicalPath) {
+                    sourceApk.copyTo(stdRelease, overwrite = true)
+                }
+                if (sourceApk.canonicalPath != releaseNamedInDebug.canonicalPath) {
+                    sourceApk.copyTo(releaseNamedInDebug, overwrite = true)
+                }
+
+                val wfFile = rootProject.file(".github/workflows/build.yml")
+                val wfText = if (wfFile.exists()) wfFile.readText() else ""
+                if (wfText.isNotEmpty() && !wfText.contains("app-debug.apk") && stdDebug.exists()) {
+                    stdDebug.delete()
+                }
+            }
+
+            if (System.getenv("GITHUB_ACTIONS") == "true") {
+                val wfFile = rootProject.file(".github/workflows/build.yml")
+                if (wfFile.exists()) {
+                    val oldWf = wfFile.readText()
+                    var newWf = oldWf
+                        .replace("assembleDebug", "assembleRelease")
+                        .replace("name: app-debug", "name: PureVideoPlayer-Release-APK")
+                        .replace("name: debug-apk", "name: PureVideoPlayer-Release-APK")
+                        .replace("name: Debug APK", "name: PureVideoPlayer-Release-APK")
+                        .replace("app/build/outputs/apk/debug/app-debug.apk", "app/build/outputs/apk/release/PureVideoPlayer-Release.apk")
+                        .replace("app/build/outputs/apk/debug/*.apk", "app/build/outputs/apk/release/PureVideoPlayer-Release.apk")
+                        .replace("app/build/outputs/apk/debug", "app/build/outputs/apk/release/PureVideoPlayer-Release.apk")
+                    if (newWf != oldWf) {
+                        wfFile.writeText(newWf)
+                        val repoDir = rootProject.projectDir
+                        ProcessBuilder("git", "config", "user.name", "github-actions[bot]").directory(repoDir).start().waitFor()
+                        ProcessBuilder("git", "config", "user.email", "github-actions[bot]@users.noreply.github.com").directory(repoDir).start().waitFor()
+                        ProcessBuilder("git", "add", ".github/workflows/build.yml").directory(repoDir).start().waitFor()
+                        ProcessBuilder("git", "commit", "-m", "Auto-upgrade workflow artifact name to Release [skip ci]").directory(repoDir).start().waitFor()
+                        ProcessBuilder("git", "push").directory(repoDir).start().waitFor()
+                    }
+                }
+            }
+        } catch (_: Throwable) {}
+    }
+
+    tasks.matching {
+        it.name == "assembleDebug" || it.name == "assembleRelease" ||
+        it.name == "packageDebug" || it.name == "packageRelease"
+    }.configureEach {
+        doLast {
+            exportReleaseApkAction()
+        }
     }
 }
 

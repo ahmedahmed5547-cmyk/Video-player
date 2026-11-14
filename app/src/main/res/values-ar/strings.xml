@@ -414,4 +414,22 @@
     <string name="lang_chinese">الصينية (中文)</string>
     <string name="lang_japanese">اليابانية (日本語)</string>
     <string name="lang_korean">الكورية (한국어)</string>
+    <string name="settings_sec_media_engine">🎬 المشغل والصوت والترجمة</string>
+    <string name="settings_sec_interface_theme">🎨 المظهر واللغة وتخطيط العرض</string>
+    <string name="settings_sec_privacy_folders">🛡️ الخزنة السرية وإدارة المجلدات</string>
+    <string name="settings_sec_system_updates">🚀 النظام والتحديثات</string>
+    <string name="settings_hub_playback_engine_title">المشغل وفك التشفير (Player &amp; Decoder)</string>
+    <string name="settings_hub_subtitles_only_title">الترجمة وتنسيق الخطوط (Subtitles)</string>
+    <string name="settings_subsec_video_engine">⚡ مشفّر الفيديو واتجاه الشاشة</string>
+    <string name="settings_subsec_pip_and_resume">🖼️ النافذة العائمة (PiP) وسلوك الاستئناف</string>
+    <string name="settings_subsec_sub_languages">🌐 لغات البحث والتحميل للترجمة</string>
+    <string name="settings_subsec_sub_appearance">🔤 حجم ولون وموضع نص الترجمة</string>
+    <string name="settings_subsec_theme_colors">🌓 وضع الإضاءة والألوان الديناميكية</string>
+    <string name="settings_subsec_app_locale">🌍 لغة واجهة البرنامج</string>
+    <string name="settings_subsec_grid_and_sort">📐 تقسيمة المجلدات (List / Grid) والترتيب</string>
+    <string name="settings_subsec_vault_security">🔒 حماية الخزنة السرية والبصمة</string>
+    <string name="settings_subsec_folder_indexing">📂 فلترة المجلدات والفحص الفوري</string>
+    <string name="setting_rescan_media_now">إعادة فحص وتحديث الفيديوهات فوراً</string>
+    <string name="setting_rescan_media_sub">تحديث الفهرس السريع واكتشاف أي ملفات فيديو أو MKV جديدة</string>
+    <string name="setting_rescan_done_toast">✅ تم تحديث فهرس الفيديوهات بنجاح</string>
 </resources>

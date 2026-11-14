@@ -51,6 +51,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.pureplayer.video.databinding.ActivityPlayerBinding
 import kotlinx.coroutines.Dispatchers
@@ -114,6 +115,7 @@ class PlayerActivity : AppCompatActivity() {
     private var hasAppliedInitialEqualizer = false
     private var currentDecoderIndex = 0
     private var isEnteringPipTransition = false
+    private var wasInPipMode = false
     private var externalUserAgent: String? = null
     private var externalHttpReferer: String? = null
     private var hasRetriedM3u8Fallback = false
@@ -447,14 +449,29 @@ class PlayerActivity : AppCompatActivity() {
 
         for (item in items) {
             if (!item.sectionHeader.isNullOrBlank()) {
+                val secRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(4), dp(12), dp(4), dp(6))
+                }
+                val secBar = View(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(dp(4), dp(15)).apply {
+                        marginEnd = dp(8)
+                    }
+                    background = GradientDrawable().apply {
+                        cornerRadius = dp(4).toFloat()
+                        setColor(accent)
+                    }
+                }
                 val tvSec = TextView(this).apply {
                     text = item.sectionHeader
                     setTextColor(accent)
-                    textSize = 12f
+                    textSize = 12.5f
                     setTypeface(typeface, Typeface.BOLD)
-                    setPadding(dp(6), dp(8), dp(6), dp(4))
                 }
-                cardContainer.addView(tvSec)
+                secRow.addView(secBar)
+                secRow.addView(tvSec)
+                cardContainer.addView(secRow)
             }
 
             val rowCard = LinearLayout(this).apply {
@@ -2225,46 +2242,111 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun showMoreProOptionsDialog() {
         val items = listOf(
-            PremiumMenuItem("⏪", getString(R.string.pro_sync_earlier), "${subtitleSyncOffsetMs}ms", true) {
-                adjustSubtitleSyncBy(-100L)
-            },
-            PremiumMenuItem("⏩", getString(R.string.pro_sync_later), "${subtitleSyncOffsetMs}ms", true) {
-                adjustSubtitleSyncBy(100L)
-            },
-            PremiumMenuItem("🔄", getString(R.string.pro_sync_reset), "0ms") {
-                subtitleSyncOffsetMs = 0L
-                currentVideoUri?.let { PlaybackStore.saveVideoSubtitleSyncMs(this, it, 0L) }
-                showToastIndicator(getString(R.string.sub_sync_offset_format, 0L))
-            },
-            PremiumMenuItem("🎯", getString(R.string.pro_reset_sub_pos), getString(R.string.sub_position_reset_toast)) {
-                resetSubtitlePositionNow()
-            },
-            PremiumMenuItem("⚡", getString(R.string.decoder_dialog_title), getDecoderShortBadge(currentDecoderIndex), true) {
-                playerMenuBackStack.addLast { showMoreProOptionsDialog() }; showDecoderModeSelectorDialog()
-            },
-            PremiumMenuItem("🎛️", getString(R.string.settings_hub_audio_title), getPlayerAudioModeName(PlaybackStore.getAudioPresetMode(this)), true) {
-                playerMenuBackStack.addLast { showMoreProOptionsDialog() }; showPlayerSoundModesDialog()
-            },
-            PremiumMenuItem("🌈", getString(R.string.pro_hdr_mode), "HDR10 / HLG Tonemapping") {
-                playerMenuBackStack.addLast { showMoreProOptionsDialog() }; showHdrModeSelectorDialog()
-            },
-            PremiumMenuItem("🌙", getString(R.string.pro_sleep_30), "30 Minutes") {
-                handler.removeCallbacks(sleepTimerRunnable)
-                handler.postDelayed(sleepTimerRunnable, 30 * 60 * 1000L)
-                showToastIndicator(getString(R.string.pro_sleep_30))
-            },
-            PremiumMenuItem("🌙", getString(R.string.pro_sleep_60), "60 Minutes") {
-                handler.removeCallbacks(sleepTimerRunnable)
-                handler.postDelayed(sleepTimerRunnable, 60 * 60 * 1000L)
-                showToastIndicator(getString(R.string.pro_sleep_60))
-            },
-            PremiumMenuItem("📺", getString(R.string.cast_screen_title), getString(R.string.cast_screen_wireless_sub), true) {
-                playerMenuBackStack.addLast { showMoreProOptionsDialog() }
-                showCastScreenDialog()
-            },
-            PremiumMenuItem("🖼️", getString(R.string.pro_pip), "Floating Window") {
-                enterPipModeNow()
-            }
+            PremiumMenuItem(
+                iconEmoji = "⚡",
+                title = getString(R.string.decoder_dialog_title),
+                subtitle = getDecoderShortBadge(currentDecoderIndex),
+                isAccentHighlighted = true,
+                sectionHeader = getString(R.string.settings_sec_media_engine),
+                onClick = {
+                    playerMenuBackStack.addLast { showMoreProOptionsDialog() }
+                    showDecoderModeSelectorDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🎛️",
+                title = getString(R.string.settings_hub_audio_title),
+                subtitle = getPlayerAudioModeName(PlaybackStore.getAudioPresetMode(this)),
+                isAccentHighlighted = true,
+                onClick = {
+                    playerMenuBackStack.addLast { showMoreProOptionsDialog() }
+                    showPlayerSoundModesDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🌈",
+                title = getString(R.string.pro_hdr_mode),
+                subtitle = "HDR10 / HLG Tonemapping",
+                onClick = {
+                    playerMenuBackStack.addLast { showMoreProOptionsDialog() }
+                    showHdrModeSelectorDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🖼️",
+                title = getString(R.string.pro_pip),
+                subtitle = getString(R.string.setting_auto_pip_title),
+                isAccentHighlighted = true,
+                sectionHeader = getString(R.string.settings_subsec_pip_and_resume),
+                onClick = {
+                    enterPipModeNow()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "📺",
+                title = getString(R.string.cast_screen_title),
+                subtitle = getString(R.string.cast_screen_wireless_sub),
+                onClick = {
+                    playerMenuBackStack.addLast { showMoreProOptionsDialog() }
+                    showCastScreenDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "⏪",
+                title = getString(R.string.pro_sync_earlier),
+                subtitle = "${subtitleSyncOffsetMs}ms",
+                sectionHeader = getString(R.string.settings_hub_subtitles_only_title),
+                onClick = {
+                    adjustSubtitleSyncBy(-100L)
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "⏩",
+                title = getString(R.string.pro_sync_later),
+                subtitle = "${subtitleSyncOffsetMs}ms",
+                onClick = {
+                    adjustSubtitleSyncBy(100L)
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🔄",
+                title = getString(R.string.pro_sync_reset),
+                subtitle = "0ms",
+                onClick = {
+                    subtitleSyncOffsetMs = 0L
+                    currentVideoUri?.let { PlaybackStore.saveVideoSubtitleSyncMs(this, it, 0L) }
+                    showToastIndicator(getString(R.string.sub_sync_offset_format, 0L))
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🎯",
+                title = getString(R.string.pro_reset_sub_pos),
+                subtitle = getString(R.string.sub_position_reset_toast),
+                onClick = {
+                    resetSubtitlePositionNow()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🌙",
+                title = getString(R.string.pro_sleep_30),
+                subtitle = "30 Minutes",
+                sectionHeader = "🌙 Sleep Timer",
+                onClick = {
+                    handler.removeCallbacks(sleepTimerRunnable)
+                    handler.postDelayed(sleepTimerRunnable, 30 * 60 * 1000L)
+                    showToastIndicator(getString(R.string.pro_sleep_30))
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🌙",
+                title = getString(R.string.pro_sleep_60),
+                subtitle = "60 Minutes",
+                onClick = {
+                    handler.removeCallbacks(sleepTimerRunnable)
+                    handler.postDelayed(sleepTimerRunnable, 60 * 60 * 1000L)
+                    showToastIndicator(getString(R.string.pro_sleep_60))
+                }
+            )
         )
 
         showPlayerPremiumMenu(
@@ -2490,17 +2572,42 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    private fun stopPlaybackImmediatelyAndClosePip(finishActivity: Boolean) {
+        saveCurrentPositionNow()
+        isEnteringPipTransition = false
+        wasInPipMode = false
+        if (::mediaPlayer.isInitialized) {
+            try {
+                if (mediaPlayer.isPlaying) {
+                    mediaPlayer.pause()
+                }
+                mediaPlayer.stop()
+            } catch (_: Exception) {}
+        }
+        updateAutoPipParams(isPlaying = false)
+        updateMediaSessionPlaybackState(isPlaying = false)
+        abandonPlayerAudioFocus()
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (finishActivity && !isFinishing) {
+            finish()
+        }
+    }
+
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         if (isInPictureInPictureMode) {
+            wasInPipMode = true
             isEnteringPipTransition = false
             binding.controlsContainer.visibility = View.GONE
-            if (::mediaPlayer.isInitialized && !mediaPlayer.isPlaying) {
-                mediaPlayer.play()
-            }
         } else {
             isEnteringPipTransition = false
-            showControls()
+            val closedViaXButton = !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) || isFinishing
+            if (closedViaXButton) {
+                stopPlaybackImmediatelyAndClosePip(finishActivity = true)
+            } else {
+                wasInPipMode = false
+                showControls()
+            }
         }
     }
 
@@ -2753,9 +2860,21 @@ class PlayerActivity : AppCompatActivity() {
         saveCurrentPositionNow()
         isEnteringPipTransition = false
         val inPip = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) isInPictureInPictureMode else false
-        if (!inPip && viewsAttached) {
-            mediaPlayer.detachViews()
-            viewsAttached = false
+        if (!inPip) {
+            if (::mediaPlayer.isInitialized && mediaPlayer.isPlaying) {
+                mediaPlayer.pause()
+            }
+            updateAutoPipParams(isPlaying = false)
+            updateMediaSessionPlaybackState(isPlaying = false)
+            abandonPlayerAudioFocus()
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            if (viewsAttached && ::mediaPlayer.isInitialized) {
+                mediaPlayer.detachViews()
+                viewsAttached = false
+            }
+            if (wasInPipMode) {
+                stopPlaybackImmediatelyAndClosePip(finishActivity = true)
+            }
         }
     }
 

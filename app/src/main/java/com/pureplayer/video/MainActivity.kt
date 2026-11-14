@@ -721,8 +721,29 @@ class MainActivity : AppCompatActivity() {
             headerTextCol.addView(tvSubtitle)
         }
 
+        val hasParentInStackTop = settingsBackStack.isNotEmpty()
+        val btnHeaderNav = TextView(this).apply {
+            text = if (hasParentInStackTop) "↩" else "✕"
+            textSize = 16f
+            gravity = Gravity.CENTER
+            setTextColor(primaryText)
+            setTypeface(typeface, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply {
+                marginStart = dp(10)
+            }
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(12).toFloat()
+                setColor(if (isLight) Color.parseColor("#E2E8F0") else Color.parseColor("#1FFFFFFF"))
+            }
+            setOnClickListener {
+                navigateBackInSettingsOrClose()
+            }
+        }
+
         headerRow.addView(tvHeaderIcon)
         headerRow.addView(headerTextCol)
+        headerRow.addView(btnHeaderNav)
         cardContainer.addView(headerRow)
 
         val divider = View(this).apply {
@@ -737,15 +758,30 @@ class MainActivity : AppCompatActivity() {
 
         for (item in items) {
             if (!item.sectionHeader.isNullOrBlank()) {
+                val secContainer = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(4), dp(12), dp(4), dp(6))
+                }
+                val secAccentBar = View(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(dp(4), dp(16)).apply {
+                        marginEnd = dp(8)
+                    }
+                    background = GradientDrawable().apply {
+                        cornerRadius = dp(4).toFloat()
+                        setColor(accent)
+                    }
+                }
                 val tvSec = TextView(this).apply {
                     text = item.sectionHeader
                     setTextColor(accent)
-                    textSize = 12.5f
+                    textSize = 13f
                     setTypeface(typeface, Typeface.BOLD)
-                    setPadding(dp(6), dp(10), dp(6), dp(6))
                 }
-                cardContainer.addView(tvSec)
-                animatedRows.add(tvSec)
+                secContainer.addView(secAccentBar)
+                secContainer.addView(tvSec)
+                cardContainer.addView(secContainer)
+                animatedRows.add(secContainer)
             }
             val rowCard = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -3121,35 +3157,29 @@ class MainActivity : AppCompatActivity() {
         val currentThemeName = themeNames[PlaybackStore.getThemeIndex(this).coerceIn(0, themeNames.size - 1)]
         val langTag = PlaybackStore.getAppLanguageTag(this)
         val langSub = getAppLanguageDisplayName(langTag)
+        val isGrid = PlaybackStore.isGridLayoutEnabled(this)
+        val layoutLabel = if (isGrid) getString(R.string.layout_mode_grid) else getString(R.string.layout_mode_list)
+
+        val decoderShort = when (PlaybackStore.getDecoderModeIndex(this)) {
+            1 -> "HW"
+            2 -> "SW"
+            else -> "HW+"
+        }
+        val pipBadge = if (PlaybackStore.isAutoPipEnabled(this)) "Auto-PiP ✅" else "Auto-PiP 🚫"
         val subLangs = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(" → ") { it.uppercase() }
+        val subSize = PlaybackStore.getSubSizeSp(this).toInt()
 
         val items = listOf(
+            // Group 1: Player, Audio & Subtitles
             PremiumMenuItem(
-                iconEmoji = "🛡️",
-                title = getString(R.string.settings_hub_privacy_title),
-                subtitle = privacySub,
+                iconEmoji = "🎬",
+                title = getString(R.string.settings_hub_playback_engine_title),
+                subtitle = "Decoder: $decoderShort • $pipBadge",
                 isAccentHighlighted = true,
+                sectionHeader = getString(R.string.settings_sec_media_engine),
                 onClick = {
                     pushSettingsBackStack { showProSettingsDialog(false) }
-                    showSettingsPrivacyFoldersPage()
-                }
-            ),
-            PremiumMenuItem(
-                iconEmoji = "🎨",
-                title = getString(R.string.settings_hub_appearance_title),
-                subtitle = "$currentThemeName • $langSub",
-                onClick = {
-                    pushSettingsBackStack { showProSettingsDialog(false) }
-                    showSettingsAppearanceDisplayPage()
-                }
-            ),
-            PremiumMenuItem(
-                iconEmoji = "💬",
-                title = getString(R.string.settings_hub_subtitles_playback_title),
-                subtitle = subLangs,
-                onClick = {
-                    pushSettingsBackStack { showProSettingsDialog(false) }
-                    showSettingsSubtitlesPlaybackPage()
+                    showSettingsPlaybackEnginePage()
                 }
             ),
             PremiumMenuItem(
@@ -3163,9 +3193,44 @@ class MainActivity : AppCompatActivity() {
                 }
             ),
             PremiumMenuItem(
+                iconEmoji = "💬",
+                title = getString(R.string.settings_hub_subtitles_only_title),
+                subtitle = "$subLangs • ${subSize}sp",
+                onClick = {
+                    pushSettingsBackStack { showProSettingsDialog(false) }
+                    showSettingsSubtitlesPlaybackPage()
+                }
+            ),
+            // Group 2: Appearance, Language & Layout
+            PremiumMenuItem(
+                iconEmoji = "🎨",
+                title = getString(R.string.settings_hub_appearance_title),
+                subtitle = "$currentThemeName • $langSub • $layoutLabel",
+                isAccentHighlighted = true,
+                sectionHeader = getString(R.string.settings_sec_interface_theme),
+                onClick = {
+                    pushSettingsBackStack { showProSettingsDialog(false) }
+                    showSettingsAppearanceDisplayPage()
+                }
+            ),
+            // Group 3: Privacy Vault & Folders
+            PremiumMenuItem(
+                iconEmoji = "🛡️",
+                title = getString(R.string.settings_hub_privacy_title),
+                subtitle = privacySub,
+                isAccentHighlighted = hasPin,
+                sectionHeader = getString(R.string.settings_sec_privacy_folders),
+                onClick = {
+                    pushSettingsBackStack { showProSettingsDialog(false) }
+                    showSettingsPrivacyFoldersPage()
+                }
+            ),
+            // Group 4: Updates & About
+            PremiumMenuItem(
                 iconEmoji = "🚀",
                 title = getString(R.string.settings_hub_updates_title),
-                subtitle = "v${BuildConfig.VERSION_NAME} • GitHub Auto-Updater",
+                subtitle = "v${BuildConfig.VERSION_NAME} • GitHub Release Auto-Updater",
+                sectionHeader = getString(R.string.settings_sec_system_updates),
                 onClick = {
                     pushSettingsBackStack { showProSettingsDialog(false) }
                     openGitHubUpdaterFlow()
@@ -3175,7 +3240,6 @@ class MainActivity : AppCompatActivity() {
                 iconEmoji = "ℹ️",
                 title = getString(R.string.settings_hub_about_title),
                 subtitle = getString(R.string.settings_hub_about_sub, BuildConfig.VERSION_NAME),
-                isAccentHighlighted = true,
                 onClick = {
                     pushSettingsBackStack { showProSettingsDialog(false) }
                     showAboutAppPage()
@@ -3186,7 +3250,77 @@ class MainActivity : AppCompatActivity() {
         showPremiumMenuDialog(
             headerIcon = "⚙️",
             title = getString(R.string.settings_header),
-            subtitle = "Pure Video Player Premium",
+            subtitle = "Pure Video Player v${BuildConfig.VERSION_NAME}",
+            items = items
+        )
+    }
+
+    private fun showSettingsPlaybackEnginePage() {
+        val decoderSub = getDecoderModeDisplayName(PlaybackStore.getDecoderModeIndex(this))
+        val orientIdx = PlaybackStore.getDefaultOrientationIndex(this)
+        val orientSub = when (orientIdx) {
+            0 -> getString(R.string.orientation_auto)
+            2 -> getString(R.string.orientation_portrait)
+            else -> getString(R.string.orientation_landscape)
+        }
+        val autoPipOn = PlaybackStore.isAutoPipEnabled(this)
+        val autoPipSub = if (autoPipOn) "✅ " + getString(R.string.setting_auto_pip_on) else "🚫 " + getString(R.string.setting_auto_pip_off)
+        val resumeSub = when (PlaybackStore.getResumeAskMode(this)) {
+            1 -> getString(R.string.resume_mode_always_resume)
+            2 -> getString(R.string.resume_mode_always_restart)
+            else -> getString(R.string.resume_mode_ask_always)
+        }
+
+        val items = listOf(
+            PremiumMenuItem(
+                iconEmoji = "⚡",
+                title = getString(R.string.decoder_dialog_title),
+                subtitle = decoderSub,
+                isAccentHighlighted = true,
+                sectionHeader = getString(R.string.settings_subsec_video_engine),
+                onClick = {
+                    pushSettingsBackStack { showSettingsPlaybackEnginePage() }
+                    showDefaultDecoderSettingsDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🔄",
+                title = getString(R.string.setting_default_orientation),
+                subtitle = orientSub,
+                onClick = {
+                    pushSettingsBackStack { showSettingsPlaybackEnginePage() }
+                    showDefaultOrientationDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🖼️",
+                title = getString(R.string.setting_auto_pip_title),
+                subtitle = autoPipSub,
+                isAccentHighlighted = autoPipOn,
+                sectionHeader = getString(R.string.settings_subsec_pip_and_resume),
+                onClick = {
+                    val nextState = !autoPipOn
+                    PlaybackStore.setAutoPipEnabled(this, nextState)
+                    val msg = if (nextState) getString(R.string.setting_auto_pip_on) else getString(R.string.setting_auto_pip_off)
+                    Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+                    showSettingsPlaybackEnginePage()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "⏯️",
+                title = getString(R.string.setting_resume_behavior_title),
+                subtitle = resumeSub,
+                onClick = {
+                    pushSettingsBackStack { showSettingsPlaybackEnginePage() }
+                    showResumeBehaviorSettingsDialog()
+                }
+            )
+        )
+
+        showPremiumMenuDialog(
+            headerIcon = "🎬",
+            title = getString(R.string.settings_hub_playback_engine_title),
+            subtitle = "$decoderSub • $orientSub",
             items = items
         )
     }
@@ -3206,12 +3340,13 @@ class MainActivity : AppCompatActivity() {
             else -> getString(R.string.folder_mode_all)
         }
 
-        val items = mutableListOf(
+        val items = listOf(
             PremiumMenuItem(
                 iconEmoji = "🔒",
                 title = getString(R.string.setting_privacy_section),
                 subtitle = privacySub,
                 isAccentHighlighted = true,
+                sectionHeader = getString(R.string.settings_subsec_vault_security),
                 onClick = {
                     pushSettingsBackStack { showSettingsPrivacyFoldersPage() }
                     openPrivacyControlSection()
@@ -3221,14 +3356,22 @@ class MainActivity : AppCompatActivity() {
                 iconEmoji = "📂",
                 title = getString(R.string.setting_folder_visibility),
                 subtitle = filterSub,
+                sectionHeader = getString(R.string.settings_subsec_folder_indexing),
                 onClick = {
                     pushSettingsBackStack { showSettingsPrivacyFoldersPage() }
                     showFolderVisibilityModeDialog()
                 }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "⚡",
+                title = getString(R.string.setting_rescan_media_now),
+                subtitle = getString(R.string.setting_rescan_media_sub),
+                onClick = {
+                    checkPermissionAndLoad()
+                    Toast.makeText(this, getString(R.string.setting_rescan_done_toast), Toast.LENGTH_SHORT).show()
+                }
             )
         )
-
-
 
         showPremiumMenuDialog(
             headerIcon = "🛡️",
@@ -3252,19 +3395,25 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.theme_teal_aqua)
         )
         val currentThemeName = themeNames[PlaybackStore.getThemeIndex(this).coerceIn(0, themeNames.size - 1)]
-        val orientIdx = PlaybackStore.getDefaultOrientationIndex(this)
-        val orientSub = when (orientIdx) {
-            0 -> getString(R.string.orientation_auto)
-            2 -> getString(R.string.orientation_portrait)
-            else -> getString(R.string.orientation_landscape)
+        val modeLabel = when (PlaybackStore.getAppearanceMode(this)) {
+            PlaybackStore.APPEARANCE_LIGHT -> getString(R.string.appearance_mode_light)
+            PlaybackStore.APPEARANCE_SYSTEM -> getString(R.string.appearance_mode_system)
+            else -> getString(R.string.appearance_mode_dark)
+        }
+        val isGrid = PlaybackStore.isGridLayoutEnabled(this)
+        val layoutSub = if (isGrid) {
+            "${getString(R.string.layout_mode_grid)} (${calculateAdaptiveGridSpanCount()} Columns)"
+        } else {
+            getString(R.string.layout_mode_list)
         }
 
         val items = listOf(
             PremiumMenuItem(
                 iconEmoji = "🎨",
                 title = getString(R.string.setting_app_theme),
-                subtitle = currentThemeName,
+                subtitle = "$modeLabel • $currentThemeName",
                 isAccentHighlighted = true,
+                sectionHeader = getString(R.string.settings_subsec_theme_colors),
                 onClick = {
                     pushSettingsBackStack { showSettingsAppearanceDisplayPage() }
                     showThemeSelectorDialog()
@@ -3274,18 +3423,21 @@ class MainActivity : AppCompatActivity() {
                 iconEmoji = "🌐",
                 title = getString(R.string.setting_app_language),
                 subtitle = langSub,
+                sectionHeader = getString(R.string.settings_subsec_app_locale),
                 onClick = {
                     pushSettingsBackStack { showSettingsAppearanceDisplayPage() }
                     showAppLanguageDialog()
                 }
             ),
             PremiumMenuItem(
-                iconEmoji = "🔄",
-                title = getString(R.string.setting_default_orientation),
-                subtitle = orientSub,
+                iconEmoji = "📐",
+                title = getString(R.string.sort_and_layout_title),
+                subtitle = layoutSub,
+                isAccentHighlighted = isGrid,
+                sectionHeader = getString(R.string.settings_subsec_grid_and_sort),
                 onClick = {
                     pushSettingsBackStack { showSettingsAppearanceDisplayPage() }
-                    showDefaultOrientationDialog()
+                    showSortAndLayoutDialog()
                 }
             )
         )
@@ -3293,7 +3445,7 @@ class MainActivity : AppCompatActivity() {
         showPremiumMenuDialog(
             headerIcon = "🎨",
             title = getString(R.string.settings_hub_appearance_title),
-            subtitle = "$currentThemeName • $langSub",
+            subtitle = "$modeLabel • $langSub",
             items = items
         )
     }
@@ -3334,55 +3486,27 @@ class MainActivity : AppCompatActivity() {
         val subLangs = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(" → ") { it.uppercase() }
         val subSize = PlaybackStore.getSubSizeSp(this).toInt()
         val subBgOpacity = PlaybackStore.getSubBgOpacityPct(this)
-        val decoderSub = getDecoderModeDisplayName(PlaybackStore.getDecoderModeIndex(this))
-        val autoPipOn = PlaybackStore.isAutoPipEnabled(this)
-        val autoPipSub = if (autoPipOn) "✅ " + getString(R.string.setting_auto_pip_on) else "🚫 " + getString(R.string.setting_auto_pip_off)
-        val resumeSub = when (PlaybackStore.getResumeAskMode(this)) {
-            1 -> getString(R.string.resume_mode_always_resume)
-            2 -> getString(R.string.resume_mode_always_restart)
-            else -> getString(R.string.resume_mode_ask_always)
-        }
 
         val items = listOf(
             PremiumMenuItem(
-                iconEmoji = "⚡",
-                title = getString(R.string.decoder_dialog_title),
-                subtitle = decoderSub,
+                iconEmoji = "🌐",
+                title = getString(R.string.setting_subtitle_languages),
+                subtitle = subLangs,
                 isAccentHighlighted = true,
+                sectionHeader = getString(R.string.settings_subsec_sub_languages),
                 onClick = {
                     pushSettingsBackStack { showSettingsSubtitlesPlaybackPage() }
-                    showDefaultDecoderSettingsDialog()
-                }
-            ),
-            PremiumMenuItem(
-                iconEmoji = "🖼️",
-                title = getString(R.string.setting_auto_pip_title),
-                subtitle = autoPipSub,
-                isAccentHighlighted = autoPipOn,
-                onClick = {
-                    val nextState = !autoPipOn
-                    PlaybackStore.setAutoPipEnabled(this, nextState)
-                    val msg = if (nextState) getString(R.string.setting_auto_pip_on) else getString(R.string.setting_auto_pip_off)
-                    Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-                    showSettingsSubtitlesPlaybackPage()
+                    showSubtitleLanguagePriorityDialog()
                 }
             ),
             PremiumMenuItem(
                 iconEmoji = "🔤",
                 title = getString(R.string.setting_subtitle_style),
                 subtitle = "${subSize}sp • ${getString(R.string.style_bg_opacity_label, subBgOpacity)}",
+                sectionHeader = getString(R.string.settings_subsec_sub_appearance),
                 onClick = {
                     pushSettingsBackStack { showSettingsSubtitlesPlaybackPage() }
                     showSubtitleStyleDialog()
-                }
-            ),
-            PremiumMenuItem(
-                iconEmoji = "💬",
-                title = getString(R.string.setting_subtitle_languages),
-                subtitle = subLangs,
-                onClick = {
-                    pushSettingsBackStack { showSettingsSubtitlesPlaybackPage() }
-                    showSubtitleLanguagePriorityDialog()
                 }
             ),
             PremiumMenuItem(
@@ -3393,22 +3517,13 @@ class MainActivity : AppCompatActivity() {
                     PlaybackStore.resetSubPosition(this)
                     Toast.makeText(this, getString(R.string.sub_position_reset_toast), Toast.LENGTH_SHORT).show()
                 }
-            ),
-            PremiumMenuItem(
-                iconEmoji = "⏯️",
-                title = getString(R.string.setting_resume_behavior_title),
-                subtitle = resumeSub,
-                onClick = {
-                    pushSettingsBackStack { showSettingsSubtitlesPlaybackPage() }
-                    showResumeBehaviorSettingsDialog()
-                }
             )
         )
 
         showPremiumMenuDialog(
             headerIcon = "💬",
-            title = getString(R.string.settings_hub_subtitles_playback_title),
-            subtitle = "$decoderSub • $subLangs",
+            title = getString(R.string.settings_hub_subtitles_only_title),
+            subtitle = "$subLangs • ${subSize}sp",
             items = items
         )
     }
@@ -3443,6 +3558,7 @@ class MainActivity : AppCompatActivity() {
                 title = getString(R.string.audio_preset_section_title),
                 subtitle = modeLabel,
                 isAccentHighlighted = true,
+                sectionHeader = getString(R.string.audio_preset_section_title),
                 onClick = {
                     pushSettingsBackStack { showSettingsAudioEqualizerPage() }
                     showAudioSoundModesPage()
@@ -3453,6 +3569,7 @@ class MainActivity : AppCompatActivity() {
                 title = getString(R.string.audio_eq_customizer_title),
                 subtitle = eqSummary,
                 isAccentHighlighted = (currentMode == 7),
+                sectionHeader = getString(R.string.audio_eq_customizer_title),
                 onClick = {
                     pushSettingsBackStack { showSettingsAudioEqualizerPage() }
                     showGraphicEqualizerDialog()

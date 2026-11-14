@@ -414,4 +414,22 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="lang_chinese">Chinese (中文)</string>
     <string name="lang_japanese">Japanese (日本語)</string>
     <string name="lang_korean">Korean (한국어)</string>
+    <string name="settings_sec_media_engine">🎬 Player, Audio &amp; Subtitles</string>
+    <string name="settings_sec_interface_theme">🎨 Appearance, Language &amp; Layout</string>
+    <string name="settings_sec_privacy_folders">🛡️ Privacy Vault &amp; Folders</string>
+    <string name="settings_sec_system_updates">🚀 System &amp; App Updates</string>
+    <string name="settings_hub_playback_engine_title">Video Player &amp; Decoder</string>
+    <string name="settings_hub_subtitles_only_title">Subtitles &amp; Caption Styling</string>
+    <string name="settings_subsec_video_engine">⚡ Video Decoder &amp; Screen Orientation</string>
+    <string name="settings_subsec_pip_and_resume">🖼️ Floating Window (PiP) &amp; Resume</string>
+    <string name="settings_subsec_sub_languages">🌐 Subtitle Search &amp; Languages</string>
+    <string name="settings_subsec_sub_appearance">🔤 Subtitle Font, Colors &amp; Position</string>
+    <string name="settings_subsec_theme_colors">🌓 Theme Mode &amp; Dynamic Colors</string>
+    <string name="settings_subsec_app_locale">🌍 Interface Language</string>
+    <string name="settings_subsec_grid_and_sort">📐 Folders Layout (List / Grid) &amp; Sorting</string>
+    <string name="settings_subsec_vault_security">🔒 Private Vault &amp; Biometric Lock</string>
+    <string name="settings_subsec_folder_indexing">📂 Folder Visibility &amp; Instant Scanner</string>
+    <string name="setting_rescan_media_now">Rescan Device Videos Now</string>
+    <string name="setting_rescan_media_sub">Refresh local folder cache &amp; detect newly added MKV/MP4 files</string>
+    <string name="setting_rescan_done_toast">✅ Video library refreshed</string>
 </resources>
