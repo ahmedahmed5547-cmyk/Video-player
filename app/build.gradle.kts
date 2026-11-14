@@ -19,8 +19,8 @@ android {
         applicationId = "com.pureplayer.video"
         minSdk = 24
         targetSdk = 34
-        versionCode = 48
-        versionName = "37.2"
+        versionCode = 50
+        versionName = "37.4"
 
         resourceConfigurations += listOf("en", "ar")
 
@@ -53,8 +53,9 @@ android {
 
     buildTypes {
         debug {
+            isDebuggable = false
             isMinifyEnabled = true
-            isShrinkResources = false
+            isShrinkResources = true
             signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -62,6 +63,7 @@ android {
             )
         }
         release {
+            isDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
             signingConfig = signingConfigs.getByName("debug")

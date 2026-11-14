@@ -14,6 +14,7 @@ import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
@@ -367,6 +368,12 @@ class MainActivity : AppCompatActivity() {
         activeFullScreenHost = null
         activeFullScreenCardView = null
         super.onDestroy()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        applyUserTheme(animated = false)
+        updateRecyclerLayoutManager()
     }
 
     override fun onResume() {
@@ -1057,13 +1064,28 @@ class MainActivity : AppCompatActivity() {
         binding.ivTabIptv.imageTintList = ColorStateList.valueOf(if (isIptv) accent else inactiveColor)
     }
 
+    private fun calculateAdaptiveGridSpanCount(): Int {
+        val widthDp = resources.configuration.screenWidthDp
+        return when {
+            widthDp >= 1200 -> 5
+            widthDp >= 840 -> 4
+            widthDp >= 600 -> 3
+            else -> 2
+        }
+    }
+
     private fun updateRecyclerLayoutManager() {
         val gridEnabled = PlaybackStore.isGridLayoutEnabled(this)
         adapter.isGridMode = gridEnabled
         val currentLm = binding.recyclerView.layoutManager
         if (gridEnabled) {
-            if (currentLm !is GridLayoutManager) {
-                binding.recyclerView.layoutManager = GridLayoutManager(this, 2)
+            val targetSpan = calculateAdaptiveGridSpanCount()
+            if (currentLm is GridLayoutManager) {
+                if (currentLm.spanCount != targetSpan) {
+                    currentLm.spanCount = targetSpan
+                }
+            } else {
+                binding.recyclerView.layoutManager = GridLayoutManager(this, targetSpan)
             }
         } else {
             if (currentLm is GridLayoutManager || currentLm == null) {
@@ -3210,17 +3232,7 @@ class MainActivity : AppCompatActivity() {
             )
         )
 
-        if (Build.VERSION.SDK_INT >= 34 && isUsingLimitedAccessMode()) {
-            items.add(
-                PremiumMenuItem(
-                    iconEmoji = "➕",
-                    title = getString(R.string.limited_access_manage_title),
-                    subtitle = getString(R.string.limited_access_active_sub),
-                    isAccentHighlighted = true,
-                    onClick = { requestStoragePermission() }
-                )
-            )
-        }
+
 
         showPremiumMenuDialog(
             headerIcon = "🛡️",
@@ -3426,8 +3438,7 @@ class MainActivity : AppCompatActivity() {
             Triple(3, "🗣️", Pair(getString(R.string.audio_mode_voice), getString(R.string.audio_mode_voice_sub))),
             Triple(4, "🎸", Pair(getString(R.string.audio_mode_bass), getString(R.string.audio_mode_bass_sub))),
             Triple(5, "🏟️", Pair(getString(R.string.audio_mode_stadium), getString(R.string.audio_mode_stadium_sub))),
-            Triple(6, "🌙", Pair(getString(R.string.audio_mode_night), getString(R.string.audio_mode_night_sub))),
-            Triple(7, "🎛️", Pair(getString(R.string.audio_mode_custom), getString(R.string.audio_mode_custom_sub)))
+            Triple(6, "🌙", Pair(getString(R.string.audio_mode_night), getString(R.string.audio_mode_night_sub)))
         )
 
         val items = modes.map { (modeIdx, emoji, texts) ->
@@ -3439,17 +3450,13 @@ class MainActivity : AppCompatActivity() {
                 subtitle = subText,
                 isAccentHighlighted = isSelected,
                 onClick = {
-                    if (modeIdx == 7) {
-                        showGraphicEqualizerDialog()
-                    } else {
-                        PlaybackStore.setAudioPresetMode(this, modeIdx)
-                        Toast.makeText(
-                            this,
-                            getString(R.string.audio_mode_applied_toast, texts.first),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                        popSettingsBackStack()
-                    }
+                    PlaybackStore.setAudioPresetMode(this, modeIdx)
+                    Toast.makeText(
+                        this,
+                        getString(R.string.audio_mode_applied_toast, texts.first),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    popSettingsBackStack()
                 }
             )
         }
