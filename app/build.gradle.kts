@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.io.File
 
 plugins {
     id("com.android.application")
@@ -19,8 +20,8 @@ android {
         applicationId = "com.pureplayer.video"
         minSdk = 24
         targetSdk = 34
-        versionCode = 54
-        versionName = "37.8"
+        versionCode = 55
+        versionName = "37.9"
 
         resourceConfigurations += listOf("en", "ar", "fr", "es", "de", "tr", "ru", "pt", "it", "hi", "ur", "id", "zh", "ja", "ko")
 
@@ -98,6 +99,25 @@ android {
     lint {
         checkReleaseBuilds = false
         abortOnError = false
+    }
+}
+
+// Ensure that even if a legacy workflow runs assembleDebug, Gradle also builds bundleRelease (.aab) and copies it into outputs/apk/debug/
+tasks.matching { it.name == "assembleDebug" }.configureEach {
+    dependsOn("bundleRelease", "assembleRelease")
+    doLast {
+        try {
+            val debugOutDir = File(project.buildDir, "outputs/apk/debug")
+            val releaseApk = File(project.buildDir, "outputs/apk/release/app-release.apk")
+            val releaseAab = File(project.buildDir, "outputs/bundle/release/app-release.aab")
+            debugOutDir.mkdirs()
+            if (releaseApk.exists()) {
+                releaseApk.copyTo(File(debugOutDir, "PureVideoPlayer-Release.apk"), overwrite = true)
+            }
+            if (releaseAab.exists()) {
+                releaseAab.copyTo(File(debugOutDir, "PureVideoPlayer-Release.aab"), overwrite = true)
+            }
+        } catch (_: Exception) {}
     }
 }
 
