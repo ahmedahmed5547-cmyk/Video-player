@@ -19,10 +19,10 @@ android {
         applicationId = "com.pureplayer.video"
         minSdk = 24
         targetSdk = 34
-        versionCode = 50
-        versionName = "37.4"
+        versionCode = 51
+        versionName = "37.5"
 
-        resourceConfigurations += listOf("en", "ar")
+        resourceConfigurations += listOf("en", "ar", "fr", "es", "de", "tr", "ru", "pt", "it", "hi", "ur", "id", "zh", "ja", "ko")
 
         // Strip unused 32-bit & emulator native libs -> Reduces APK size by ~75% while keeping 100% 64-bit Flagship speed!
         ndk {

@@ -3120,11 +3120,7 @@ class MainActivity : AppCompatActivity() {
         )
         val currentThemeName = themeNames[PlaybackStore.getThemeIndex(this).coerceIn(0, themeNames.size - 1)]
         val langTag = PlaybackStore.getAppLanguageTag(this)
-        val langSub = when (langTag) {
-            "ar" -> getString(R.string.lang_arabic)
-            "en" -> getString(R.string.lang_english)
-            else -> getString(R.string.lang_system_default)
-        }
+        val langSub = getAppLanguageDisplayName(langTag)
         val subLangs = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(" → ") { it.uppercase() }
 
         val items = listOf(
@@ -3244,11 +3240,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showSettingsAppearanceDisplayPage() {
         val langTag = PlaybackStore.getAppLanguageTag(this)
-        val langSub = when (langTag) {
-            "ar" -> getString(R.string.lang_arabic)
-            "en" -> getString(R.string.lang_english)
-            else -> getString(R.string.lang_system_default)
-        }
+        val langSub = getAppLanguageDisplayName(langTag)
         val themeNames = arrayOf(
             getString(R.string.theme_cyber_blue),
             getString(R.string.theme_amoled_gold),
@@ -3306,10 +3298,45 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    private fun getDecoderModeDisplayName(modeIdx: Int): String {
+        return when (modeIdx) {
+            1 -> "HW • " + getString(R.string.decoder_hw_title)
+            2 -> "SW • " + getString(R.string.decoder_sw_title)
+            else -> "HW+ • " + getString(R.string.decoder_hw_plus_title)
+        }
+    }
+
+    private fun showDefaultDecoderSettingsDialog() {
+        val currentIdx = PlaybackStore.getDecoderModeIndex(this)
+        val options = listOf(
+            Triple(0, "⚡", Pair(getString(R.string.decoder_hw_plus_title), getString(R.string.decoder_hw_plus_sub))),
+            Triple(1, "🔧", Pair(getString(R.string.decoder_hw_title), getString(R.string.decoder_hw_sub))),
+            Triple(2, "💻", Pair(getString(R.string.decoder_sw_title), getString(R.string.decoder_sw_sub)))
+        )
+        val items = options.map { (idx, emoji, texts) ->
+            val isSel = (idx == currentIdx)
+            PremiumMenuItem(
+                iconEmoji = emoji,
+                title = texts.first,
+                subtitle = if (isSel) "✅ ${getString(R.string.active_mode_badge)} • ${texts.second}" else texts.second,
+                isAccentHighlighted = isSel,
+                onClick = {
+                    PlaybackStore.setDecoderModeIndex(this, idx)
+                    Toast.makeText(this, getString(R.string.decoder_switched_toast, texts.first), Toast.LENGTH_SHORT).show()
+                    popSettingsBackStack()
+                }
+            )
+        }
+        showPremiumMenuDialog("⚡", getString(R.string.decoder_dialog_title), getDecoderModeDisplayName(currentIdx), items)
+    }
+
     private fun showSettingsSubtitlesPlaybackPage() {
         val subLangs = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(" → ") { it.uppercase() }
         val subSize = PlaybackStore.getSubSizeSp(this).toInt()
         val subBgOpacity = PlaybackStore.getSubBgOpacityPct(this)
+        val decoderSub = getDecoderModeDisplayName(PlaybackStore.getDecoderModeIndex(this))
+        val autoPipOn = PlaybackStore.isAutoPipEnabled(this)
+        val autoPipSub = if (autoPipOn) "✅ " + getString(R.string.setting_auto_pip_on) else "🚫 " + getString(R.string.setting_auto_pip_off)
         val resumeSub = when (PlaybackStore.getResumeAskMode(this)) {
             1 -> getString(R.string.resume_mode_always_resume)
             2 -> getString(R.string.resume_mode_always_restart)
@@ -3318,10 +3345,32 @@ class MainActivity : AppCompatActivity() {
 
         val items = listOf(
             PremiumMenuItem(
+                iconEmoji = "⚡",
+                title = getString(R.string.decoder_dialog_title),
+                subtitle = decoderSub,
+                isAccentHighlighted = true,
+                onClick = {
+                    pushSettingsBackStack { showSettingsSubtitlesPlaybackPage() }
+                    showDefaultDecoderSettingsDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🖼️",
+                title = getString(R.string.setting_auto_pip_title),
+                subtitle = autoPipSub,
+                isAccentHighlighted = autoPipOn,
+                onClick = {
+                    val nextState = !autoPipOn
+                    PlaybackStore.setAutoPipEnabled(this, nextState)
+                    val msg = if (nextState) getString(R.string.setting_auto_pip_on) else getString(R.string.setting_auto_pip_off)
+                    Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+                    showSettingsSubtitlesPlaybackPage()
+                }
+            ),
+            PremiumMenuItem(
                 iconEmoji = "🔤",
                 title = getString(R.string.setting_subtitle_style),
                 subtitle = "${subSize}sp • ${getString(R.string.style_bg_opacity_label, subBgOpacity)}",
-                isAccentHighlighted = true,
                 onClick = {
                     pushSettingsBackStack { showSettingsSubtitlesPlaybackPage() }
                     showSubtitleStyleDialog()
@@ -3359,7 +3408,7 @@ class MainActivity : AppCompatActivity() {
         showPremiumMenuDialog(
             headerIcon = "💬",
             title = getString(R.string.settings_hub_subtitles_playback_title),
-            subtitle = subLangs,
+            subtitle = "$decoderSub • $subLangs",
             items = items
         )
     }
@@ -3736,32 +3785,83 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    private fun getAppLanguageDisplayName(tag: String): String {
+        return when (tag) {
+            "ar" -> getString(R.string.lang_arabic)
+            "en" -> getString(R.string.lang_english)
+            "fr" -> getString(R.string.lang_french)
+            "es" -> getString(R.string.lang_spanish)
+            "de" -> getString(R.string.lang_german)
+            "tr" -> getString(R.string.lang_turkish)
+            "ru" -> getString(R.string.lang_russian)
+            "pt" -> getString(R.string.lang_portuguese)
+            "it" -> getString(R.string.lang_italian)
+            "hi" -> getString(R.string.lang_hindi)
+            "ur" -> getString(R.string.lang_urdu)
+            "id" -> getString(R.string.lang_indonesian)
+            "zh" -> getString(R.string.lang_chinese)
+            "ja" -> getString(R.string.lang_japanese)
+            "ko" -> getString(R.string.lang_korean)
+            else -> getString(R.string.lang_system_default)
+        }
+    }
+
     private fun showAppLanguageDialog() {
         val currentTag = PlaybackStore.getAppLanguageTag(this)
-        val items = listOf(
-            PremiumMenuItem("📱", getString(R.string.lang_system_default), null, currentTag == "") {
-                PlaybackStore.setAppLanguageTag(this, ""); popSettingsBackStack()
-            },
-            PremiumMenuItem("🇸🇦", getString(R.string.lang_arabic), "العربية", currentTag == "ar") {
-                PlaybackStore.setAppLanguageTag(this, "ar"); popSettingsBackStack()
-            },
-            PremiumMenuItem("🇺🇸", getString(R.string.lang_english), "English", currentTag == "en") {
-                PlaybackStore.setAppLanguageTag(this, "en"); popSettingsBackStack()
-            }
+        val devLocaleName = Locale.getDefault().displayLanguage
+        val supportedAppLangs = listOf(
+            Triple("", "📱", Pair(getString(R.string.lang_system_default), devLocaleName)),
+            Triple("ar", "🇸🇦", Pair(getString(R.string.lang_arabic), "العربية")),
+            Triple("en", "🇺🇸", Pair(getString(R.string.lang_english), "English")),
+            Triple("fr", "🇫🇷", Pair(getString(R.string.lang_french), "Français")),
+            Triple("es", "🇪🇸", Pair(getString(R.string.lang_spanish), "Español")),
+            Triple("de", "🇩🇪", Pair(getString(R.string.lang_german), "Deutsch")),
+            Triple("tr", "🇹🇷", Pair(getString(R.string.lang_turkish), "Türkçe")),
+            Triple("ru", "🇷🇺", Pair(getString(R.string.lang_russian), "Русский")),
+            Triple("pt", "🇧🇷", Pair(getString(R.string.lang_portuguese), "Português")),
+            Triple("it", "🇮🇹", Pair(getString(R.string.lang_italian), "Italiano")),
+            Triple("hi", "🇮🇳", Pair(getString(R.string.lang_hindi), "हिन्दी")),
+            Triple("ur", "🇵🇰", Pair(getString(R.string.lang_urdu), "اردو")),
+            Triple("id", "🇮🇩", Pair(getString(R.string.lang_indonesian), "Bahasa Indonesia")),
+            Triple("zh", "🇨🇳", Pair(getString(R.string.lang_chinese), "中文")),
+            Triple("ja", "🇯🇵", Pair(getString(R.string.lang_japanese), "日本語")),
+            Triple("ko", "🇰🇷", Pair(getString(R.string.lang_korean), "한국어"))
         )
-        showPremiumMenuDialog("🌐", getString(R.string.setting_app_language), null, items)
+
+        val items = supportedAppLangs.map { (tag, flag, names) ->
+            val isSel = (currentTag == tag)
+            PremiumMenuItem(
+                iconEmoji = flag,
+                title = names.first,
+                subtitle = if (isSel) "✅ ${getString(R.string.active_mode_badge)} • ${names.second}" else names.second,
+                isAccentHighlighted = isSel,
+                onClick = {
+                    PlaybackStore.setAppLanguageTag(this, tag)
+                    popSettingsBackStack()
+                }
+            )
+        }
+        showPremiumMenuDialog("🌐", getString(R.string.setting_app_language), getAppLanguageDisplayName(currentTag), items)
     }
 
     private fun showSubtitleLanguagePriorityDialog() {
-        val langCodes = arrayOf("ar", "en", "fr", "es", "tr", "hi", "ur")
+        val langCodes = arrayOf("ar", "en", "fr", "es", "de", "tr", "ru", "pt", "it", "hi", "ur", "id", "zh", "ja", "ko")
         val langLabels = arrayOf(
             getString(R.string.sub_lang_ar),
             getString(R.string.sub_lang_en),
             getString(R.string.sub_lang_fr),
             getString(R.string.sub_lang_es),
+            getString(R.string.lang_german),
             getString(R.string.sub_lang_tr),
+            getString(R.string.lang_russian),
+            getString(R.string.lang_portuguese),
+            getString(R.string.lang_italian),
             getString(R.string.sub_lang_hi),
-            getString(R.string.sub_lang_ur)
+            getString(R.string.sub_lang_ur),
+            getString(R.string.lang_indonesian),
+            getString(R.string.lang_chinese),
+            getString(R.string.lang_japanese),
+            getString(R.string.lang_korean)
         )
 
         val currentPreferred = PlaybackStore.getPreferredSubtitleLanguages(this).toMutableList()

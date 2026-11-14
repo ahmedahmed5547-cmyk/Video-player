@@ -121,6 +121,8 @@ object PlaybackStore {
     private const val KEY_AUDIO_PRESET_MODE = "audio_eq_preset_mode_v1"
     private const val KEY_AUDIO_PREAMP_DB = "audio_eq_preamp_db_v1"
     private const val KEY_AUDIO_BANDS_CSV = "audio_eq_5bands_csv_v1"
+    private const val KEY_DECODER_MODE_IDX = "video_decoder_mode_idx_v1"
+    private const val KEY_AUTO_PIP_ENABLED = "auto_pip_on_exit_enabled_v1"
     private const val KEY_SUB_SIZE_SP = "sub_size_sp"
     private const val KEY_SUB_COLOR_IDX = "sub_color_index"
     private const val KEY_SUB_BG_OPACITY = "sub_bg_opacity_pct"
@@ -203,8 +205,10 @@ object PlaybackStore {
     }
 
     fun getPreferredSubtitleLanguages(context: Context): List<String> {
-        val csv = prefs(context).getString(KEY_SUB_LANGS_CSV, "ar,en") ?: "ar,en"
-        return csv.split(",").map { it.trim().lowercase(Locale.ROOT) }.filter { it.isNotEmpty() }.ifEmpty { listOf("ar", "en") }
+        val devLang = Locale.getDefault().language.lowercase(Locale.ROOT).ifBlank { "ar" }
+        val defaultCsv = if (devLang != "ar" && devLang != "en") "$devLang,ar,en" else "ar,en"
+        val csv = prefs(context).getString(KEY_SUB_LANGS_CSV, defaultCsv) ?: defaultCsv
+        return csv.split(",").map { it.trim().lowercase(Locale.ROOT) }.filter { it.isNotEmpty() }.ifEmpty { listOf(devLang, "ar", "en").distinct() }
     }
 
     fun setPreferredSubtitleLanguages(context: Context, langs: List<String>) {
@@ -361,6 +365,22 @@ object PlaybackStore {
             .putFloat(KEY_AUDIO_PREAMP_DB, preAmpDb.coerceIn(-10.0f, 12.0f))
             .putInt(KEY_AUDIO_PRESET_MODE, 7)
             .apply()
+    }
+
+
+    // 0 = HW+ (Default), 1 = HW, 2 = SW (Software CPU)
+    fun getDecoderModeIndex(context: Context): Int =
+        prefs(context).getInt(KEY_DECODER_MODE_IDX, 0).coerceIn(0, 2)
+
+    fun setDecoderModeIndex(context: Context, index: Int) {
+        prefs(context).edit().putInt(KEY_DECODER_MODE_IDX, index.coerceIn(0, 2)).apply()
+    }
+
+    fun isAutoPipEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_AUTO_PIP_ENABLED, true)
+
+    fun setAutoPipEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_AUTO_PIP_ENABLED, enabled).apply()
     }
 
     fun resetAudioEqualizerToStandard(context: Context) {

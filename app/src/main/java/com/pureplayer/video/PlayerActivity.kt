@@ -111,6 +111,9 @@ class PlayerActivity : AppCompatActivity() {
     private var currentVideoTitle = "Video"
     private var pendingStartPositionMs = 0L
     private var hasAppliedInitialSeek = false
+    private var hasAppliedInitialEqualizer = false
+    private var currentDecoderIndex = 0
+    private var isEnteringPipTransition = false
     private var externalUserAgent: String? = null
     private var externalHttpReferer: String? = null
     private var hasRetriedM3u8Fallback = false
@@ -222,6 +225,8 @@ class PlayerActivity : AppCompatActivity() {
         currentOrientationIndex = PlaybackStore.getDefaultOrientationIndex(this)
         requestedOrientation = orientationModes[currentOrientationIndex]
         binding.btnOrientation.text = getOrientationLabel(currentOrientationIndex)
+        currentDecoderIndex = PlaybackStore.getDecoderModeIndex(this)
+        binding.btnDecoder.text = getDecoderShortBadge(currentDecoderIndex)
 
         extractIntentData(intent)
 
@@ -261,10 +266,11 @@ class PlayerActivity : AppCompatActivity() {
         val options = arrayListOf(
             "--avcodec-skiploopfilter", "0",
             "--avcodec-threads", "0",
-            "--avcodec-fast",
-            "--file-caching=150",
-            "--live-caching=300",
-            "--network-caching=900",
+            "--file-caching=600",
+            "--live-caching=600",
+            "--network-caching=1200",
+            "--clock-jitter=0",
+            "--clock-synchro=0",
             "--tone-mapping=$toneMapAlgo",
             "--subsdec-encoding", "UTF-8",
             "--freetype-rel-fontsize", "18"
@@ -279,7 +285,11 @@ class PlayerActivity : AppCompatActivity() {
                     binding.playerLoadingBar.visibility = View.GONE
                     binding.btnPlayPause.setImageResource(R.drawable.ic_pause_modern)
                     updateMediaSessionPlaybackState(isPlaying = true)
-                    applyAudioEqualizerFromStore()
+                    updateAutoPipParams(isPlaying = true)
+                    if (!hasAppliedInitialEqualizer) {
+                        hasAppliedInitialEqualizer = true
+                        applyAudioEqualizerFromStore()
+                    }
                     if (externalSubtitleCues.isNotEmpty()) {
                         mediaPlayer.spuTrack = -1
                     }
@@ -294,6 +304,7 @@ class PlayerActivity : AppCompatActivity() {
                 MediaPlayer.Event.Paused -> {
                     binding.btnPlayPause.setImageResource(R.drawable.ic_play_modern)
                     updateMediaSessionPlaybackState(isPlaying = false)
+                    updateAutoPipParams(isPlaying = false)
                 }
                 MediaPlayer.Event.EncounteredError -> {
                     binding.playerLoadingBar.visibility = View.GONE
@@ -1020,7 +1031,7 @@ class PlayerActivity : AppCompatActivity() {
                     media.addOption(":http-referrer=$externalHttpReferer")
                 }
             } else {
-                media.addOption(":file-caching=150")
+                media.addOption(":file-caching=600")
             }
 
             // Pre-seek at demuxer level BEFORE decoding frame 0 -> eliminates the 2-second black screen on resume!
@@ -1031,7 +1042,23 @@ class PlayerActivity : AppCompatActivity() {
                 showToastIndicator(getString(R.string.resume_from_format, formatTime(pendingStartPositionMs)))
             }
 
-            media.setHWDecoderEnabled(true, false)
+            when (currentDecoderIndex) {
+                0 -> {
+                    // HW+ (Hardware Accelerated Plus)
+                    media.setHWDecoderEnabled(true, true)
+                    media.addOption(":codec=mediacodec_ndk,mediacodec_jni,all")
+                }
+                1 -> {
+                    // HW (Standard Hardware Decoder)
+                    media.setHWDecoderEnabled(true, false)
+                }
+                else -> {
+                    // SW (Software CPU Decoder)
+                    media.setHWDecoderEnabled(false, false)
+                    media.addOption(":codec=avcodec,all")
+                }
+            }
+            hasAppliedInitialEqualizer = false
             mediaPlayer.media = media
             media.release()
         } catch (_: Exception) {
@@ -1263,6 +1290,7 @@ class PlayerActivity : AppCompatActivity() {
         val accent = PlaybackStore.getAccentColor(this)
         binding.btnPlayPause.imageTintList = ColorStateList.valueOf(accent)
         binding.btnUnlock.imageTintList = ColorStateList.valueOf(accent)
+        binding.btnDecoder.setTextColor(accent)
         binding.btnOrientation.setTextColor(accent)
         binding.btnSpeed.setTextColor(accent)
         binding.btnSubFontUp.setTextColor(accent)
@@ -1278,6 +1306,7 @@ class PlayerActivity : AppCompatActivity() {
             binding.btnSubFontDown,
             binding.btnSubFontUp,
             binding.btnResetSubPos,
+            binding.btnDecoder,
             binding.btnOrientation,
             binding.btnSpeed
         )
@@ -1367,6 +1396,7 @@ class PlayerActivity : AppCompatActivity() {
             binding.btnSubFontDown,
             binding.btnSubFontUp,
             binding.btnResetSubPos,
+            binding.btnDecoder,
             binding.btnOrientation,
             binding.btnCastScreen,
             binding.btnPip,
@@ -1469,6 +1499,11 @@ class PlayerActivity : AppCompatActivity() {
             binding.btnUnlock.visibility = View.GONE
             showControls()
             showToastIndicator(getString(R.string.toast_unlocked))
+        }
+
+        binding.btnDecoder.setOnClickListener {
+            playerMenuBackStack.clear()
+            showDecoderModeSelectorDialog()
         }
 
         binding.btnOrientation.setOnClickListener {
@@ -1958,15 +1993,23 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showPlayerSubtitleLanguagePicker() {
-        val langCodes = arrayOf("ar", "en", "fr", "es", "tr", "hi", "ur")
+        val langCodes = arrayOf("ar", "en", "fr", "es", "de", "tr", "ru", "pt", "it", "hi", "ur", "id", "zh", "ja", "ko")
         val langLabels = arrayOf(
             getString(R.string.sub_lang_ar),
             getString(R.string.sub_lang_en),
             getString(R.string.sub_lang_fr),
             getString(R.string.sub_lang_es),
+            getString(R.string.lang_german),
             getString(R.string.sub_lang_tr),
+            getString(R.string.lang_russian),
+            getString(R.string.lang_portuguese),
+            getString(R.string.lang_italian),
             getString(R.string.sub_lang_hi),
-            getString(R.string.sub_lang_ur)
+            getString(R.string.sub_lang_ur),
+            getString(R.string.lang_indonesian),
+            getString(R.string.lang_chinese),
+            getString(R.string.lang_japanese),
+            getString(R.string.lang_korean)
         )
         val currentPreferred = PlaybackStore.getPreferredSubtitleLanguages(this).toMutableList()
         val checked = BooleanArray(langCodes.size) { currentPreferred.contains(langCodes[it]) }
@@ -2196,6 +2239,9 @@ class PlayerActivity : AppCompatActivity() {
             PremiumMenuItem("🎯", getString(R.string.pro_reset_sub_pos), getString(R.string.sub_position_reset_toast)) {
                 resetSubtitlePositionNow()
             },
+            PremiumMenuItem("⚡", getString(R.string.decoder_dialog_title), getDecoderShortBadge(currentDecoderIndex), true) {
+                playerMenuBackStack.addLast { showMoreProOptionsDialog() }; showDecoderModeSelectorDialog()
+            },
             PremiumMenuItem("🎛️", getString(R.string.settings_hub_audio_title), getPlayerAudioModeName(PlaybackStore.getAudioPresetMode(this)), true) {
                 playerMenuBackStack.addLast { showMoreProOptionsDialog() }; showPlayerSoundModesDialog()
             },
@@ -2358,22 +2404,102 @@ class PlayerActivity : AppCompatActivity() {
         )
     }
 
+    private fun getDecoderShortBadge(index: Int): String {
+        return when (index) {
+            1 -> "HW"
+            2 -> "SW"
+            else -> "HW+"
+        }
+    }
+
+    private fun showDecoderModeSelectorDialog() {
+        val options = listOf(
+            Triple(0, "⚡", Pair(getString(R.string.decoder_hw_plus_title), getString(R.string.decoder_hw_plus_sub))),
+            Triple(1, "🔧", Pair(getString(R.string.decoder_hw_title), getString(R.string.decoder_hw_sub))),
+            Triple(2, "💻", Pair(getString(R.string.decoder_sw_title), getString(R.string.decoder_sw_sub)))
+        )
+        val items = options.map { (idx, emoji, texts) ->
+            val isSel = (idx == currentDecoderIndex)
+            PremiumMenuItem(
+                iconEmoji = emoji,
+                title = texts.first,
+                subtitle = texts.second,
+                isAccentHighlighted = isSel,
+                onClick = {
+                    playerMenuBackStack.clear()
+                    if (currentDecoderIndex != idx) {
+                        currentDecoderIndex = idx
+                        PlaybackStore.setDecoderModeIndex(this, idx)
+                        binding.btnDecoder.text = getDecoderShortBadge(idx)
+                        val resumeMs = if (::mediaPlayer.isInitialized) mediaPlayer.time.coerceAtLeast(0L) else 0L
+                        pendingStartPositionMs = resumeMs
+                        hasAppliedInitialSeek = false
+                        currentVideoUri?.let { uri ->
+                            startVideoPlaybackSafely(uri)
+                        }
+                    }
+                    showToastIndicator(getString(R.string.decoder_switched_toast, getDecoderShortBadge(idx)))
+                }
+            )
+        }
+        showPlayerPremiumMenu("⚡", getString(R.string.decoder_dialog_title), getDecoderShortBadge(currentDecoderIndex), items)
+    }
+
+    private fun buildPipParams(isPlaying: Boolean = true): PictureInPictureParams? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
+        return try {
+            val builder = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(16, 9))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                builder.setAutoEnterEnabled(PlaybackStore.isAutoPipEnabled(this) && isPlaying)
+                builder.setSeamlessResizeEnabled(true)
+            }
+            builder.build()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun updateAutoPipParams(isPlaying: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                buildPipParams(isPlaying)?.let { setPictureInPictureParams(it) }
+            } catch (_: Exception) {}
+        }
+    }
+
     private fun enterPipModeNow() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
-                val params = PictureInPictureParams.Builder()
-                    .setAspectRatio(Rational(16, 9))
-                    .build()
-                enterPictureInPictureMode(params)
-            } catch (_: Exception) {}
+                isEnteringPipTransition = true
+                binding.controlsContainer.visibility = View.GONE
+                val params = buildPipParams(isPlaying = true)
+                if (params != null) {
+                    enterPictureInPictureMode(params)
+                }
+            } catch (_: Exception) {
+                isEnteringPipTransition = false
+            }
+        }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (PlaybackStore.isAutoPipEnabled(this) && ::mediaPlayer.isInitialized && mediaPlayer.isPlaying) {
+            enterPipModeNow()
         }
     }
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         if (isInPictureInPictureMode) {
+            isEnteringPipTransition = false
             binding.controlsContainer.visibility = View.GONE
+            if (::mediaPlayer.isInitialized && !mediaPlayer.isPlaying) {
+                mediaPlayer.play()
+            }
         } else {
+            isEnteringPipTransition = false
             showControls()
         }
     }
@@ -2616,7 +2742,7 @@ class PlayerActivity : AppCompatActivity() {
         super.onPause()
         saveCurrentPositionNow()
         val inPip = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) isInPictureInPictureMode else false
-        if (!inPip && mediaPlayer.isPlaying) {
+        if (!inPip && !isEnteringPipTransition && mediaPlayer.isPlaying) {
             mediaPlayer.pause()
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
@@ -2625,6 +2751,7 @@ class PlayerActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         saveCurrentPositionNow()
+        isEnteringPipTransition = false
         val inPip = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) isInPictureInPictureMode else false
         if (!inPip && viewsAttached) {
             mediaPlayer.detachViews()

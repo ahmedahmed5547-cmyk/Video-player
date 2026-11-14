@@ -244,6 +244,21 @@
                 android:textSize="13sp" />
 
             <Button
+                android:id="@+id/btnDecoder"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginEnd="6dp"
+                android:minWidth="46dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:text="HW+"
+                android:textAllCaps="false"
+                android:textColor="#38BDF8"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <Button
                 android:id="@+id/btnOrientation"
                 style="?android:attr/borderlessButtonStyle"
                 android:layout_width="wrap_content"
