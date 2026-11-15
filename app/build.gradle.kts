@@ -1,5 +1,6 @@
 import java.util.Properties
 import java.io.FileInputStream
+import org.gradle.api.GradleException
 
 plugins {
     id("com.android.application")
@@ -14,42 +15,53 @@ val localProps = Properties().apply {
     }
 }
 
-fun resolveSigningConfigValue(key: String, defaultVal: String): String {
+fun resolveSigningConfigValue(key: String): String? {
     val fromProps = localProps.getProperty(key)?.trim()
     if (!fromProps.isNullOrEmpty()) return fromProps
     val fromEnv = System.getenv(key)?.trim()
     if (!fromEnv.isNullOrEmpty()) return fromEnv
-    return defaultVal
+    return null
 }
 
-val resolvedKeystorePath = resolveSigningConfigValue("KEYSTORE_PATH", "release.keystore")
-val resolvedKeystorePassword = resolveSigningConfigValue("KEYSTORE_PASSWORD", "PureVideo#2026!")
-val resolvedKeyAlias = resolveSigningConfigValue("KEY_ALIAS", "pureplayer_release_key")
-val resolvedKeyPassword = resolveSigningConfigValue("KEY_PASSWORD", "PureVideo#2026!")
+val isReleaseBuildRequested = gradle.startParameter.taskNames.any {
+    it.contains("Release", ignoreCase = true)
+}
 
-val ksFile = file(resolvedKeystorePath)
-if (!ksFile.exists()) {
-    ksFile.parentFile?.mkdirs()
-    val pb = ProcessBuilder(
-        "keytool", "-genkeypair", "-v",
-        "-keystore", ksFile.absolutePath,
-        "-alias", resolvedKeyAlias,
-        "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000",
-        "-storepass", resolvedKeystorePassword,
-        "-keypass", resolvedKeyPassword,
-        "-dname", "CN=Pure Video Player, OU=Mobile, O=PurePlayer, L=Riyadh, ST=Riyadh, C=SA"
-    )
-    pb.inheritIO().start().waitFor()
+val resolvedKeystorePath = resolveSigningConfigValue("KEYSTORE_PATH")
+val resolvedKeystorePassword = resolveSigningConfigValue("KEYSTORE_PASSWORD")
+val resolvedKeyAlias = resolveSigningConfigValue("KEY_ALIAS")
+val resolvedKeyPassword = resolveSigningConfigValue("KEY_PASSWORD")
+
+if (isReleaseBuildRequested) {
+    val missing = mutableListOf<String>()
+    if (resolvedKeystorePath.isNullOrBlank()) missing.add("KEYSTORE_PATH")
+    if (resolvedKeystorePassword.isNullOrBlank()) missing.add("KEYSTORE_PASSWORD")
+    if (resolvedKeyAlias.isNullOrBlank()) missing.add("KEY_ALIAS")
+    if (resolvedKeyPassword.isNullOrBlank()) missing.add("KEY_PASSWORD")
+    if (missing.isNotEmpty()) {
+        throw GradleException(
+            "Release build aborted: Missing required signing configuration $missing. " +
+                "Provide KEYSTORE_PATH (or KEYSTORE_BASE64 in CI), KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD " +
+                "via GitHub Secrets, environment variables, or local.properties."
+        )
+    }
+    val ksFile = file(resolvedKeystorePath!!)
+    if (!ksFile.exists() || !ksFile.isFile) {
+        throw GradleException(
+            "Release build aborted: Keystore file not found at '${ksFile.absolutePath}'. " +
+                "Never use a debug or auto-generated replacement key for Release builds."
+        )
+    }
 }
 
 android {
     namespace = "com.pureplayer.video"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.pureplayer.video"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 58
         versionName = "38.02"
 
@@ -76,10 +88,19 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = ksFile
-            storePassword = resolvedKeystorePassword
-            keyAlias = resolvedKeyAlias
-            keyPassword = resolvedKeyPassword
+            if (!resolvedKeystorePath.isNullOrBlank() &&
+                !resolvedKeystorePassword.isNullOrBlank() &&
+                !resolvedKeyAlias.isNullOrBlank() &&
+                !resolvedKeyPassword.isNullOrBlank()
+            ) {
+                val ksFile = file(resolvedKeystorePath)
+                if (ksFile.exists() && ksFile.isFile) {
+                    storeFile = ksFile
+                    storePassword = resolvedKeystorePassword
+                    keyAlias = resolvedKeyAlias
+                    keyPassword = resolvedKeyPassword
+                }
+            }
         }
     }
 
@@ -130,12 +151,12 @@ android {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.appcompat:appcompat:1.6.1")
-    implementation("com.google.android.material:material:1.11.0")
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
-    implementation("androidx.activity:activity-ktx:1.8.2")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    implementation("androidx.activity:activity-ktx:1.9.3")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("org.videolan.android:libvlc-all:3.6.3")
