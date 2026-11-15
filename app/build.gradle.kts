@@ -1,5 +1,6 @@
 import java.util.Properties
 import java.io.FileInputStream
+import org.gradle.api.GradleException
 
 plugins {
     id("com.android.application")
@@ -14,18 +15,44 @@ val localProps = Properties().apply {
     }
 }
 
-fun resolveSigningConfigValue(key: String, defaultVal: String): String {
+fun resolveSigningSecret(key: String): String? {
     val fromProps = localProps.getProperty(key)?.trim()
     if (!fromProps.isNullOrEmpty()) return fromProps
     val fromEnv = System.getenv(key)?.trim()
     if (!fromEnv.isNullOrEmpty()) return fromEnv
-    return defaultVal
+    return null
 }
 
-val resolvedKeystorePath = resolveSigningConfigValue("KEYSTORE_PATH", "release.keystore")
-val resolvedKeystorePassword = resolveSigningConfigValue("KEYSTORE_PASSWORD", "PureVideo#2026!")
-val resolvedKeyAlias = resolveSigningConfigValue("KEY_ALIAS", "pureplayer_release_key")
-val resolvedKeyPassword = resolveSigningConfigValue("KEY_PASSWORD", "PureVideo#2026!")
+val resolvedKeystorePath = resolveSigningSecret("KEYSTORE_PATH")
+val resolvedKeystorePassword = resolveSigningSecret("KEYSTORE_PASSWORD")
+val resolvedKeyAlias = resolveSigningSecret("KEY_ALIAS")
+val resolvedKeyPassword = resolveSigningSecret("KEY_PASSWORD")
+
+val isReleaseTaskRequested = gradle.startParameter.taskNames.any { taskName ->
+    taskName.contains("Release", ignoreCase = true)
+}
+
+if (isReleaseTaskRequested) {
+    val missingSecrets = mutableListOf<String>()
+    if (resolvedKeystorePath.isNullOrBlank()) missingSecrets.add("KEYSTORE_PATH")
+    if (resolvedKeystorePassword.isNullOrBlank()) missingSecrets.add("KEYSTORE_PASSWORD")
+    if (resolvedKeyAlias.isNullOrBlank()) missingSecrets.add("KEY_ALIAS")
+    if (resolvedKeyPassword.isNullOrBlank()) missingSecrets.add("KEY_PASSWORD")
+
+    if (missingSecrets.isNotEmpty()) {
+        throw GradleException(
+            "Release build aborted: Missing required signing configuration [${missingSecrets.joinToString(", ")}]. " +
+                "Provide KEYSTORE_PATH (or KEYSTORE_BASE64 in CI), KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD via GitHub Secrets, environment variables, or local.properties."
+        )
+    }
+
+    val keystoreFile = file(resolvedKeystorePath!!)
+    if (!keystoreFile.exists() || !keystoreFile.isFile) {
+        throw GradleException(
+            "Release build aborted: Keystore file not found at KEYSTORE_PATH='$resolvedKeystorePath'."
+        )
+    }
+}
 
 android {
     namespace = "com.pureplayer.video"
@@ -61,12 +88,18 @@ android {
 
     signingConfigs {
         create("release") {
-            val ksFile = file(resolvedKeystorePath)
-            if (ksFile.exists()) {
-                storeFile = ksFile
-                storePassword = resolvedKeystorePassword
-                keyAlias = resolvedKeyAlias
-                keyPassword = resolvedKeyPassword
+            if (!resolvedKeystorePath.isNullOrBlank() &&
+                !resolvedKeystorePassword.isNullOrBlank() &&
+                !resolvedKeyAlias.isNullOrBlank() &&
+                !resolvedKeyPassword.isNullOrBlank()
+            ) {
+                val ksFile = file(resolvedKeystorePath)
+                if (ksFile.exists()) {
+                    storeFile = ksFile
+                    storePassword = resolvedKeystorePassword
+                    keyAlias = resolvedKeyAlias
+                    keyPassword = resolvedKeyPassword
+                }
             }
         }
     }

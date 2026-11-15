@@ -1,16 +1,25 @@
+# Built application files
 *.apk
 *.aab
 *.ap_
+*.aab_
 *.dex
 *.class
-bin/
-gen/
-out/
-build/
+
+# Gradle files
 .gradle/
+build/
+app/build/
+
+# Local configuration & signing secrets (NEVER commit to Git)
 local.properties
-# *.keystore (kept for zero-config GitHub build)
-# *.jks
+*.keystore
+*.jks
+*.key
+*.pem
+*.b64
+
+# IDE / Android Studio
 .idea/
 *.iml
 .DS_Store
