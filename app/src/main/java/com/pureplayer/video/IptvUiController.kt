@@ -325,6 +325,7 @@ internal fun MainActivity.loadInitialIptvStreamsPage(src: IptvSource, cType: Ipt
 
 internal fun MainActivity.loadNextIptvStreamsPage() {
     val hostActivity = this
+    val hostActivity = this
     val src = activeIptvSource ?: return
     val cType = activeIptvContentType ?: return
     if (isLoadingNextIptvPage || !hasMoreIptvCategoryPages) return
@@ -619,6 +620,7 @@ internal fun MainActivity.showAddIptvSourceDialog() {
 
 internal fun MainActivity.showAddOrEditM3uUrlDialog(existingSource: IptvSource? = null) {
     val hostActivity = this
+    val hostActivity = this
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
     val bg = PlaybackStore.getBackgroundColor(this)
@@ -729,6 +731,7 @@ internal fun MainActivity.showAddOrEditXtreamDialog(
     prefillUser: String = "",
     prefillPass: String = ""
 ) {
+    val hostActivity = this
     val hostActivity = this
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
@@ -925,6 +928,7 @@ internal fun MainActivity.syncIptvSourceWithProgress(
     passwordPlain: String = ""
 ) {
     val hostActivity = this
+    val hostActivity = this
     settingsBackStack.clear()
     closeActiveFullScreenDialogSmoothly()
     iptvSyncJob?.cancel()
@@ -1112,6 +1116,7 @@ internal fun MainActivity.downloadIptvMediaLocally(
     userAgent: String = "",
     referrer: String = ""
 ) {
+    val hostActivity = this
     val hostActivity = this
     val cleanUrl = streamUrl.trim()
     if (!cleanUrl.startsWith("http://", ignoreCase = true) && !cleanUrl.startsWith("https://", ignoreCase = true)) {
@@ -1310,6 +1315,7 @@ internal fun MainActivity.showIptvMovieDetailsDialog(movie: IptvStreamItem) {
 }
 
 internal fun MainActivity.openIptvSeriesSeasons(seriesItem: IptvStreamItem) {
+    val hostActivity = this
     val hostActivity = this
     val src = activeIptvSource ?: return
     if (src.type == IptvSourceType.XTREAM && seriesItem.seriesId.isNotBlank()) {

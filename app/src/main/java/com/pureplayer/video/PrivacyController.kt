@@ -282,6 +282,7 @@ internal fun MainActivity.showPinUnlockDialog(
     allowBiometricRetry: Boolean
 ) {
     val hostActivity = this
+    val hostActivity = this
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
     val bg = PlaybackStore.getBackgroundColor(this)
@@ -393,6 +394,7 @@ internal fun MainActivity.showPinUnlockDialog(
 
 internal fun MainActivity.showFirstTimeSetupPinDialog(onPinSaved: () -> Unit = {}) {
     val hostActivity = this
+    val hostActivity = this
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
     val bg = PlaybackStore.getBackgroundColor(this)
@@ -485,6 +487,7 @@ internal fun MainActivity.showFirstTimeSetupPinDialog(onPinSaved: () -> Unit = {
 }
 
 internal fun MainActivity.showChangePasswordWithCurrentVerifyDialog() {
+    val hostActivity = this
     val hostActivity = this
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
@@ -604,6 +607,7 @@ internal fun MainActivity.openPrivacyControlSection() {
 }
 
 internal fun MainActivity.showRemovePasswordVerifyDialog() {
+    val hostActivity = this
     val hostActivity = this
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
@@ -767,6 +771,7 @@ internal fun MainActivity.showPremiumFolderMultiPicker(
     neutralActionLabel: String? = null,
     onNeutralAction: (() -> Unit)? = null
 ) {
+    val hostActivity = this
     val hostActivity = this
     if (allDiscoveredFolders.isEmpty()) {
         Toast.makeText(this, getString(R.string.no_videos_found), Toast.LENGTH_SHORT).show()

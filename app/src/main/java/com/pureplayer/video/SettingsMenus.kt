@@ -819,6 +819,7 @@ internal fun MainActivity.showAudioSoundModesPage() {
 
 internal fun MainActivity.showGraphicEqualizerDialog() {
     val hostActivity = this
+    val hostActivity = this
     val primaryText = PlaybackStore.getPrimaryTextColor(this)
     val secondaryText = PlaybackStore.getSecondaryTextColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
@@ -1201,6 +1202,7 @@ internal fun MainActivity.showSubtitleLanguagePriorityDialog() {
 }
 
 internal fun MainActivity.showThemeSelectorDialog() {
+    val hostActivity = this
     val hostActivity = this
     var selectedIdx = PlaybackStore.getThemeIndex(this)
     var selectedMode = PlaybackStore.getAppearanceMode(this)

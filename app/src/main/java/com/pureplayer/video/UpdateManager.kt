@@ -129,6 +129,7 @@ internal fun MainActivity.openGitHubUpdaterFlow() {
 
 internal fun MainActivity.showConfigureGitHubRepoDialog(onConfigured: (String) -> Unit = {}) {
     val hostActivity = this
+    val hostActivity = this
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
     val bg = PlaybackStore.getBackgroundColor(this)
@@ -357,6 +358,7 @@ internal fun MainActivity.checkForGitHubUpdatesNow(repoSlug: String) {
 }
 
 internal fun MainActivity.downloadAndInstallApkInApp(apkUrl: String, fallbackActionsUrl: String) {
+    val hostActivity = this
     val hostActivity = this
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
