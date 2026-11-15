@@ -48,7 +48,7 @@ jobs:
         run: |
           VER=$(grep 'versionName =' app/build.gradle.kts | head -n 1 | cut -d'"' -f2)
           if [ -z "$VER" ]; then VER="38.04"; fi
-          echo "APP_VERSION=$VER" >> $GITHUB_ENV
+          echo "APP_VERSION=$VER" >> "$GITHUB_ENV"
           gradle assembleGithubDebug assemblePlayDebug --no-daemon --stacktrace
           mkdir -p dist_outputs
           find app/build/outputs/apk/github/debug -name "*.apk" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-github-debug.apk" \;
@@ -61,19 +61,28 @@ jobs:
           SECRET_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           SECRET_KEY_PASS: ${{ secrets.KEY_PASSWORD }}
         run: |
-          KS_B64="${SECRET_KS_B64:-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}"
-          KS_PASS="${SECRET_KS_PASS:-PureVideo#2026!}"
-          K_ALIAS="${SECRET_KEY_ALIAS:-pureplayer_release_key}"
-          K_PASS="${SECRET_KEY_PASS:-PureVideo#2026!}"
-          if [ -z "$KS_B64" ] || [ -z "$KS_PASS" ] || [ -z "$K_ALIAS" ] || [ -z "$K_PASS" ]; then
-            echo "::error::Missing required signing secrets (KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD)."
+          MISSING=""
+          if [ -z "$SECRET_KS_B64" ]; then MISSING="${MISSING} KEYSTORE_BASE64"; fi
+          if [ -z "$SECRET_KS_PASS" ]; then MISSING="${MISSING} KEYSTORE_PASSWORD"; fi
+          if [ -z "$SECRET_KEY_ALIAS" ]; then MISSING="${MISSING} KEY_ALIAS"; fi
+          if [ -z "$SECRET_KEY_PASS" ]; then MISSING="${MISSING} KEY_PASSWORD"; fi
+          if [ -n "$MISSING" ]; then
+            echo "::error::Release build aborted — missing required GitHub Secrets:${MISSING}. Configure them in Settings -> Secrets and variables -> Actions."
             exit 1
           fi
-          echo "$KS_B64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
-          echo "KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> $GITHUB_ENV
-          echo "RESOLVED_KS_PASS=$KS_PASS" >> $GITHUB_ENV
-          echo "RESOLVED_KEY_ALIAS=$K_ALIAS" >> $GITHUB_ENV
-          echo "RESOLVED_KEY_PASS=$K_PASS" >> $GITHUB_ENV
+          KS_FILE="$RUNNER_TEMP/release.keystore"
+          if ! printf '%s' "$SECRET_KS_B64" | tr -d '\r\n ' | base64 --decode > "$KS_FILE"; then
+            echo "::error::Failed to decode KEYSTORE_BASE64. Ensure it is a valid Base64-encoded keystore."
+            exit 1
+          fi
+          if [ ! -s "$KS_FILE" ]; then
+            echo "::error::Decoded keystore file is empty (0 bytes). Verify KEYSTORE_BASE64 secret content."
+            exit 1
+          fi
+          echo "KEYSTORE_PATH=$KS_FILE" >> "$GITHUB_ENV"
+          echo "RESOLVED_KS_PASS=$SECRET_KS_PASS" >> "$GITHUB_ENV"
+          echo "RESOLVED_KEY_ALIAS=$SECRET_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "RESOLVED_KEY_PASS=$SECRET_KEY_PASS" >> "$GITHUB_ENV"
 
       - name: Build Signed Release APKs & Google Play AAB
         env:
