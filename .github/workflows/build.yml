@@ -1,0 +1,71 @@
+name: Build PureVideoPlayer (GitHub & Play)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Auto-Unpack ZIP or Nested Folder (If Uploaded Directly)
+        run: |
+          LATEST_ZIP=$(ls -v PureVideoPlayer*.zip 2>/dev/null | tail -n 1 || true)
+          if [ -n "$LATEST_ZIP" ]; then
+            echo "Found uploaded archive $LATEST_ZIP — extracting into repository root..."
+            unzip -o "$LATEST_ZIP"
+            rm -f PureVideoPlayer*.zip
+          fi
+          NESTED_DIR=$(find . -maxdepth 2 -type d -name "PureVideoPlayer*" | head -n 1 || true)
+          if [ -n "$NESTED_DIR" ] && [ -d "$NESTED_DIR/app" ]; then
+            echo "Found nested folder $NESTED_DIR — syncing into repository root..."
+            cp -rf "$NESTED_DIR"/* .
+            rm -rf "$NESTED_DIR"
+          fi
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle 8.5
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
+
+      - name: Run Unit Tests (GitHub & Play Flavors)
+        run: gradle testGithubDebugUnitTest testPlayDebugUnitTest --no-daemon --stacktrace
+
+      - name: Build Debug & Signed Release APKs + Google Play AAB
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          VER=$(grep 'versionName =' app/build.gradle.kts | head -n 1 | cut -d'"' -f2)
+          if [ -z "$VER" ]; then VER="38.03"; fi
+          echo "APP_VERSION=$VER" >> $GITHUB_ENV
+          gradle assembleGithubDebug assemblePlayDebug assembleGithubRelease assemblePlayRelease bundlePlayRelease --no-daemon --stacktrace
+          mkdir -p dist_outputs
+          find app/build/outputs/apk/github/debug -name "*.apk" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-github-debug.apk" \;
+          find app/build/outputs/apk/play/debug -name "*.apk" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-play-debug.apk" \;
+          find app/build/outputs/apk/github/release -name "*.apk" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-github-release.apk" \;
+          find app/build/outputs/apk/play/release -name "*.apk" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-play-release.apk" \;
+          find app/build/outputs/bundle/playRelease -name "*.aab" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-play-release.aab" \;
+
+      - name: Upload Signed Release APKs & Google Play Bundle (AAB)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PureVideoPlayer-v${{ env.APP_VERSION }}-Packages
+          path: |
+            dist_outputs/*.apk
+            dist_outputs/*.aab
+          if-no-files-found: error
