@@ -2,6 +2,7 @@ package com.pureplayer.video
 
 import android.content.Context
 import android.os.Build
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Log

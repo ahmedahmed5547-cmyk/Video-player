@@ -100,6 +100,7 @@ import javax.crypto.SecretKey
  */
 
 internal fun MainActivity.showResumeBehaviorSettingsDialog() {
+    val hostActivity = this
     val currentMode = PlaybackStore.getResumeAskMode(this)
     val items = listOf(
         PremiumMenuItem(
@@ -143,6 +144,7 @@ internal fun MainActivity.showResumeBehaviorSettingsDialog() {
 
 
 internal fun MainActivity.showSortAndLayoutDialog() {
+    val hostActivity = this
     val isGrid = PlaybackStore.isGridLayoutEnabled(this)
     val sortMode = PlaybackStore.getSortOrderMode(this)
 
@@ -264,6 +266,7 @@ internal fun MainActivity.showSortAndLayoutDialog() {
 }
 
 internal fun MainActivity.sortVideosList(videos: List<VideoItem>, sortMode: Int): List<VideoItem> {
+    val hostActivity = this
     return when (sortMode) {
         0 -> videos.sortedByDescending { it.dateAddedSec }
         1 -> videos.sortedBy { it.dateAddedSec }
@@ -277,6 +280,7 @@ internal fun MainActivity.sortVideosList(videos: List<VideoItem>, sortMode: Int)
 }
 
 internal fun MainActivity.sortFoldersList(folders: List<VideoFolder>, sortMode: Int): List<VideoFolder> {
+    val hostActivity = this
     val withSortedInnerVideos = folders.map { folder ->
         VideoFolder(folder.name, sortVideosList(folder.videos, sortMode))
     }
@@ -301,6 +305,7 @@ internal fun MainActivity.sortFoldersList(folders: List<VideoFolder>, sortMode: 
  * Tapping any category opens its dedicated sub-page with smooth staggered animation & full Back-Stack support!
  */
 internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
+    val hostActivity = this
     if (clearStack) {
         settingsBackStack.clear()
     }
@@ -427,6 +432,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
 }
 
 internal fun MainActivity.showSettingsPlaybackEnginePage() {
+    val hostActivity = this
     val decoderSub = getDecoderModeDisplayName(PlaybackStore.getDecoderModeIndex(this))
     val orientIdx = PlaybackStore.getDefaultOrientationIndex(this)
     val orientSub = when (orientIdx) {
@@ -497,6 +503,7 @@ internal fun MainActivity.showSettingsPlaybackEnginePage() {
 }
 
 internal fun MainActivity.showSettingsPrivacyFoldersPage() {
+    val hostActivity = this
     val hasPin = PlaybackStore.hasPrivacyPin(this)
     val lockedCount = PlaybackStore.getLockedFolders(this).size
     val privacySub = if (hasPin) {
@@ -564,6 +571,7 @@ internal fun MainActivity.showSettingsPrivacyFoldersPage() {
 }
 
 internal fun MainActivity.showSettingsAppearanceDisplayPage() {
+    val hostActivity = this
     val langTag = PlaybackStore.getAppLanguageTag(this)
     val langSub = getAppLanguageDisplayName(langTag)
     val themeNames = arrayOf(
@@ -633,6 +641,7 @@ internal fun MainActivity.showSettingsAppearanceDisplayPage() {
 }
 
 internal fun MainActivity.getDecoderModeDisplayName(modeIdx: Int): String {
+    val hostActivity = this
     return when (modeIdx) {
         1 -> "HW • " + getString(R.string.decoder_hw_title)
         2 -> "SW • " + getString(R.string.decoder_sw_title)
@@ -641,6 +650,7 @@ internal fun MainActivity.getDecoderModeDisplayName(modeIdx: Int): String {
 }
 
 internal fun MainActivity.showDefaultDecoderSettingsDialog() {
+    val hostActivity = this
     val currentIdx = PlaybackStore.getDecoderModeIndex(this)
     val options = listOf(
         Triple(0, "⚡", Pair(getString(R.string.decoder_hw_plus_title), getString(R.string.decoder_hw_plus_sub))),
@@ -665,6 +675,7 @@ internal fun MainActivity.showDefaultDecoderSettingsDialog() {
 }
 
 internal fun MainActivity.showSettingsSubtitlesPlaybackPage() {
+    val hostActivity = this
     val subLangs = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(" → ") { it.uppercase() }
     val subSize = PlaybackStore.getSubSizeSp(this).toInt()
     val subBgOpacity = PlaybackStore.getSubBgOpacityPct(this)
@@ -711,6 +722,7 @@ internal fun MainActivity.showSettingsSubtitlesPlaybackPage() {
 }
 
 internal fun MainActivity.getAudioModeDisplayName(mode: Int): String {
+    val hostActivity = this
     return when (mode) {
         1 -> "🎬 " + getString(R.string.audio_mode_cinematic)
         2 -> "🏛️ " + getString(R.string.audio_mode_hall)
@@ -724,6 +736,7 @@ internal fun MainActivity.getAudioModeDisplayName(mode: Int): String {
 }
 
 internal fun MainActivity.showSettingsAudioEqualizerPage() {
+    val hostActivity = this
     val currentMode = PlaybackStore.getAudioPresetMode(this)
     val modeLabel = getAudioModeDisplayName(currentMode)
     val preAmp = PlaybackStore.getAudioPreAmpDb(this)
@@ -778,6 +791,7 @@ internal fun MainActivity.showSettingsAudioEqualizerPage() {
 }
 
 internal fun MainActivity.showAudioSoundModesPage() {
+    val hostActivity = this
     val activeMode = PlaybackStore.getAudioPresetMode(this)
     val modes = listOf(
         Triple(0, "🎵", Pair(getString(R.string.audio_mode_standard), getString(R.string.audio_mode_standard_sub))),
@@ -818,6 +832,7 @@ internal fun MainActivity.showAudioSoundModesPage() {
 }
 
 internal fun MainActivity.showGraphicEqualizerDialog() {
+    val hostActivity = this
     val primaryText = PlaybackStore.getPrimaryTextColor(this)
     val secondaryText = PlaybackStore.getSecondaryTextColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
@@ -986,9 +1001,9 @@ internal fun MainActivity.showGraphicEqualizerDialog() {
             isNavigatingToSubDialog = true
             dialog.dismiss()
             isNavigatingToSubDialog = false
-            PlaybackStore.setAudioEqBandsDb(this@MainActivity, currentBands, currentPreAmp)
+            PlaybackStore.setAudioEqBandsDb(hostActivity, currentBands, currentPreAmp)
             Toast.makeText(
-                this@MainActivity,
+                hostActivity,
                 getString(R.string.audio_mode_applied_toast, getString(R.string.audio_mode_custom)),
                 Toast.LENGTH_SHORT
             ).show()
@@ -1004,6 +1019,7 @@ internal fun MainActivity.showGraphicEqualizerDialog() {
 }
 
 internal fun MainActivity.showAboutAppPage() {
+    val hostActivity = this
     val verName = BuildConfig.VERSION_NAME
     val items = listOf(
         PremiumMenuItem(
@@ -1041,6 +1057,7 @@ internal fun MainActivity.showAboutAppPage() {
 }
 
 internal fun MainActivity.showChangelogPage() {
+    val hostActivity = this
     val verName = BuildConfig.VERSION_NAME
     val items = listOf(
         PremiumMenuItem(
@@ -1085,6 +1102,7 @@ internal fun MainActivity.showChangelogPage() {
 }
 
 internal fun MainActivity.getAppLanguageDisplayName(tag: String): String {
+    val hostActivity = this
     return when (tag) {
         "ar" -> getString(R.string.lang_arabic)
         "en" -> getString(R.string.lang_english)
@@ -1106,6 +1124,7 @@ internal fun MainActivity.getAppLanguageDisplayName(tag: String): String {
 }
 
 internal fun MainActivity.showAppLanguageDialog() {
+    val hostActivity = this
     val currentTag = PlaybackStore.getAppLanguageTag(this)
     val devLocaleName = Locale.getDefault().displayLanguage
     val supportedAppLangs = listOf(
@@ -1144,6 +1163,7 @@ internal fun MainActivity.showAppLanguageDialog() {
 }
 
 internal fun MainActivity.showSubtitleLanguagePriorityDialog() {
+    val hostActivity = this
     val langCodes = arrayOf("ar", "en", "fr", "es", "de", "tr", "ru", "pt", "it", "hi", "ur", "id", "zh", "ja", "ko")
     val langLabels = arrayOf(
         getString(R.string.sub_lang_ar),
@@ -1194,6 +1214,7 @@ internal fun MainActivity.showSubtitleLanguagePriorityDialog() {
 }
 
 internal fun MainActivity.showThemeSelectorDialog() {
+    val hostActivity = this
     var selectedIdx = PlaybackStore.getThemeIndex(this)
     var selectedMode = PlaybackStore.getAppearanceMode(this)
     val surface = PlaybackStore.getSurfaceColor(this)
@@ -1238,14 +1259,14 @@ internal fun MainActivity.showThemeSelectorDialog() {
         }
         background = GradientDrawable().apply {
             cornerRadius = dp(4).toFloat()
-            setColor(PlaybackStore.getAccentColor(this@MainActivity))
+            setColor(PlaybackStore.getAccentColor(hostActivity))
         }
     }
     cardContainer.addView(topPill)
 
     val tvTitle = TextView(this).apply {
         text = "🎨  " + getString(R.string.theme_dialog_title)
-        setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
+        setTextColor(PlaybackStore.getPrimaryTextColor(hostActivity))
         textSize = 18f
         setTypeface(typeface, Typeface.BOLD)
         setPadding(dp(4), 0, dp(4), dp(10))
@@ -1255,7 +1276,7 @@ internal fun MainActivity.showThemeSelectorDialog() {
     // Section 1: Appearance Mode Selector (Dark / Light / System Default)
     val tvModeSec = TextView(this).apply {
         text = getString(R.string.appearance_mode_section)
-        setTextColor(PlaybackStore.getAccentColor(this@MainActivity))
+        setTextColor(PlaybackStore.getAccentColor(hostActivity))
         textSize = 12.5f
         setTypeface(typeface, Typeface.BOLD)
         setPadding(dp(4), dp(4), dp(4), dp(8))
@@ -1281,7 +1302,7 @@ internal fun MainActivity.showThemeSelectorDialog() {
     // Section 2: Accent Color Presets
     val tvAccentSec = TextView(this).apply {
         text = getString(R.string.accent_colors_section)
-        setTextColor(PlaybackStore.getAccentColor(this@MainActivity))
+        setTextColor(PlaybackStore.getAccentColor(hostActivity))
         textSize = 12.5f
         setTypeface(typeface, Typeface.BOLD)
         setPadding(dp(4), dp(4), dp(4), dp(8))
@@ -1379,7 +1400,7 @@ internal fun MainActivity.showThemeSelectorDialog() {
             }
             setOnClickListener {
                 selectedMode = modeCode
-                PlaybackStore.setAppearanceMode(this@MainActivity, modeCode)
+                PlaybackStore.setAppearanceMode(hostActivity, modeCode)
                 refreshVisualSelection(selectedIdx, selectedMode)
                 applyUserTheme(animated = true)
             }
@@ -1423,7 +1444,7 @@ internal fun MainActivity.showThemeSelectorDialog() {
         }
         val tvName = TextView(this).apply {
             text = opt.name
-            setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
+            setTextColor(PlaybackStore.getPrimaryTextColor(hostActivity))
             textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
         }
@@ -1465,7 +1486,7 @@ internal fun MainActivity.showThemeSelectorDialog() {
     val btnBack = TextView(this).apply {
         text = if (settingsBackStack.isNotEmpty()) getString(R.string.back_to_previous_menu) else getString(R.string.close)
         gravity = Gravity.CENTER
-        setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
+        setTextColor(PlaybackStore.getPrimaryTextColor(hostActivity))
         textSize = 14.5f
         setTypeface(typeface, Typeface.BOLD)
         setPadding(0, dp(12), 0, dp(12))
@@ -1487,6 +1508,7 @@ internal fun MainActivity.showThemeSelectorDialog() {
 }
 
 internal fun MainActivity.showSubtitleStyleDialog() {
+    val hostActivity = this
     val primaryText = PlaybackStore.getPrimaryTextColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
     val accent = PlaybackStore.getAccentColor(this)
@@ -1675,6 +1697,7 @@ internal fun MainActivity.showSubtitleStyleDialog() {
 }
 
 internal fun MainActivity.showDefaultOrientationDialog() {
+    val hostActivity = this
     val current = PlaybackStore.getDefaultOrientationIndex(this)
     val items = listOf(
         PremiumMenuItem("🔄", getString(R.string.orientation_auto), null, current == 0) {

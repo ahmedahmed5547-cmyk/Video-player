@@ -380,7 +380,7 @@ private fun httpGetString(urlStr: String, headers: Map<String, String> = emptyMa
             }
         }
         if (conn.responseCode in 200..299) {
-            val bytes = conn.inputStream.use { SubtitleSearchEngine.readBytesBounded(it, 4 * 1024 * 1024) } ?: return emptyList()
+            val bytes = conn.inputStream.use { SubtitleSearchEngine.readBytesBounded(it, 4 * 1024 * 1024) } ?: return null
             String(bytes, Charsets.UTF_8)
         } else {
             null

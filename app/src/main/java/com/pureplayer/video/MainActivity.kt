@@ -106,8 +106,8 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var binding: ActivityMainBinding
     internal lateinit var adapter: MediaAdapter
 
-    private var allDiscoveredVideos = listOf<VideoItem>()
-    private var allDiscoveredFolders = listOf<VideoFolder>()
+    internal var allDiscoveredVideos = listOf<VideoItem>()
+    internal var allDiscoveredFolders = listOf<VideoFolder>()
 
     private var publicFoldersOnly = listOf<VideoFolder>()
     internal var publicVideosFlat = listOf<VideoItem>()
@@ -129,7 +129,7 @@ class MainActivity : AppCompatActivity() {
     internal var isSearchActive = false
     private var pendingDeleteVideo: VideoItem? = null
     private var loadMediaJob: Job? = null
-    private var iptvSyncJob: Job? = null
+    internal var iptvSyncJob: Job? = null
 
     // Settings & Sub-Settings Back-Stack + Persistent Full-Screen Host (eliminates window close/open flicker)
     internal val settingsBackStack = ArrayDeque<() -> Unit>()
@@ -138,7 +138,7 @@ class MainActivity : AppCompatActivity() {
     internal var activeFullScreenHost: FrameLayout? = null
     internal var activeFullScreenCardView: View? = null
     internal var fullScreenMenuRenderToken: Int = 0
-    private var isFullScreenDialogClosing: Boolean = false
+    internal var isFullScreenDialogClosing: Boolean = false
 
     // Instant Debounced Search StateFlow (280ms debounce + distinctUntilChanged + flatMapLatest)
     private val searchQueryFlow = MutableStateFlow("")
@@ -147,12 +147,12 @@ class MainActivity : AppCompatActivity() {
     // 0 = Sources List, 1 = Source Dashboard (Live/Movies/Series/Radio), 2 = Categories, 3 = Streams/Series List, 4 = Series Seasons, 5 = Season Episodes
     internal var iptvNavLevel = 0
     internal var activeIptvSource: IptvSource? = null
-    private var activeIptvContentType: IptvContentType? = null
+    internal var activeIptvContentType: IptvContentType? = null
     internal var activeIptvCategoryId: String? = null
     internal var activeIptvCategoryName: String = ""
     internal var activeIptvSeriesInfo: IptvSeriesInfoResult? = null
-    private var activeIptvSeasonGroup: IptvSeasonGroup? = null
-    private var currentOpenedSeriesStreamItem: IptvStreamItem? = null
+    internal var activeIptvSeasonGroup: IptvSeasonGroup? = null
+    internal var currentOpenedSeriesStreamItem: IptvStreamItem? = null
     // 0 = All / Categories, 1 = Favorites ❤️, 2 = Continue Watching / History ⏱️
     internal var iptvSectionSubTab = 0
     private var lastBackExitPressMs = 0L
@@ -185,8 +185,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private var pendingM3uFileSourceName: String = ""
-    private val m3uFilePickerLauncher = registerForActivityResult(
+    internal var pendingM3uFileSourceName: String = ""
+    internal val m3uFilePickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
@@ -333,7 +333,7 @@ class MainActivity : AppCompatActivity() {
     /**
      * Returns true if the user specifically chose "Allow limited access" on Android 14+ (API 34+).
      */
-    private fun isUsingLimitedAccessMode(): Boolean {
+    internal fun isUsingLimitedAccessMode(): Boolean {
         if (Build.VERSION.SDK_INT >= 34) {
             val fullGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
             val partialGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
@@ -1560,7 +1560,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun requestStoragePermission() {
+    internal fun requestStoragePermission() {
         val permissions = if (Build.VERSION.SDK_INT >= 34) {
             arrayOf(
                 Manifest.permission.READ_MEDIA_VIDEO,
@@ -1597,7 +1597,7 @@ class MainActivity : AppCompatActivity() {
         return false
     }
 
-    private fun loadVideoFoldersOnly(showSpinner: Boolean = false) {
+    internal fun loadVideoFoldersOnly(showSpinner: Boolean = false) {
         loadMediaJob?.cancel()
         if (showSpinner && allDiscoveredVideos.isEmpty()) {
             binding.swipeRefresh.isRefreshing = true

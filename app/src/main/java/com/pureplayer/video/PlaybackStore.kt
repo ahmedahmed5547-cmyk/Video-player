@@ -1,6 +1,9 @@
 package com.pureplayer.video
 
 import android.content.Context
+import java.util.concurrent.TimeUnit
+import androidx.core.content.ContextCompat
+import android.graphics.Typeface
 import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.graphics.Color
@@ -159,6 +162,31 @@ object PlaybackStore {
             .putString(KEY_LAST_TITLE, title)
             .putLong(KEY_LAST_POSITION, safePos)
             .apply()
+    }
+
+    fun savePosition(context: Context, uri: Uri, posMs: Long) {
+        prefs(context).edit().putLong(PREFIX_POS + uri.toString(), posMs).apply()
+    }
+
+    fun getLastPlayedUri(context: Context): String? = getLastPlayedVideo(context)?.first?.toString()
+
+    fun applyAppearanceMode(context: Context) {
+        val nightMode = when (getAppearanceMode(context)) {
+            1 -> AppCompatDelegate.MODE_NIGHT_NO
+            2 -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            else -> AppCompatDelegate.MODE_NIGHT_YES
+        }
+        AppCompatDelegate.setDefaultNightMode(nightMode)
+    }
+
+    fun applySavedAppLanguage(context: Context) {
+        val tag = getAppLanguageTag(context)
+        val localeList = if (tag.isEmpty()) {
+            LocaleListCompat.getEmptyLocaleList()
+        } else {
+            LocaleListCompat.forLanguageTags(tag)
+        }
+        AppCompatDelegate.setApplicationLocales(localeList)
     }
 
     fun getSavedPosition(context: Context, uri: Uri): Long {

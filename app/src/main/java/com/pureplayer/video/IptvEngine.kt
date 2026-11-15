@@ -1059,7 +1059,7 @@ object XtreamCodesClient {
             type = IptvSourceType.XTREAM,
             serverOrM3uUrl = baseUrl,
             username = cleanUser,
-            encryptedPassword = IptvCredentialVault.encryptSecret(cleanPass),
+            encryptedPassword = IptvCredentialVault.encryptSecretOrNull(cleanPass) ?: throw IllegalStateException("Keystore encryption failed"),
             lastUpdatedMs = System.currentTimeMillis(),
             liveCount = liveCnt,
             movieCount = movieCnt,
@@ -1299,7 +1299,7 @@ object XtreamCodesClient {
     ): IptvSeriesInfoResult {
         val baseUrl = normalizeServerBaseUrl(source.serverOrM3uUrl)
         val user = sanitizeCredentialOrUrl(source.username)
-        val pass = sanitizeCredentialOrUrl(IptvCredentialVault.decryptSecret(source.encryptedPassword))
+        val pass = sanitizeCredentialOrUrl((IptvCredentialVault.decryptSecretOrNull(source.encryptedPassword) ?: ""))
         val uEnc = URLEncoder.encode(user, "UTF-8")
         val pEnc = URLEncoder.encode(pass, "UTF-8")
         val sEnc = URLEncoder.encode(seriesItem.seriesId, "UTF-8")

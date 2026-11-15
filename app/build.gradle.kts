@@ -38,6 +38,8 @@ android {
         versionCode = 58
         versionName = "38.02"
 
+        buildConfigField("String", "SUBDL_API_KEY", "\"\"")
+
         ndk {
             abiFilters.add("arm64-v8a")
         }
@@ -47,11 +49,13 @@ android {
     productFlavors {
         create("github") {
             dimension = "distribution"
-            buildConfigField(" boolean".trim(), "ALLOW_SELF_UPDATE", "true")
+            buildConfigField("boolean", "ALLOW_SELF_UPDATE", "true")
+            buildConfigField("boolean", "ENABLE_IN_APP_UPDATER", "true")
         }
         create("play") {
             dimension = "distribution"
             buildConfigField("boolean", "ALLOW_SELF_UPDATE", "false")
+            buildConfigField("boolean", "ENABLE_IN_APP_UPDATER", "false")
         }
     }
 
@@ -96,6 +100,7 @@ android {
 
     buildFeatures {
         buildConfig = true
+        viewBinding = true
     }
 
     testOptions {

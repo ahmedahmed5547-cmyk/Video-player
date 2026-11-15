@@ -100,6 +100,7 @@ import javax.crypto.SecretKey
  */
 
 internal fun MainActivity.normalizeGitHubRepoInput(rawInput: String): String {
+    val hostActivity = this
     var clean = rawInput.trim()
         .removePrefix("https://github.com/")
         .removePrefix("http://github.com/")
@@ -117,6 +118,7 @@ internal fun MainActivity.normalizeGitHubRepoInput(rawInput: String): String {
 }
 
 internal fun MainActivity.openGitHubUpdaterFlow() {
+    val hostActivity = this
     val savedRepo = PlaybackStore.getGitHubRepo(this)
     if (savedRepo.isBlank() || !savedRepo.contains("/")) {
         showConfigureGitHubRepoDialog { configuredRepo ->
@@ -128,6 +130,7 @@ internal fun MainActivity.openGitHubUpdaterFlow() {
 }
 
 internal fun MainActivity.showConfigureGitHubRepoDialog(onConfigured: (String) -> Unit = {}) {
+    val hostActivity = this
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
     val bg = PlaybackStore.getBackgroundColor(this)
@@ -145,7 +148,7 @@ internal fun MainActivity.showConfigureGitHubRepoDialog(onConfigured: (String) -
 
     val tvTitle = TextView(this).apply {
         text = getString(R.string.update_repo_setup_title)
-        setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
+        setTextColor(PlaybackStore.getPrimaryTextColor(hostActivity))
         textSize = 17.5f
         setTypeface(typeface, Typeface.BOLD)
     }
@@ -201,10 +204,10 @@ internal fun MainActivity.showConfigureGitHubRepoDialog(onConfigured: (String) -
         setOnClickListener {
             val normalized = normalizeGitHubRepoInput(etRepo.text.toString())
             if (!normalized.contains("/")) {
-                Toast.makeText(this@MainActivity, getString(R.string.update_repo_invalid_toast), Toast.LENGTH_SHORT).show()
+                Toast.makeText(hostActivity, getString(R.string.update_repo_invalid_toast), Toast.LENGTH_SHORT).show()
             } else {
                 dialog.dismiss()
-                PlaybackStore.setGitHubRepo(this@MainActivity, normalized)
+                PlaybackStore.setGitHubRepo(hostActivity, normalized)
                 onConfigured(normalized)
             }
         }
@@ -217,6 +220,7 @@ internal fun MainActivity.showConfigureGitHubRepoDialog(onConfigured: (String) -
 }
 
 internal fun MainActivity.checkForGitHubUpdatesNow(repoSlug: String) {
+    val hostActivity = this
     Toast.makeText(this, getString(R.string.update_checking_toast, repoSlug), Toast.LENGTH_SHORT).show()
 
     lifecycleScope.launch {
@@ -356,6 +360,7 @@ internal fun MainActivity.checkForGitHubUpdatesNow(repoSlug: String) {
 }
 
 internal fun MainActivity.downloadAndInstallApkInApp(apkUrl: String, fallbackActionsUrl: String) {
+    val hostActivity = this
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
 
@@ -372,7 +377,7 @@ internal fun MainActivity.downloadAndInstallApkInApp(apkUrl: String, fallbackAct
 
     val tvTitle = TextView(this).apply {
         text = getString(R.string.update_downloading_title)
-        setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
+        setTextColor(PlaybackStore.getPrimaryTextColor(hostActivity))
         textSize = 17f
         setTypeface(typeface, Typeface.BOLD)
     }
@@ -447,7 +452,7 @@ internal fun MainActivity.downloadAndInstallApkInApp(apkUrl: String, fallbackAct
             installDownloadedApkFile(downloadedFile)
         } else {
             // If GitHub Release APK wasn't published yet, open the latest successful GitHub Actions run page directly!
-            Toast.makeText(this@MainActivity, getString(R.string.update_fallback_actions_toast), Toast.LENGTH_LONG).show()
+            Toast.makeText(hostActivity, getString(R.string.update_fallback_actions_toast), Toast.LENGTH_LONG).show()
             try {
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallbackActionsUrl)))
             } catch (e: Exception) { Log.w("UpdateManager", "Handled non-fatal exception: ${e.javaClass.simpleName}") }
@@ -456,6 +461,7 @@ internal fun MainActivity.downloadAndInstallApkInApp(apkUrl: String, fallbackAct
 }
 
 internal fun MainActivity.installDownloadedApkFile(apkFile: File) {
+    val hostActivity = this
     try {
         val apkUri = FileProvider.getUriForFile(
             this,

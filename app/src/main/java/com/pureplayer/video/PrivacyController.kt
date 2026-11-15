@@ -100,6 +100,7 @@ import javax.crypto.SecretKey
  */
 
 internal fun MainActivity.showFolderLockMenu(folder: VideoFolder) {
+    val hostActivity = this
     settingsBackStack.clear()
     val isLocked = PlaybackStore.isFolderLocked(this, folder.name)
     val statusSubtitle = if (isLocked) {
@@ -175,6 +176,7 @@ internal fun MainActivity.showFolderLockMenu(folder: VideoFolder) {
 }
 
 internal fun MainActivity.toggleSingleFolderLock(folderName: String) {
+    val hostActivity = this
     val currentLocked = PlaybackStore.getLockedFolders(this).toMutableSet()
     val nowLocked = if (currentLocked.contains(folderName)) {
         currentLocked.remove(folderName)
@@ -191,6 +193,7 @@ internal fun MainActivity.toggleSingleFolderLock(folderName: String) {
 }
 
 internal fun MainActivity.authenticatePrivacyAccess(subtitle: String, onAuthenticated: () -> Unit) {
+    val hostActivity = this
     if (!PlaybackStore.hasPrivacyPin(this)) {
         showFirstTimeSetupPinDialog(onPinSaved = onAuthenticated)
         return
@@ -266,6 +269,7 @@ internal fun MainActivity.authenticatePrivacyAccess(subtitle: String, onAuthenti
 }
 
 internal fun MainActivity.stylePremiumInputBox(editText: EditText, bg: Int, accent: Int) {
+    val hostActivity = this
     editText.setTextColor(PlaybackStore.getPrimaryTextColor(this))
     editText.setHintTextColor(PlaybackStore.getSecondaryTextColor(this))
     editText.background = GradientDrawable().apply {
@@ -281,6 +285,7 @@ internal fun MainActivity.showPinUnlockDialog(
     onAuthenticated: () -> Unit,
     allowBiometricRetry: Boolean
 ) {
+    val hostActivity = this
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
     val bg = PlaybackStore.getBackgroundColor(this)
@@ -298,7 +303,7 @@ internal fun MainActivity.showPinUnlockDialog(
 
     val tvTitle = TextView(this).apply {
         text = getString(R.string.privacy_unlock_title)
-        setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
+        setTextColor(PlaybackStore.getPrimaryTextColor(hostActivity))
         textSize = 18f
         setTypeface(typeface, Typeface.BOLD)
     }
@@ -366,12 +371,12 @@ internal fun MainActivity.showPinUnlockDialog(
         }
         setOnClickListener {
             val entered = etPin.text.toString()
-            if (PlaybackStore.verifyPrivacyPin(this@MainActivity, entered)) {
+            if (PlaybackStore.verifyPrivacyPin(hostActivity, entered)) {
                 dialog.dismiss()
-                BiometricHardwareGuard.bindKeyAfterPasswordVerified(this@MainActivity)
+                BiometricHardwareGuard.bindKeyAfterPasswordVerified(hostActivity)
                 onAuthenticated()
             } else {
-                Toast.makeText(this@MainActivity, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
+                Toast.makeText(hostActivity, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -384,6 +389,7 @@ internal fun MainActivity.showPinUnlockDialog(
 }
 
 internal fun MainActivity.showFirstTimeSetupPinDialog(onPinSaved: () -> Unit = {}) {
+    val hostActivity = this
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
     val bg = PlaybackStore.getBackgroundColor(this)
@@ -401,7 +407,7 @@ internal fun MainActivity.showFirstTimeSetupPinDialog(onPinSaved: () -> Unit = {
 
     val tvTitle = TextView(this).apply {
         text = getString(R.string.privacy_setup_title)
-        setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
+        setTextColor(PlaybackStore.getPrimaryTextColor(hostActivity))
         textSize = 18f
         setTypeface(typeface, Typeface.BOLD)
     }
@@ -455,14 +461,14 @@ internal fun MainActivity.showFirstTimeSetupPinDialog(onPinSaved: () -> Unit = {
         setOnClickListener {
             val newPin = etNewPin.text.toString().trim()
             if (newPin.length < 2) {
-                Toast.makeText(this@MainActivity, getString(R.string.privacy_pin_too_short), Toast.LENGTH_SHORT).show()
+                Toast.makeText(hostActivity, getString(R.string.privacy_pin_too_short), Toast.LENGTH_SHORT).show()
             } else {
                 isNavigatingToSubDialog = true
                 dialog.dismiss()
                 isNavigatingToSubDialog = false
-                PlaybackStore.setPrivacyPin(this@MainActivity, newPin)
-                BiometricHardwareGuard.bindKeyAfterPasswordVerified(this@MainActivity)
-                Toast.makeText(this@MainActivity, getString(R.string.privacy_pin_saved_toast), Toast.LENGTH_SHORT).show()
+                PlaybackStore.setPrivacyPin(hostActivity, newPin)
+                BiometricHardwareGuard.bindKeyAfterPasswordVerified(hostActivity)
+                Toast.makeText(hostActivity, getString(R.string.privacy_pin_saved_toast), Toast.LENGTH_SHORT).show()
                 popSettingsBackStack()
                 onPinSaved()
             }
@@ -476,6 +482,7 @@ internal fun MainActivity.showFirstTimeSetupPinDialog(onPinSaved: () -> Unit = {
 }
 
 internal fun MainActivity.showChangePasswordWithCurrentVerifyDialog() {
+    val hostActivity = this
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
     val bg = PlaybackStore.getBackgroundColor(this)
@@ -493,7 +500,7 @@ internal fun MainActivity.showChangePasswordWithCurrentVerifyDialog() {
 
     val tvTitle = TextView(this).apply {
         text = getString(R.string.privacy_change_pin_title)
-        setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
+        setTextColor(PlaybackStore.getPrimaryTextColor(hostActivity))
         textSize = 18f
         setTypeface(typeface, Typeface.BOLD)
         setPadding(0, 0, 0, dp(14))
@@ -555,15 +562,15 @@ internal fun MainActivity.showChangePasswordWithCurrentVerifyDialog() {
         setOnClickListener {
             val currentInput = etCurrentPin.text.toString()
             val newPin = etNewPin.text.toString().trim()
-            if (!PlaybackStore.verifyPrivacyPin(this@MainActivity, currentInput)) {
-                Toast.makeText(this@MainActivity, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
+            if (!PlaybackStore.verifyPrivacyPin(hostActivity, currentInput)) {
+                Toast.makeText(hostActivity, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
             } else if (newPin.length < 2) {
-                Toast.makeText(this@MainActivity, getString(R.string.privacy_pin_too_short), Toast.LENGTH_SHORT).show()
+                Toast.makeText(hostActivity, getString(R.string.privacy_pin_too_short), Toast.LENGTH_SHORT).show()
             } else {
                 dialog.dismiss()
-                PlaybackStore.setPrivacyPin(this@MainActivity, newPin)
-                BiometricHardwareGuard.bindKeyAfterPasswordVerified(this@MainActivity)
-                Toast.makeText(this@MainActivity, getString(R.string.privacy_pin_saved_toast), Toast.LENGTH_SHORT).show()
+                PlaybackStore.setPrivacyPin(hostActivity, newPin)
+                BiometricHardwareGuard.bindKeyAfterPasswordVerified(hostActivity)
+                Toast.makeText(hostActivity, getString(R.string.privacy_pin_saved_toast), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -575,6 +582,7 @@ internal fun MainActivity.showChangePasswordWithCurrentVerifyDialog() {
 }
 
 internal fun MainActivity.openPrivacyControlSection() {
+    val hostActivity = this
     if (!PlaybackStore.hasPrivacyPin(this)) {
         showFirstTimeSetupPinDialog {
             showPrivacyDashboardDialog()
@@ -587,6 +595,7 @@ internal fun MainActivity.openPrivacyControlSection() {
 }
 
 internal fun MainActivity.showRemovePasswordVerifyDialog() {
+    val hostActivity = this
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
     val bg = PlaybackStore.getBackgroundColor(this)
@@ -604,7 +613,7 @@ internal fun MainActivity.showRemovePasswordVerifyDialog() {
 
     val tvTitle = TextView(this).apply {
         text = getString(R.string.privacy_remove_pin_title)
-        setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
+        setTextColor(PlaybackStore.getPrimaryTextColor(hostActivity))
         textSize = 18f
         setTypeface(typeface, Typeface.BOLD)
     }
@@ -647,7 +656,7 @@ internal fun MainActivity.showRemovePasswordVerifyDialog() {
 
     val btnDelete = TextView(this).apply {
         text = getString(R.string.privacy_remove_pin_action)
-        setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
+        setTextColor(PlaybackStore.getPrimaryTextColor(hostActivity))
         textSize = 14.5f
         setTypeface(typeface, Typeface.BOLD)
         setPadding(dp(20), dp(10), dp(20), dp(10))
@@ -657,19 +666,19 @@ internal fun MainActivity.showRemovePasswordVerifyDialog() {
         }
         setOnClickListener {
             val entered = etCurrentPin.text.toString()
-            if (!PlaybackStore.verifyPrivacyPin(this@MainActivity, entered)) {
-                Toast.makeText(this@MainActivity, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
+            if (!PlaybackStore.verifyPrivacyPin(hostActivity, entered)) {
+                Toast.makeText(hostActivity, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
             } else {
                 isNavigatingToSubDialog = true
                 dialog.dismiss()
                 isNavigatingToSubDialog = false
-                PlaybackStore.clearPrivacyPinAndLocks(this@MainActivity)
-                BiometricHardwareGuard.clearBiometricKey(this@MainActivity)
+                PlaybackStore.clearPrivacyPinAndLocks(hostActivity)
+                BiometricHardwareGuard.clearBiometricKey(hostActivity)
                 isVaultSessionUnlocked = false
                 isInVaultTab = false
                 applyFolderVisibilityAndRefreshUI()
                 updateResumeLastFab()
-                Toast.makeText(this@MainActivity, getString(R.string.privacy_pin_removed_toast), Toast.LENGTH_LONG).show()
+                Toast.makeText(hostActivity, getString(R.string.privacy_pin_removed_toast), Toast.LENGTH_LONG).show()
                 settingsBackStack.removeLastOrNull()
                 popSettingsBackStack()
             }
@@ -683,6 +692,7 @@ internal fun MainActivity.showRemovePasswordVerifyDialog() {
 }
 
 internal fun MainActivity.showPrivacyDashboardDialog() {
+    val hostActivity = this
     val bioEnabled = PlaybackStore.isBiometricEnabled(this)
     val lockedCount = PlaybackStore.getLockedFolders(this).size
     val bioStatus = if (bioEnabled) getString(R.string.privacy_bio_on) else getString(R.string.privacy_bio_off)
@@ -742,6 +752,7 @@ internal fun MainActivity.showPremiumFolderMultiPicker(
     neutralActionLabel: String? = null,
     onNeutralAction: (() -> Unit)? = null
 ) {
+    val hostActivity = this
     if (allDiscoveredFolders.isEmpty()) {
         Toast.makeText(this, getString(R.string.no_videos_found), Toast.LENGTH_SHORT).show()
         return
@@ -781,7 +792,7 @@ internal fun MainActivity.showPremiumFolderMultiPicker(
 
     val tvTitle = TextView(this).apply {
         text = "$headerIcon  $title"
-        setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
+        setTextColor(PlaybackStore.getPrimaryTextColor(hostActivity))
         textSize = 17.5f
         setTypeface(typeface, Typeface.BOLD)
     }
@@ -830,7 +841,7 @@ internal fun MainActivity.showPremiumFolderMultiPicker(
 
         val tvName = TextView(this).apply {
             text = folder.name
-            setTextColor(PlaybackStore.getPrimaryTextColor(this@MainActivity))
+            setTextColor(PlaybackStore.getPrimaryTextColor(hostActivity))
             textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
         }
@@ -911,6 +922,7 @@ internal fun MainActivity.showPremiumFolderMultiPicker(
 }
 
 internal fun MainActivity.showLockedFoldersMultiPickerDialog() {
+    val hostActivity = this
     showPremiumFolderMultiPicker(
         headerIcon = "🔒",
         title = getString(R.string.privacy_locked_folders_dialog_title),
@@ -935,6 +947,7 @@ internal fun MainActivity.showLockedFoldersMultiPickerDialog() {
  * Styled as a Premium Popup Card with full support for Android 14+ Allow Limited Access!
  */
 internal fun MainActivity.showFolderVisibilityModeDialog() {
+    val hostActivity = this
     val currentMode = PlaybackStore.getFolderFilterMode(this)
     val allowedCount = PlaybackStore.getAllowedFolders(this).size
     val isLimited = isUsingLimitedAccessMode()
@@ -1002,6 +1015,7 @@ internal fun MainActivity.showFolderVisibilityModeDialog() {
 }
 
 internal fun MainActivity.showAllowedFoldersMultiPickerDialog() {
+    val hostActivity = this
     val savedAllowed = PlaybackStore.getAllowedFolders(this)
     val initialSet = if (savedAllowed.isEmpty()) {
         allDiscoveredFolders.map { it.name }.toSet()
