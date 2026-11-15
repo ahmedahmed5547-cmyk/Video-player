@@ -79,8 +79,8 @@ android {
     productFlavors {
         create("github") {
             dimension = "distribution"
-            buildConfigField("boolean", "ALLOW_SELF_UPDATE", "true")
-            buildConfigField("boolean", "ENABLE_IN_APP_UPDATER", "true")
+            buildConfigField("boolean", "ALLOW_SELF_UPDATE", "false")
+            buildConfigField("boolean", "ENABLE_IN_APP_UPDATER", "false")
         }
         create("play") {
             dimension = "distribution"
