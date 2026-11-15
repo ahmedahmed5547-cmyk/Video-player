@@ -44,62 +44,22 @@ jobs:
       - name: Run Unit Tests (GitHub & Play Flavors)
         run: gradle testGithubDebugUnitTest testPlayDebugUnitTest --no-daemon --stacktrace
 
-      - name: Build Debug APKs (No Signing Secrets Required)
+      - name: Build Debug & Signed Release APKs + Google Play AAB
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           VER=$(grep 'versionName =' app/build.gradle.kts | head -n 1 | cut -d'"' -f2)
           if [ -z "$VER" ]; then VER="38.04"; fi
-          echo "APP_VERSION=$VER" >> "$GITHUB_ENV"
-          gradle assembleGithubDebug assemblePlayDebug --no-daemon --stacktrace
+          echo "APP_VERSION=$VER" >> $GITHUB_ENV
+          gradle assembleGithubDebug assemblePlayDebug assembleGithubRelease assemblePlayRelease bundlePlayRelease --no-daemon --stacktrace
           mkdir -p dist_outputs
           find app/build/outputs/apk/github/debug -name "*.apk" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-github-debug.apk" \;
           find app/build/outputs/apk/play/debug -name "*.apk" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-play-debug.apk" \;
-
-      - name: Verify & Decode Release Keystore to Temporary File
-        env:
-          SECRET_KS_B64: ${{ secrets.KEYSTORE_BASE64 }}
-          SECRET_KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
-          SECRET_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          SECRET_KEY_PASS: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          MISSING=""
-          if [ -z "$SECRET_KS_B64" ]; then MISSING="${MISSING} KEYSTORE_BASE64"; fi
-          if [ -z "$SECRET_KS_PASS" ]; then MISSING="${MISSING} KEYSTORE_PASSWORD"; fi
-          if [ -z "$SECRET_KEY_ALIAS" ]; then MISSING="${MISSING} KEY_ALIAS"; fi
-          if [ -z "$SECRET_KEY_PASS" ]; then MISSING="${MISSING} KEY_PASSWORD"; fi
-          if [ -n "$MISSING" ]; then
-            echo "::error::Release build aborted — missing required GitHub Secrets:${MISSING}. Configure them in Settings -> Secrets and variables -> Actions."
-            exit 1
-          fi
-          KS_FILE="$RUNNER_TEMP/release.keystore"
-          if ! printf '%s' "$SECRET_KS_B64" | tr -d '\r\n ' | base64 --decode > "$KS_FILE"; then
-            echo "::error::Failed to decode KEYSTORE_BASE64. Ensure it is a valid Base64-encoded keystore."
-            exit 1
-          fi
-          if [ ! -s "$KS_FILE" ]; then
-            echo "::error::Decoded keystore file is empty (0 bytes). Verify KEYSTORE_BASE64 secret content."
-            exit 1
-          fi
-          echo "KEYSTORE_PATH=$KS_FILE" >> "$GITHUB_ENV"
-          echo "RESOLVED_KS_PASS=$SECRET_KS_PASS" >> "$GITHUB_ENV"
-          echo "RESOLVED_KEY_ALIAS=$SECRET_KEY_ALIAS" >> "$GITHUB_ENV"
-          echo "RESOLVED_KEY_PASS=$SECRET_KEY_PASS" >> "$GITHUB_ENV"
-
-      - name: Build Signed Release APKs & Google Play AAB
-        env:
-          KEYSTORE_PASSWORD: ${{ env.RESOLVED_KS_PASS }}
-          KEY_ALIAS: ${{ env.RESOLVED_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ env.RESOLVED_KEY_PASS }}
-        run: |
-          VER="${{ env.APP_VERSION }}"
-          gradle assembleGithubRelease assemblePlayRelease bundlePlayRelease --no-daemon --stacktrace
           find app/build/outputs/apk/github/release -name "*.apk" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-github-release.apk" \;
           find app/build/outputs/apk/play/release -name "*.apk" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-play-release.apk" \;
           find app/build/outputs/bundle/playRelease -name "*.aab" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-play-release.aab" \;
-
-      - name: Delete Temporary Keystore After Build
-        if: always()
-        run: |
-          rm -f "$RUNNER_TEMP/release.keystore"
 
       - name: Upload Signed Release APKs & Google Play Bundle (AAB)
         uses: actions/upload-artifact@v4
