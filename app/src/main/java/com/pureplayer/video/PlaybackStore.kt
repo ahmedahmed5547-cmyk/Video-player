@@ -168,7 +168,7 @@ object PlaybackStore {
         prefs(context).edit().putLong(PREFIX_POS + uri.toString(), posMs).apply()
     }
 
-    fun getLastPlayedUri(context: Context): String? = getLastPlayedVideo(context)?.first?.toString()
+    fun getLastPlayedUri(context: Context): Uri? = getLastPlayedVideo(context)?.first
 
     fun applyAppearanceMode(context: Context) {
         val nightMode = when (getAppearanceMode(context)) {
