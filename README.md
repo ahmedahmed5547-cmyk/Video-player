@@ -16,4 +16,4 @@ Flagship 4K Cinema & Media Player for Android (`minSdk 24` / `targetSdk 35` / `c
 
 ## Developer
 - **Ahmed M Moumen**
-- **Current Version:** `v38.04` (`versionCode = 60`)
+- **Current Version:** `v38.05` (`versionCode = 61`)
