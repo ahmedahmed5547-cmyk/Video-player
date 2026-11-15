@@ -100,7 +100,6 @@ import javax.crypto.SecretKey
  */
 
 internal fun MainActivity.renderIptvCurrentLevel() {
-    val hostActivity = this
     if (currentMainTab != 2) return
     binding.iptvHeaderBar.visibility = View.VISIBLE
     binding.fabResumeLast.visibility = View.GONE
@@ -303,7 +302,6 @@ internal fun MainActivity.renderIptvCurrentLevel() {
 
 
 internal fun MainActivity.loadInitialIptvStreamsPage(src: IptvSource, cType: IptvContentType) {
-    val hostActivity = this
     currentIptvCategoryOffset = 0
     isLoadingNextIptvPage = false
     currentIptvPagedList.clear()
@@ -362,7 +360,6 @@ internal fun MainActivity.loadNextIptvStreamsPage() {
 }
 
 internal fun MainActivity.navigateBackInIptvHierarchy() {
-    val hostActivity = this
     when {
         iptvNavLevel == 5 -> iptvNavLevel = 4
         iptvNavLevel == 4 -> {
@@ -382,7 +379,6 @@ internal fun MainActivity.navigateBackInIptvHierarchy() {
 }
 
 internal fun MainActivity.getSectionDisplayName(type: IptvContentType): String {
-    val hostActivity = this
     return when (type) {
         IptvContentType.LIVE_TV -> getString(R.string.iptv_sec_live_tv)
         IptvContentType.MOVIES -> getString(R.string.iptv_sec_movies)
@@ -392,7 +388,6 @@ internal fun MainActivity.getSectionDisplayName(type: IptvContentType): String {
 }
 
 internal fun MainActivity.handleIptvItemClick(item: Any) {
-    val hostActivity = this
     when (item) {
         is IptvAddCardItem -> showAddIptvSourceDialog()
         is IptvSource -> {
@@ -470,7 +465,6 @@ internal fun MainActivity.handleIptvItemClick(item: Any) {
 }
 
 internal fun MainActivity.handleIptvItemLongClick(item: Any) {
-    val hostActivity = this
     when (item) {
         is IptvSource -> showIptvSourceManagementMenu(item)
         is IptvCategory -> {
@@ -572,7 +566,6 @@ internal fun MainActivity.handleIptvItemLongClick(item: Any) {
 }
 
 internal fun MainActivity.showAddIptvSourceDialog() {
-    val hostActivity = this
     settingsBackStack.clear()
     val items = listOf(
         PremiumMenuItem(
@@ -994,7 +987,6 @@ internal fun MainActivity.syncIptvSourceWithProgress(
 }
 
 internal fun MainActivity.refreshExistingIptvSource(source: IptvSource) {
-    val hostActivity = this
     val decryptedPass = if (source.type == IptvSourceType.XTREAM) {
         val dec = IptvCredentialVault.decryptSecretOrNull(source.encryptedPassword)
         if (dec == null) {
@@ -1014,7 +1006,6 @@ internal fun MainActivity.refreshExistingIptvSource(source: IptvSource) {
 }
 
 internal fun MainActivity.showIptvSourceManagementMenu(source: IptvSource) {
-    val hostActivity = this
     settingsBackStack.clear()
     val items = mutableListOf(
         PremiumMenuItem(
@@ -1084,7 +1075,6 @@ internal fun MainActivity.showIptvSourceManagementMenu(source: IptvSource) {
 }
 
 internal fun MainActivity.handleIptvDownloadRequest(item: Any) {
-    val hostActivity = this
     when (item) {
         is IptvStreamItem -> {
             if (item.streamUrl.isNotBlank()) {
@@ -1234,7 +1224,6 @@ internal fun MainActivity.downloadIptvMediaLocally(
 }
 
 internal fun MainActivity.showIptvMovieDetailsDialog(movie: IptvStreamItem) {
-    val hostActivity = this
     settingsBackStack.clear()
     val metaParts = mutableListOf<String>()
     if (movie.categoryName.isNotBlank()) metaParts.add(movie.categoryName)
@@ -1360,7 +1349,6 @@ internal fun MainActivity.openIptvSeriesSeasons(seriesItem: IptvStreamItem) {
 }
 
 internal fun MainActivity.showReclassifyCategoryDialog(categoryName: String) {
-    val hostActivity = this
     val src = activeIptvSource ?: return
     val options = listOf(
         Triple("📺", getString(R.string.iptv_sec_live_tv), IptvContentType.LIVE_TV),
@@ -1392,7 +1380,6 @@ internal fun MainActivity.showReclassifyCategoryDialog(categoryName: String) {
 }
 
 internal fun MainActivity.addBuiltInDemoIptvSource() {
-    val hostActivity = this
     val sampleM3u = """
         #EXTM3U
         #EXTINF:-1 tvg-name="Big Buck Bunny Live" group-title="Live Channels / قنوات مباشرة",Big Buck Bunny HD (Live Stream)

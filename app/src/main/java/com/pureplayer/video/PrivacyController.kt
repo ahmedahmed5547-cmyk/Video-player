@@ -100,7 +100,6 @@ import javax.crypto.SecretKey
  */
 
 internal fun MainActivity.showFolderLockMenu(folder: VideoFolder) {
-    val hostActivity = this
     settingsBackStack.clear()
     val isLocked = PlaybackStore.isFolderLocked(this, folder.name)
     val statusSubtitle = if (isLocked) {
@@ -176,7 +175,6 @@ internal fun MainActivity.showFolderLockMenu(folder: VideoFolder) {
 }
 
 internal fun MainActivity.toggleSingleFolderLock(folderName: String) {
-    val hostActivity = this
     val currentLocked = PlaybackStore.getLockedFolders(this).toMutableSet()
     val nowLocked = if (currentLocked.contains(folderName)) {
         currentLocked.remove(folderName)
@@ -193,7 +191,6 @@ internal fun MainActivity.toggleSingleFolderLock(folderName: String) {
 }
 
 internal fun MainActivity.authenticatePrivacyAccess(subtitle: String, onAuthenticated: () -> Unit) {
-    val hostActivity = this
     if (!PlaybackStore.hasPrivacyPin(this)) {
         showFirstTimeSetupPinDialog(onPinSaved = onAuthenticated)
         return
@@ -269,7 +266,6 @@ internal fun MainActivity.authenticatePrivacyAccess(subtitle: String, onAuthenti
 }
 
 internal fun MainActivity.stylePremiumInputBox(editText: EditText, bg: Int, accent: Int) {
-    val hostActivity = this
     editText.setTextColor(PlaybackStore.getPrimaryTextColor(this))
     editText.setHintTextColor(PlaybackStore.getSecondaryTextColor(this))
     editText.background = GradientDrawable().apply {
@@ -582,7 +578,6 @@ internal fun MainActivity.showChangePasswordWithCurrentVerifyDialog() {
 }
 
 internal fun MainActivity.openPrivacyControlSection() {
-    val hostActivity = this
     if (!PlaybackStore.hasPrivacyPin(this)) {
         showFirstTimeSetupPinDialog {
             showPrivacyDashboardDialog()
@@ -692,7 +687,6 @@ internal fun MainActivity.showRemovePasswordVerifyDialog() {
 }
 
 internal fun MainActivity.showPrivacyDashboardDialog() {
-    val hostActivity = this
     val bioEnabled = PlaybackStore.isBiometricEnabled(this)
     val lockedCount = PlaybackStore.getLockedFolders(this).size
     val bioStatus = if (bioEnabled) getString(R.string.privacy_bio_on) else getString(R.string.privacy_bio_off)
@@ -922,7 +916,6 @@ internal fun MainActivity.showPremiumFolderMultiPicker(
 }
 
 internal fun MainActivity.showLockedFoldersMultiPickerDialog() {
-    val hostActivity = this
     showPremiumFolderMultiPicker(
         headerIcon = "🔒",
         title = getString(R.string.privacy_locked_folders_dialog_title),
@@ -947,7 +940,6 @@ internal fun MainActivity.showLockedFoldersMultiPickerDialog() {
  * Styled as a Premium Popup Card with full support for Android 14+ Allow Limited Access!
  */
 internal fun MainActivity.showFolderVisibilityModeDialog() {
-    val hostActivity = this
     val currentMode = PlaybackStore.getFolderFilterMode(this)
     val allowedCount = PlaybackStore.getAllowedFolders(this).size
     val isLimited = isUsingLimitedAccessMode()
@@ -1015,7 +1007,6 @@ internal fun MainActivity.showFolderVisibilityModeDialog() {
 }
 
 internal fun MainActivity.showAllowedFoldersMultiPickerDialog() {
-    val hostActivity = this
     val savedAllowed = PlaybackStore.getAllowedFolders(this)
     val initialSet = if (savedAllowed.isEmpty()) {
         allDiscoveredFolders.map { it.name }.toSet()

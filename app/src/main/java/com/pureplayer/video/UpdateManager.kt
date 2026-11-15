@@ -100,7 +100,6 @@ import javax.crypto.SecretKey
  */
 
 internal fun MainActivity.normalizeGitHubRepoInput(rawInput: String): String {
-    val hostActivity = this
     var clean = rawInput.trim()
         .removePrefix("https://github.com/")
         .removePrefix("http://github.com/")
@@ -118,7 +117,6 @@ internal fun MainActivity.normalizeGitHubRepoInput(rawInput: String): String {
 }
 
 internal fun MainActivity.openGitHubUpdaterFlow() {
-    val hostActivity = this
     val savedRepo = PlaybackStore.getGitHubRepo(this)
     if (savedRepo.isBlank() || !savedRepo.contains("/")) {
         showConfigureGitHubRepoDialog { configuredRepo ->
@@ -220,7 +218,6 @@ internal fun MainActivity.showConfigureGitHubRepoDialog(onConfigured: (String) -
 }
 
 internal fun MainActivity.checkForGitHubUpdatesNow(repoSlug: String) {
-    val hostActivity = this
     Toast.makeText(this, getString(R.string.update_checking_toast, repoSlug), Toast.LENGTH_SHORT).show()
 
     lifecycleScope.launch {
@@ -461,7 +458,6 @@ internal fun MainActivity.downloadAndInstallApkInApp(apkUrl: String, fallbackAct
 }
 
 internal fun MainActivity.installDownloadedApkFile(apkFile: File) {
-    val hostActivity = this
     try {
         val apkUri = FileProvider.getUriForFile(
             this,

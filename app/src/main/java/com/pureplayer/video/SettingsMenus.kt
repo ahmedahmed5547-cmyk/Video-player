@@ -100,7 +100,6 @@ import javax.crypto.SecretKey
  */
 
 internal fun MainActivity.showResumeBehaviorSettingsDialog() {
-    val hostActivity = this
     val currentMode = PlaybackStore.getResumeAskMode(this)
     val items = listOf(
         PremiumMenuItem(
@@ -144,7 +143,6 @@ internal fun MainActivity.showResumeBehaviorSettingsDialog() {
 
 
 internal fun MainActivity.showSortAndLayoutDialog() {
-    val hostActivity = this
     val isGrid = PlaybackStore.isGridLayoutEnabled(this)
     val sortMode = PlaybackStore.getSortOrderMode(this)
 
@@ -266,7 +264,6 @@ internal fun MainActivity.showSortAndLayoutDialog() {
 }
 
 internal fun MainActivity.sortVideosList(videos: List<VideoItem>, sortMode: Int): List<VideoItem> {
-    val hostActivity = this
     return when (sortMode) {
         0 -> videos.sortedByDescending { it.dateAddedSec }
         1 -> videos.sortedBy { it.dateAddedSec }
@@ -280,7 +277,6 @@ internal fun MainActivity.sortVideosList(videos: List<VideoItem>, sortMode: Int)
 }
 
 internal fun MainActivity.sortFoldersList(folders: List<VideoFolder>, sortMode: Int): List<VideoFolder> {
-    val hostActivity = this
     val withSortedInnerVideos = folders.map { folder ->
         VideoFolder(folder.name, sortVideosList(folder.videos, sortMode))
     }
@@ -305,7 +301,6 @@ internal fun MainActivity.sortFoldersList(folders: List<VideoFolder>, sortMode: 
  * Tapping any category opens its dedicated sub-page with smooth staggered animation & full Back-Stack support!
  */
 internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
-    val hostActivity = this
     if (clearStack) {
         settingsBackStack.clear()
     }
@@ -432,7 +427,6 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
 }
 
 internal fun MainActivity.showSettingsPlaybackEnginePage() {
-    val hostActivity = this
     val decoderSub = getDecoderModeDisplayName(PlaybackStore.getDecoderModeIndex(this))
     val orientIdx = PlaybackStore.getDefaultOrientationIndex(this)
     val orientSub = when (orientIdx) {
@@ -503,7 +497,6 @@ internal fun MainActivity.showSettingsPlaybackEnginePage() {
 }
 
 internal fun MainActivity.showSettingsPrivacyFoldersPage() {
-    val hostActivity = this
     val hasPin = PlaybackStore.hasPrivacyPin(this)
     val lockedCount = PlaybackStore.getLockedFolders(this).size
     val privacySub = if (hasPin) {
@@ -571,7 +564,6 @@ internal fun MainActivity.showSettingsPrivacyFoldersPage() {
 }
 
 internal fun MainActivity.showSettingsAppearanceDisplayPage() {
-    val hostActivity = this
     val langTag = PlaybackStore.getAppLanguageTag(this)
     val langSub = getAppLanguageDisplayName(langTag)
     val themeNames = arrayOf(
@@ -641,7 +633,6 @@ internal fun MainActivity.showSettingsAppearanceDisplayPage() {
 }
 
 internal fun MainActivity.getDecoderModeDisplayName(modeIdx: Int): String {
-    val hostActivity = this
     return when (modeIdx) {
         1 -> "HW • " + getString(R.string.decoder_hw_title)
         2 -> "SW • " + getString(R.string.decoder_sw_title)
@@ -650,7 +641,6 @@ internal fun MainActivity.getDecoderModeDisplayName(modeIdx: Int): String {
 }
 
 internal fun MainActivity.showDefaultDecoderSettingsDialog() {
-    val hostActivity = this
     val currentIdx = PlaybackStore.getDecoderModeIndex(this)
     val options = listOf(
         Triple(0, "⚡", Pair(getString(R.string.decoder_hw_plus_title), getString(R.string.decoder_hw_plus_sub))),
@@ -675,7 +665,6 @@ internal fun MainActivity.showDefaultDecoderSettingsDialog() {
 }
 
 internal fun MainActivity.showSettingsSubtitlesPlaybackPage() {
-    val hostActivity = this
     val subLangs = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(" → ") { it.uppercase() }
     val subSize = PlaybackStore.getSubSizeSp(this).toInt()
     val subBgOpacity = PlaybackStore.getSubBgOpacityPct(this)
@@ -722,7 +711,6 @@ internal fun MainActivity.showSettingsSubtitlesPlaybackPage() {
 }
 
 internal fun MainActivity.getAudioModeDisplayName(mode: Int): String {
-    val hostActivity = this
     return when (mode) {
         1 -> "🎬 " + getString(R.string.audio_mode_cinematic)
         2 -> "🏛️ " + getString(R.string.audio_mode_hall)
@@ -736,7 +724,6 @@ internal fun MainActivity.getAudioModeDisplayName(mode: Int): String {
 }
 
 internal fun MainActivity.showSettingsAudioEqualizerPage() {
-    val hostActivity = this
     val currentMode = PlaybackStore.getAudioPresetMode(this)
     val modeLabel = getAudioModeDisplayName(currentMode)
     val preAmp = PlaybackStore.getAudioPreAmpDb(this)
@@ -791,7 +778,6 @@ internal fun MainActivity.showSettingsAudioEqualizerPage() {
 }
 
 internal fun MainActivity.showAudioSoundModesPage() {
-    val hostActivity = this
     val activeMode = PlaybackStore.getAudioPresetMode(this)
     val modes = listOf(
         Triple(0, "🎵", Pair(getString(R.string.audio_mode_standard), getString(R.string.audio_mode_standard_sub))),
@@ -1019,7 +1005,6 @@ internal fun MainActivity.showGraphicEqualizerDialog() {
 }
 
 internal fun MainActivity.showAboutAppPage() {
-    val hostActivity = this
     val verName = BuildConfig.VERSION_NAME
     val items = listOf(
         PremiumMenuItem(
@@ -1057,7 +1042,6 @@ internal fun MainActivity.showAboutAppPage() {
 }
 
 internal fun MainActivity.showChangelogPage() {
-    val hostActivity = this
     val verName = BuildConfig.VERSION_NAME
     val items = listOf(
         PremiumMenuItem(
@@ -1102,7 +1086,6 @@ internal fun MainActivity.showChangelogPage() {
 }
 
 internal fun MainActivity.getAppLanguageDisplayName(tag: String): String {
-    val hostActivity = this
     return when (tag) {
         "ar" -> getString(R.string.lang_arabic)
         "en" -> getString(R.string.lang_english)
@@ -1124,7 +1107,6 @@ internal fun MainActivity.getAppLanguageDisplayName(tag: String): String {
 }
 
 internal fun MainActivity.showAppLanguageDialog() {
-    val hostActivity = this
     val currentTag = PlaybackStore.getAppLanguageTag(this)
     val devLocaleName = Locale.getDefault().displayLanguage
     val supportedAppLangs = listOf(
@@ -1163,7 +1145,6 @@ internal fun MainActivity.showAppLanguageDialog() {
 }
 
 internal fun MainActivity.showSubtitleLanguagePriorityDialog() {
-    val hostActivity = this
     val langCodes = arrayOf("ar", "en", "fr", "es", "de", "tr", "ru", "pt", "it", "hi", "ur", "id", "zh", "ja", "ko")
     val langLabels = arrayOf(
         getString(R.string.sub_lang_ar),
@@ -1508,7 +1489,6 @@ internal fun MainActivity.showThemeSelectorDialog() {
 }
 
 internal fun MainActivity.showSubtitleStyleDialog() {
-    val hostActivity = this
     val primaryText = PlaybackStore.getPrimaryTextColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
     val accent = PlaybackStore.getAccentColor(this)
@@ -1697,7 +1677,6 @@ internal fun MainActivity.showSubtitleStyleDialog() {
 }
 
 internal fun MainActivity.showDefaultOrientationDialog() {
-    val hostActivity = this
     val current = PlaybackStore.getDefaultOrientationIndex(this)
     val items = listOf(
         PremiumMenuItem("🔄", getString(R.string.orientation_auto), null, current == 0) {

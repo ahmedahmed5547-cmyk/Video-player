@@ -179,11 +179,16 @@ object IptvSearchNormalizer {
     }
 
     fun matches(targetTitle: String, targetCategory: String, normalizedQuery: String): Boolean {
-        if (normalizedQuery.isEmpty()) return true
+        val normQ = normalize(normalizedQuery)
+        if (normQ.isEmpty()) return true
         val normTitle = normalize(targetTitle)
-        if (normTitle.contains(normalizedQuery)) return true
+        if (normTitle.contains(normQ)) return true
         val normCat = normalize(targetCategory)
-        return normCat.contains(normalizedQuery)
+        if (normCat.contains(normQ)) return true
+        val tokens = normQ.split(" ").filter { it.isNotEmpty() }
+        return tokens.isNotEmpty() && tokens.all { token ->
+            normTitle.contains(token) || normCat.contains(token)
+        }
     }
 }
 
