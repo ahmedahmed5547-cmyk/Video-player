@@ -1025,6 +1025,12 @@ internal fun MainActivity.showAboutAppPage() {
             isInteractive = false
         ),
         PremiumMenuItem(
+            iconEmoji = "⚖️",
+            title = getString(R.string.about_disclaimer_title),
+            subtitle = getString(R.string.about_disclaimer_sub),
+            isInteractive = false
+        ),
+        PremiumMenuItem(
             iconEmoji = "👨‍💻",
             title = getString(R.string.about_developer_label),
             subtitle = "Ahmed M Moumen",

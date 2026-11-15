@@ -4,5 +4,7 @@
     <exclude domain="sharedpref" path="pure_player_iptv_store_v1.xml" />
     <exclude domain="file" path="iptv_cache" />
     <exclude domain="database" path="pure_video_iptv.db" />
-        <exclude domain="database" path="pure_video_iptv_room.db" />
+    <exclude domain="database" path="pure_video_iptv_room.db" />
+    <exclude domain="database" path="pure_video_iptv_room.db-shm" />
+    <exclude domain="database" path="pure_video_iptv_room.db-wal" />
 </full-backup-content>

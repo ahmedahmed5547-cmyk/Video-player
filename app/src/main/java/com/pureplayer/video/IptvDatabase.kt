@@ -1,7 +1,6 @@
 package com.pureplayer.video
 
 import android.content.Context
-import androidx.paging.PagingSource
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
@@ -14,6 +13,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Entity(tableName = "sources")
 data class IptvSourceEntity(
@@ -214,7 +215,7 @@ interface IptvDao {
     @Query("DELETE FROM sources WHERE id = :sourceId")
     fun deleteSourceByIdSync(sourceId: String)
 
-    // --- 2. Streams & Paging 3 PagingSource ---
+    // --- 2. Streams ---
     @Query("SELECT COUNT(*) FROM streams WHERE sourceId = :sourceId")
     fun countStreamsForSourceSync(sourceId: String): Int
 
@@ -232,15 +233,6 @@ interface IptvDao {
 
     @Query("SELECT MIN(categoryId) AS categoryId, categoryName, COUNT(*) AS cnt FROM streams WHERE sourceId = :sourceId AND contentType = :contentType GROUP BY categoryName ORDER BY categoryName ASC")
     fun getCategoriesForTypeSync(sourceId: String, contentType: String): List<CategorySummaryTuple>
-
-    @Query("SELECT * FROM streams WHERE sourceId = :sourceId AND contentType = :contentType AND categoryName = :categoryName ORDER BY rowId ASC")
-    fun pagingStreamsByCategory(sourceId: String, contentType: String, categoryName: String): PagingSource<Int, IptvStreamEntity>
-
-    @Query("SELECT * FROM streams WHERE sourceId = :sourceId AND contentType = :contentType ORDER BY rowId ASC")
-    fun pagingAllStreamsByType(sourceId: String, contentType: String): PagingSource<Int, IptvStreamEntity>
-
-    @Query("SELECT * FROM streams WHERE sourceId = :sourceId AND (normalizedTitle LIKE :pattern OR normalizedCategory LIKE :pattern) ORDER BY contentType ASC, rowId ASC")
-    fun pagingSearchStreams(sourceId: String, pattern: String): PagingSource<Int, IptvStreamEntity>
 
     @Query("SELECT * FROM streams WHERE sourceId = :sourceId AND contentType = :contentType AND (:isAll = 1 OR categoryName = :categoryName OR categoryId = :categoryId) ORDER BY rowId ASC LIMIT :limit OFFSET :offset")
     fun getStreamsPageSync(
@@ -318,6 +310,9 @@ interface IptvDao {
     }
 
     // --- 3. Favorites ---
+    @Query("SELECT itemId FROM favorites WHERE sourceId = :sourceId")
+    fun getFavoriteItemIdsForSourceSync(sourceId: String): List<String>
+
     @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE sourceId = :sourceId AND itemId = :itemId)")
     fun isFavoriteSync(sourceId: String, itemId: String): Boolean
 
@@ -373,6 +368,9 @@ interface IptvDao {
     fun getRecentStreamsSqlSync(sourceId: String, contentType: String?, limit: Int = 100): List<IptvStreamEntity>
 
     // --- 5. Series Last Watched Episode ---
+    @Query("SELECT * FROM series_last_episode WHERE sourceId = :sourceId")
+    fun getAllSeriesLastEpForSourceSync(sourceId: String): List<IptvSeriesLastEpEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun upsertSeriesLastEpSync(entity: IptvSeriesLastEpEntity)
 
@@ -407,13 +405,100 @@ interface IptvDao {
         IptvSeriesLastEpEntity::class
     ],
     version = 2,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class IptvRoomDatabase : RoomDatabase() {
     abstract fun iptvDao(): IptvDao
 
     companion object {
         private const val DB_NAME = "pure_video_iptv_room.db"
+
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `sources` (
+                        `id` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `type` TEXT NOT NULL,
+                        `serverOrM3uUrl` TEXT NOT NULL,
+                        `username` TEXT NOT NULL,
+                        `encryptedPassword` TEXT NOT NULL,
+                        `lastUpdatedMs` INTEGER NOT NULL,
+                        `liveCount` INTEGER NOT NULL,
+                        `movieCount` INTEGER NOT NULL,
+                        `seriesCount` INTEGER NOT NULL,
+                        `radioCount` INTEGER NOT NULL,
+                        `expDateSec` INTEGER NOT NULL,
+                        `accountStatus` TEXT NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `streams` (
+                        `rowId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `sourceId` TEXT NOT NULL,
+                        `streamId` TEXT NOT NULL,
+                        `contentType` TEXT NOT NULL,
+                        `categoryId` TEXT NOT NULL,
+                        `categoryName` TEXT NOT NULL,
+                        `normalizedCategory` TEXT NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `normalizedTitle` TEXT NOT NULL,
+                        `streamUrl` TEXT NOT NULL,
+                        `logoUrl` TEXT NOT NULL,
+                        `rating` TEXT NOT NULL,
+                        `plot` TEXT NOT NULL,
+                        `releaseDate` TEXT NOT NULL,
+                        `durationLabel` TEXT NOT NULL,
+                        `seriesId` TEXT NOT NULL,
+                        `seriesName` TEXT NOT NULL,
+                        `seasonNum` INTEGER NOT NULL,
+                        `episodeNum` INTEGER NOT NULL,
+                        `containerExt` TEXT NOT NULL,
+                        `httpUa` TEXT NOT NULL,
+                        `httpRef` TEXT NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_streams_source_type_cat` ON `streams` (`sourceId`, `contentType`, `categoryName`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_streams_norm_title` ON `streams` (`sourceId`, `normalizedTitle`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_streams_norm_cat` ON `streams` (`sourceId`, `normalizedCategory`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_streams_source_item` ON `streams` (`sourceId`, `streamId`)")
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `favorites` (
+                        `sourceId` TEXT NOT NULL,
+                        `itemId` TEXT NOT NULL,
+                        `addedMs` INTEGER NOT NULL,
+                        PRIMARY KEY(`sourceId`, `itemId`)
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_fav_source_added` ON `favorites` (`sourceId`, `addedMs`)")
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `recents` (
+                        `sourceId` TEXT NOT NULL,
+                        `itemId` TEXT NOT NULL,
+                        `watchedMs` INTEGER NOT NULL,
+                        PRIMARY KEY(`sourceId`, `itemId`)
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_recent_source_watched` ON `recents` (`sourceId`, `watchedMs`)")
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `series_last_episode` (
+                        `sourceId` TEXT NOT NULL,
+                        `seriesKey` TEXT NOT NULL,
+                        `seasonNumber` INTEGER NOT NULL,
+                        `episodeNumber` INTEGER NOT NULL,
+                        `episodeTitle` TEXT NOT NULL,
+                        `streamUrl` TEXT NOT NULL,
+                        `updatedMs` INTEGER NOT NULL,
+                        PRIMARY KEY(`sourceId`, `seriesKey`)
+                    )
+                """.trimIndent())
+            }
+        }
 
         @Volatile
         private var instance: IptvRoomDatabase? = null
@@ -425,8 +510,7 @@ abstract class IptvRoomDatabase : RoomDatabase() {
                     IptvRoomDatabase::class.java,
                     DB_NAME
                 )
-                    .fallbackToDestructiveMigration()
-                    .allowMainThreadQueries()
+                    .addMigrations(MIGRATION_1_2)
                     .build()
                     .also { instance = it }
             }

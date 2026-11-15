@@ -144,7 +144,7 @@
     <string name="privacy_change_pin_title">🔑 تغيير باسورد الخصوصية</string>
     <string name="privacy_setup_pin_desc">اختر باسورد أو رقم سري لقفل المجلدات الخاصة (وستعمل بصمة الإصبع تلقائياً بجانبه):</string>
     <string name="privacy_new_pin_hint">اكتب الباسورد الجديد...</string>
-    <string name="privacy_pin_too_short">⚠️ يرجى إدخال حرفين أو رقمين على الأقل</string>
+    <string name="privacy_pin_too_short">⚠️ يجب أن يتكون الرمز السري من 4 أرقام أو أحرف على الأقل</string>
     <string name="privacy_pin_saved_toast">✅ تم حفظ باسورد الخصوصية بنجاح!</string>
     <string name="privacy_select_locked_folders">📁 اختيار المجلدات المقفلة بالباسورد والبصمة (%1$d مقفل)</string>
     <string name="privacy_change_pin_option">🔑 تغيير الباسورد / الرقم السري</string>
@@ -250,7 +250,7 @@
     <string name="iptv_add_demo_source_option">إضافة مصدر IPTV تجريبي للاختبار الفوري</string>
     <string name="iptv_add_demo_source_sub">يحتوي على بث مباشر وأفلام ومسلسلات تجريبية جاهزة للتشغيل</string>
     <string name="iptv_hint_source_name">اسم المصدر (اختياري - مثال: اشتراكي)</string>
-    <string name="iptv_hint_server_url">رابط أو دومين السيرفر (مثال: mar10.sbs أو mar10.sbs:8080 بدون الحاجة لـ http)</string>
+    <string name="iptv_hint_server_url">رابط أو دومين السيرفر (مثال: example.com أو example.com:8080 بدون الحاجة لـ http)</string>
     <string name="iptv_hint_username">اسم المستخدم (Username)</string>
     <string name="iptv_hint_password">كلمة المرور (Password)</string>
     <string name="iptv_loading_data">جاري الاتصال بالسيرفر وجلب وتصنيف المحتوى...</string>
@@ -285,7 +285,7 @@
     <string name="iptv_err_empty_playlist">⚠️ لم يتم العثور على قنوات أو محتوى صالح داخل هذا المصدر</string>
     <string name="iptv_err_file_read">❌ تعذر قراءة ملف M3U المختار من الذاكرة</string>
     <string name="iptv_err_connection">❌ تعذر الاتصال بالسيرفر، تأكد من صحة الرابط واتصال الإنترنت</string>
-    <string name="iptv_err_invalid_url">يرجى إدخال رابط أو دومين صحيح (مثال: mar10.sbs/...)</string>
+    <string name="iptv_err_invalid_url">يرجى إدخال رابط أو دومين صحيح (مثال: example.com/...)</string>
     <string name="iptv_err_missing_fields">يرجى إدخال رابط السيرفر واسم المستخدم وكلمة المرور</string>
     <string name="iptv_err_no_episodes">لم يتم العثور على حلقات لهذا المسلسل</string>
     <string name="last_in_folder_badge">👁 آخر مشغّل</string>
@@ -437,4 +437,8 @@
     <string name="setting_allow_untrusted_ssl_on">مفعّل — يعيد المحاولة مع شهادات IPTV الذاتية عند فشل SSL القياسي</string>
     <string name="setting_allow_untrusted_ssl_off">معطّل (مستحسن) — التحقق القياسي الآمن من شهادات SSL</string>
     <string name="iptv_err_keystore_encryption">⚠️ فشل تشفير كلمة المرور عبر Android KeyStore؛ لم يتم حفظ كلمة المرور وتم الحفاظ على بيانات الاعتماد السابقة.</string>
+    <string name="privacy_pin_locked_wait_toast">⏳ محاولات خاطئة متكررة. يرجى الانتظار %1$d ثانية قبل المحاولة مجددًا.</string>
+    <string name="iptv_err_reenter_password">🔑 أعد إدخال كلمة المرور لتحديث هذا المصدر.</string>
+    <string name="about_disclaimer_title">إخلاء مسؤولية المحتوى</string>
+    <string name="about_disclaimer_sub">التطبيق مشغّل فقط ولا يوفر أي محتوى، والمستخدم مسؤول عن المحتوى الذي يضيفه</string>
 </resources>

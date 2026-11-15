@@ -826,13 +826,13 @@ internal fun MainActivity.showAddOrEditXtreamDialog(
     etPassword.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
     container.addView(cbShowPass)
 
-    // 4. Server URL / Domain (e.g. mar10.sbs or http://mar10.sbs:8080)
+    // 4. Server URL / Domain (e.g. example.com or http://example.com:8080)
     container.addView(makeFieldLabel("🌐 " + getString(R.string.iptv_hint_server_url)))
     val etServer = EditText(this).apply {
         setSingleLine(true)
         inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         setText(existingSource?.serverOrM3uUrl ?: prefillServer)
-        hint = "mar10.sbs  أو  http://mar10.sbs:8080"
+        hint = "example.com  أو  http://example.com:8080"
         setPadding(dp(16), dp(12), dp(16), dp(12))
     }
     stylePremiumInputBox(etServer, bg, accent)
@@ -870,7 +870,7 @@ internal fun MainActivity.showAddOrEditXtreamDialog(
             var usr = XtreamCodesClient.sanitizeCredentialOrUrl(etUsername.text.toString())
             var pwd = XtreamCodesClient.sanitizeCredentialOrUrl(etPassword.text.toString())
 
-            // Smart Auto-Swap: If user accidentally typed the domain (e.g. mar10.sbs) in Username box and username in Server box!
+            // Smart Auto-Swap: If user accidentally typed the domain (e.g. example.com) in Username box and username in Server box!
             if (!srv.contains(".") && usr.contains(".") && !usr.contains("@")) {
                 val tmp = srv
                 srv = usr
@@ -989,8 +989,9 @@ internal fun MainActivity.syncIptvSourceWithProgress(
 internal fun MainActivity.refreshExistingIptvSource(source: IptvSource) {
     val decryptedPass = if (source.type == IptvSourceType.XTREAM) {
         val dec = IptvCredentialVault.decryptSecretOrNull(source.encryptedPassword)
-        if (dec == null) {
-            Toast.makeText(this, getString(R.string.iptv_err_keystore_encryption), Toast.LENGTH_LONG).show()
+        if (dec == null || dec.isEmpty()) {
+            Toast.makeText(this, getString(R.string.iptv_err_reenter_password), Toast.LENGTH_LONG).show()
+            showAddOrEditXtreamDialog(source)
             return
         }
         dec

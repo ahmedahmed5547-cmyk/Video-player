@@ -44,20 +44,28 @@ class PurePlayerUnitTests {
     }
 
     @Test
-    fun testKeystoreAndIptvEncryptionFailureHandling() {
-        // 1. Keystore failure (null key) must return null, NEVER Base64 fallback
+    fun testKeystoreAndIptvEncryptionRoundTripAndFailureHandling() {
+        // 1. Real AES-256-GCM round-trip in pure JVM using pure-Kotlin Base64Codec
+        val testAesKey = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
+        val encrypted = IptvCredentialVault.encryptSecretOrNull("P@ssw0rd_2026!", keyProvider = { testAesKey })
+        assertNotNull("AES-GCM encryption with valid key must succeed", encrypted)
+        assertTrue(encrypted!!.startsWith("GCM:"))
+        val decrypted = IptvCredentialVault.decryptSecretOrNull(encrypted, keyProvider = { testAesKey })
+        assertEquals("P@ssw0rd_2026!", decrypted)
+
+        // 2. Keystore failure (null key) must return null, NEVER Base64 fallback
         val failedEnc = IptvCredentialVault.encryptSecretOrNull("mySecretPassword", keyProvider = { null })
         assertNull("Encryption must return null when Keystore fails", failedEnc)
 
-        // 2. Exception inside key provider must return null safely
+        // 3. Exception inside key provider must return null safely
         val thrownEnc = IptvCredentialVault.encryptSecretOrNull("mySecretPassword", keyProvider = {
             throw IllegalStateException("KeyStore hardware unavailable")
         })
         assertNull("Encryption must return null when Keystore throws", thrownEnc)
 
-        // 3. Reject legacy unencrypted Base64 strings during decryption
+        // 4. Reject legacy unencrypted Base64 strings during decryption
         val rawB64 = "bXlTZWNyZXRQYXNzd29yZA=="
-        val rejectedDec = IptvCredentialVault.decryptSecretOrNull(rawB64)
+        val rejectedDec = IptvCredentialVault.decryptSecretOrNull(rawB64, keyProvider = { testAesKey })
         assertNull("Decryption must reject non-GCM Base64 strings", rejectedDec)
     }
 
@@ -146,7 +154,7 @@ class PurePlayerUnitTests {
         assertEquals(2, fakeDb.size)
         assertFalse("JSON file must be deleted after verified migration", tempGood.exists())
 
-        // Now simulate count mismatch -> file MUST NOT be deleted
+        // Simulate count mismatch -> file MUST NOT be deleted
         val tempKeep = File.createTempFile("streams_keep_", ".json")
         tempKeep.writeText(
             """
@@ -162,7 +170,7 @@ class PurePlayerUnitTests {
             chunkSize = 10,
             clearExistingForSource = {},
             insertBatch = {},
-            countInDb = { 1 }, // Simulated incomplete DB insert (1 instead of 2)
+            countInDb = { 1 },
             hasStreamIdInDb = { _, _ -> true }
         )
         assertFalse("Migration must fail when DB count does not match JSON line count", failedOk)

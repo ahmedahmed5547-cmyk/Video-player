@@ -366,13 +366,20 @@ internal fun MainActivity.showPinUnlockDialog(
             setColor(accent)
         }
         setOnClickListener {
+            val lockoutSec = PlaybackStore.getPinLockoutRemainingSeconds(hostActivity)
+            if (lockoutSec > 0) {
+                Toast.makeText(hostActivity, getString(R.string.privacy_pin_locked_wait_toast, lockoutSec), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             val entered = etPin.text.toString()
             if (PlaybackStore.verifyPrivacyPin(hostActivity, entered)) {
                 dialog.dismiss()
                 BiometricHardwareGuard.bindKeyAfterPasswordVerified(hostActivity)
                 onAuthenticated()
             } else {
-                Toast.makeText(hostActivity, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
+                val remSec = PlaybackStore.getPinLockoutRemainingSeconds(hostActivity)
+                val msg = if (remSec > 0) getString(R.string.privacy_pin_locked_wait_toast, remSec) else getString(R.string.privacy_wrong_pin_toast)
+                Toast.makeText(hostActivity, msg, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -456,7 +463,7 @@ internal fun MainActivity.showFirstTimeSetupPinDialog(onPinSaved: () -> Unit = {
         }
         setOnClickListener {
             val newPin = etNewPin.text.toString().trim()
-            if (newPin.length < 2) {
+            if (newPin.length < 4) {
                 Toast.makeText(hostActivity, getString(R.string.privacy_pin_too_short), Toast.LENGTH_SHORT).show()
             } else {
                 isNavigatingToSubDialog = true
@@ -556,11 +563,18 @@ internal fun MainActivity.showChangePasswordWithCurrentVerifyDialog() {
             setColor(accent)
         }
         setOnClickListener {
+            val lockoutSec = PlaybackStore.getPinLockoutRemainingSeconds(hostActivity)
+            if (lockoutSec > 0) {
+                Toast.makeText(hostActivity, getString(R.string.privacy_pin_locked_wait_toast, lockoutSec), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             val currentInput = etCurrentPin.text.toString()
             val newPin = etNewPin.text.toString().trim()
             if (!PlaybackStore.verifyPrivacyPin(hostActivity, currentInput)) {
-                Toast.makeText(hostActivity, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
-            } else if (newPin.length < 2) {
+                val remSec = PlaybackStore.getPinLockoutRemainingSeconds(hostActivity)
+                val msg = if (remSec > 0) getString(R.string.privacy_pin_locked_wait_toast, remSec) else getString(R.string.privacy_wrong_pin_toast)
+                Toast.makeText(hostActivity, msg, Toast.LENGTH_SHORT).show()
+            } else if (newPin.length < 4) {
                 Toast.makeText(hostActivity, getString(R.string.privacy_pin_too_short), Toast.LENGTH_SHORT).show()
             } else {
                 dialog.dismiss()
@@ -660,9 +674,16 @@ internal fun MainActivity.showRemovePasswordVerifyDialog() {
             setColor(Color.parseColor("#E11D48"))
         }
         setOnClickListener {
+            val lockoutSec = PlaybackStore.getPinLockoutRemainingSeconds(hostActivity)
+            if (lockoutSec > 0) {
+                Toast.makeText(hostActivity, getString(R.string.privacy_pin_locked_wait_toast, lockoutSec), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             val entered = etCurrentPin.text.toString()
             if (!PlaybackStore.verifyPrivacyPin(hostActivity, entered)) {
-                Toast.makeText(hostActivity, getString(R.string.privacy_wrong_pin_toast), Toast.LENGTH_SHORT).show()
+                val remSec = PlaybackStore.getPinLockoutRemainingSeconds(hostActivity)
+                val msg = if (remSec > 0) getString(R.string.privacy_pin_locked_wait_toast, remSec) else getString(R.string.privacy_wrong_pin_toast)
+                Toast.makeText(hostActivity, msg, Toast.LENGTH_SHORT).show()
             } else {
                 isNavigatingToSubDialog = true
                 dialog.dismiss()

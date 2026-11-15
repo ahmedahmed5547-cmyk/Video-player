@@ -1,5 +1,4 @@
-# Pure Video Player R8 Release Optimization, Log Stripping & Anti-Reverse-Engineering Rules
--ignorewarnings
+# Pure Video Player R8 Release Optimization, Log Stripping & Keep Rules
 -dontwarn org.videolan.**
 -dontwarn androidx.media3.**
 -dontwarn com.google.android.exoplayer2.**
@@ -23,10 +22,11 @@
 -keep class com.google.android.exoplayer2.** { *; }
 -keep interface com.google.android.exoplayer2.** { *; }
 
-# Keep Room Database generated implementations, Entities, and DAOs
+# Keep Room Database generated implementations, Entities, Migrations, and DAOs
 -keep class * extends androidx.room.RoomDatabase { *; }
 -keep @androidx.room.Entity class * { *; }
 -keep @androidx.room.Dao class * { *; }
+-keep class * extends androidx.room.migration.Migration { *; }
 -keep class com.pureplayer.video.ContentTypeCountTuple { *; }
 -keep class com.pureplayer.video.CategorySummaryTuple { *; }
 

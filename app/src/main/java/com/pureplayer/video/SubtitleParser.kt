@@ -9,7 +9,7 @@ object SubtitleParser {
         return try {
             parseFromBytes(file.readBytes())
         } catch (e: Exception) {
-            Log.w("SubtitleParser", "Failed to read subtitle file: ${e.javaClass.simpleName}")
+            runCatching { Log.w("SubtitleParser", "Failed to read subtitle file: ${e.javaClass.simpleName}") }
             emptyList()
         }
     }
@@ -41,7 +41,7 @@ object SubtitleParser {
         return try {
             String(bytes, Charset.forName("windows-1256"))
         } catch (e: Exception) {
-            Log.w("SubtitleParser", "Charset windows-1256 fallback failed: ${e.javaClass.simpleName}")
+            runCatching { Log.w("SubtitleParser", "Charset windows-1256 fallback failed: ${e.javaClass.simpleName}") }
             utf8
         }
     }
@@ -135,7 +135,7 @@ object SubtitleParser {
                 else -> 0L
             }
         } catch (e: Exception) {
-            Log.w("SubtitleParser", "Timecode parse failed: ${e.javaClass.simpleName}")
+            runCatching { Log.w("SubtitleParser", "Timecode parse failed: ${e.javaClass.simpleName}") }
             0L
         }
     }

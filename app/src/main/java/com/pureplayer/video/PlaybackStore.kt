@@ -48,7 +48,7 @@ object PinCryptoHelper {
             val actualHash = pbkdf2(inputPin.toCharArray(), salt, iter)
             MessageDigest.isEqual(expectedHash, actualHash)
         } catch (e: Exception) {
-            Log.w("PinCryptoHelper", "PIN hash verification failed: ${e.javaClass.simpleName}")
+            runCatching { Log.w("PinCryptoHelper", "PIN hash verification failed: ${e.javaClass.simpleName}") }
             false
         }
     }
@@ -136,6 +136,10 @@ object PlaybackStore {
     private const val KEY_DEFAULT_ORIENTATION = "default_orientation_idx"
     private const val KEY_HDR_MODE_IDX = "hdr_mode_idx"
     private const val KEY_PRIVACY_PIN = "privacy_pin_code"
+    private const val KEY_PIN_FAILED_ATTEMPTS = "privacy_pin_failed_attempts_v1"
+    private const val KEY_PIN_LOCKOUT_UNTIL_MS = "privacy_pin_lockout_until_ms_v1"
+    private const val MAX_PIN_FAILED_ATTEMPTS = 5
+    private const val PIN_LOCKOUT_DURATION_MS = 30_000L
     private const val KEY_PRIVACY_BIOMETRIC = "privacy_biometric_enabled"
     private const val KEY_BIOMETRIC_PWD_VERIFIED = "privacy_bio_pwd_verified"
     private const val KEY_LOCKED_FOLDERS = "privacy_locked_folders_set"
@@ -155,17 +159,24 @@ object PlaybackStore {
 
     fun saveProgress(context: Context, uri: Uri, title: String, positionMs: Long, durationMs: Long) {
         markVideoOpened(context, uri)
+        val uriKey = uri.toString()
+        val now = System.currentTimeMillis()
         val safePos = if (durationMs > 0 && positionMs >= durationMs - 4000L) 0L else positionMs
         prefs(context).edit()
-            .putLong(PREFIX_POS + uri.toString(), safePos)
-            .putString(KEY_LAST_URI, uri.toString())
+            .putLong(PREFIX_POS + uriKey, safePos)
+            .putLong(PREFIX_META_TS + uriKey, now)
+            .putString(KEY_LAST_URI, uriKey)
             .putString(KEY_LAST_TITLE, title)
             .putLong(KEY_LAST_POSITION, safePos)
             .apply()
     }
 
     fun savePosition(context: Context, uri: Uri, posMs: Long) {
-        prefs(context).edit().putLong(PREFIX_POS + uri.toString(), posMs).apply()
+        val uriKey = uri.toString()
+        prefs(context).edit()
+            .putLong(PREFIX_POS + uriKey, posMs)
+            .putLong(PREFIX_META_TS + uriKey, System.currentTimeMillis())
+            .apply()
     }
 
     fun getLastPlayedUri(context: Context): Uri? = getLastPlayedVideo(context)?.first
@@ -203,7 +214,11 @@ object PlaybackStore {
     }
 
     fun saveVideoSubtitleCachePath(context: Context, videoUri: Uri, path: String) {
-        prefs(context).edit().putString(PREFIX_SUB_PATH + videoUri.toString(), path).apply()
+        val uriKey = videoUri.toString()
+        prefs(context).edit()
+            .putString(PREFIX_SUB_PATH + uriKey, path)
+            .putLong(PREFIX_META_TS + uriKey, System.currentTimeMillis())
+            .apply()
     }
 
     fun getVideoSubtitleCachePath(context: Context, videoUri: Uri): String? {
@@ -511,24 +526,53 @@ object PlaybackStore {
     fun hasPrivacyPin(context: Context): Boolean =
         !prefs(context).getString(KEY_PRIVACY_PIN, "").isNullOrBlank()
 
+    fun getPinLockoutRemainingSeconds(context: Context): Int {
+        val untilMs = prefs(context).getLong(KEY_PIN_LOCKOUT_UNTIL_MS, 0L)
+        val diffMs = untilMs - System.currentTimeMillis()
+        return if (diffMs > 0L) ((diffMs + 999L) / 1000L).toInt() else 0
+    }
+
     fun verifyPrivacyPin(context: Context, inputPin: String): Boolean {
-        val saved = prefs(context).getString(KEY_PRIVACY_PIN, "") ?: ""
-        return PinCryptoHelper.verifyAndMigratePin(inputPin, saved) { newHash ->
-            prefs(context).edit().putString(KEY_PRIVACY_PIN, newHash).apply()
+        if (getPinLockoutRemainingSeconds(context) > 0) return false
+        val sp = prefs(context)
+        val saved = sp.getString(KEY_PRIVACY_PIN, "") ?: ""
+        val ok = PinCryptoHelper.verifyAndMigratePin(inputPin, saved) { newHash ->
+            sp.edit().putString(KEY_PRIVACY_PIN, newHash).apply()
         }
+        if (ok) {
+            sp.edit()
+                .putInt(KEY_PIN_FAILED_ATTEMPTS, 0)
+                .putLong(KEY_PIN_LOCKOUT_UNTIL_MS, 0L)
+                .apply()
+        } else {
+            val attempts = sp.getInt(KEY_PIN_FAILED_ATTEMPTS, 0) + 1
+            val ed = sp.edit().putInt(KEY_PIN_FAILED_ATTEMPTS, attempts)
+            if (attempts >= MAX_PIN_FAILED_ATTEMPTS) {
+                ed.putLong(KEY_PIN_LOCKOUT_UNTIL_MS, System.currentTimeMillis() + PIN_LOCKOUT_DURATION_MS)
+                ed.putInt(KEY_PIN_FAILED_ATTEMPTS, 0)
+            }
+            ed.apply()
+        }
+        return ok
     }
 
     fun setPrivacyPin(context: Context, newPin: String) {
         val trimmed = newPin.trim()
-        if (trimmed.isEmpty()) return
+        if (trimmed.length < 4) return
         val hashed = PinCryptoHelper.hashPin(trimmed)
-        prefs(context).edit().putString(KEY_PRIVACY_PIN, hashed).apply()
+        prefs(context).edit()
+            .putString(KEY_PRIVACY_PIN, hashed)
+            .putInt(KEY_PIN_FAILED_ATTEMPTS, 0)
+            .putLong(KEY_PIN_LOCKOUT_UNTIL_MS, 0L)
+            .apply()
     }
 
     fun clearPrivacyPinAndLocks(context: Context) {
         prefs(context).edit()
             .remove(KEY_PRIVACY_PIN)
             .remove(KEY_LOCKED_FOLDERS)
+            .remove(KEY_PIN_FAILED_ATTEMPTS)
+            .remove(KEY_PIN_LOCKOUT_UNTIL_MS)
             .putBoolean(KEY_BIOMETRIC_PWD_VERIFIED, false)
             .apply()
     }
@@ -550,7 +594,6 @@ object PlaybackStore {
             val all = sp.all
             val now = System.currentTimeMillis()
             val lastUri = sp.getString(KEY_LAST_URI, "") ?: ""
-            val lastUriHash = if (lastUri.isNotEmpty()) lastUri.hashCode().toString() else ""
 
             val trackedPrefixes = listOf(PREFIX_POS, PREFIX_SUB_PATH, PREFIX_SUB_SYNC)
             val entriesBySuffix = linkedMapOf<String, Long>()
@@ -558,7 +601,7 @@ object PlaybackStore {
             for ((k, _) in all) {
                 val matchedPrefix = trackedPrefixes.firstOrNull { k.startsWith(it) } ?: continue
                 val suffix = k.removePrefix(matchedPrefix)
-                if (suffix == lastUriHash) continue
+                if (lastUri.isNotEmpty() && suffix == lastUri) continue
                 val ts = sp.getLong(PREFIX_META_TS + suffix, now)
                 entriesBySuffix[suffix] = ts
             }
