@@ -1,5 +1,6 @@
 import java.util.Properties
 import java.io.FileInputStream
+import org.gradle.api.GradleException
 
 plugins {
     id("com.android.application")
@@ -14,32 +15,44 @@ val localProps = Properties().apply {
     }
 }
 
-fun resolveSigningConfigValue(key: String, defaultVal: String): String {
-    val fromProps = localProps.getProperty(key)?.trim()
-    if (!fromProps.isNullOrEmpty()) return fromProps
-    val fromEnv = System.getenv(key)?.trim()
-    if (!fromEnv.isNullOrEmpty()) return fromEnv
-    return defaultVal
+fun resolveSigningConfigValue(vararg keys: String): String? {
+    for (key in keys) {
+        val fromProps = localProps.getProperty(key)?.trim()
+        if (!fromProps.isNullOrEmpty()) return fromProps
+        val fromEnv = System.getenv(key)?.trim()
+        if (!fromEnv.isNullOrEmpty()) return fromEnv
+    }
+    return null
 }
 
-val resolvedKeystorePath = resolveSigningConfigValue("KEYSTORE_PATH", "release.keystore")
-val resolvedKeystorePassword = resolveSigningConfigValue("KEYSTORE_PASSWORD", "2855798Aa")
-val resolvedKeyAlias = resolveSigningConfigValue("KEY_ALIAS", "pureplayer_release_key")
-val resolvedKeyPassword = resolveSigningConfigValue("KEY_PASSWORD", "2855798Aa")
+val isReleaseBuildRequested = gradle.startParameter.taskNames.any {
+    it.contains("Release", ignoreCase = true)
+}
 
-val ksFile = file(resolvedKeystorePath)
-if (!ksFile.exists()) {
-    ksFile.parentFile?.mkdirs()
-    val pb = ProcessBuilder(
-        "keytool", "-genkeypair", "-v",
-        "-keystore", ksFile.absolutePath,
-        "-alias", resolvedKeyAlias,
-        "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000",
-        "-storepass", resolvedKeystorePassword,
-        "-keypass", resolvedKeyPassword,
-        "-dname", "CN=Pure Video Player, OU=Mobile, O=PurePlayer, L=Riyadh, ST=Riyadh, C=SA"
-    )
-    pb.inheritIO().start().waitFor()
+val resolvedKeystorePath = resolveSigningConfigValue("KEYSTORE_PATH")
+val resolvedKeystorePassword = resolveSigningConfigValue("RESOLVED_KS_PASS", "KEYSTORE_PASSWORD")
+val resolvedKeyAlias = resolveSigningConfigValue("RESOLVED_KEY_ALIAS", "KEY_ALIAS")
+val resolvedKeyPassword = resolveSigningConfigValue("RESOLVED_KEY_PASS", "KEY_PASSWORD")
+
+if (isReleaseBuildRequested) {
+    val missing = mutableListOf<String>()
+    if (resolvedKeystorePath.isNullOrBlank()) missing.add("KEYSTORE_PATH")
+    if (resolvedKeystorePassword.isNullOrBlank()) missing.add("KEYSTORE_PASSWORD")
+    if (resolvedKeyAlias.isNullOrBlank()) missing.add("KEY_ALIAS")
+    if (resolvedKeyPassword.isNullOrBlank()) missing.add("KEY_PASSWORD")
+    if (missing.isNotEmpty()) {
+        throw GradleException(
+            "Release build aborted: Missing required signing configuration $missing. " +
+                "Provide KEYSTORE_PATH (or KEYSTORE_BASE64 in CI), KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD " +
+                "via GitHub Secrets, environment variables, or local.properties."
+        )
+    }
+    val ksFile = file(resolvedKeystorePath!!)
+    if (!ksFile.exists() || !ksFile.isFile || ksFile.length() == 0L) {
+        throw GradleException(
+            "Release build aborted: Keystore file not found or empty at '${ksFile.absolutePath}'."
+        )
+    }
 }
 
 android {
@@ -50,8 +63,8 @@ android {
         applicationId = "com.pureplayer.video"
         minSdk = 24
         targetSdk = 34
-        versionCode = 61
-        versionName = "38.05"
+        versionCode = 59
+        versionName = "38.03"
 
         buildConfigField("String", "SUBDL_API_KEY", "\"\"")
 
@@ -76,10 +89,19 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = ksFile
-            storePassword = resolvedKeystorePassword
-            keyAlias = resolvedKeyAlias
-            keyPassword = resolvedKeyPassword
+            if (!resolvedKeystorePath.isNullOrBlank() &&
+                !resolvedKeystorePassword.isNullOrBlank() &&
+                !resolvedKeyAlias.isNullOrBlank() &&
+                !resolvedKeyPassword.isNullOrBlank()
+            ) {
+                val ksFile = file(resolvedKeystorePath)
+                if (ksFile.exists() && ksFile.isFile && ksFile.length() > 0L) {
+                    storeFile = ksFile
+                    storePassword = resolvedKeystorePassword
+                    keyAlias = resolvedKeyAlias
+                    keyPassword = resolvedKeyPassword
+                }
+            }
         }
     }
 

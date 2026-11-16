@@ -405,7 +405,7 @@ interface IptvDao {
         IptvSeriesLastEpEntity::class
     ],
     version = 2,
-    exportSchema = falseexportSchema = true
+    exportSchema = true
 )
 abstract class IptvRoomDatabase : RoomDatabase() {
     abstract fun iptvDao(): IptvDao
