@@ -188,7 +188,7 @@ class PurePlayerUnitTests {
 
         val m3u = """
             #EXTM3U
-            #EXTINF:-1 group-title="Sports HD",beIN Sports 1
+            #EXTINF:-1 group-title="Sports HD",Sports Channel 1 HD
             #EXTVLCOPT:http-user-agent=CustomAgent/2.0
             #EXTVLCOPT:http-referrer=https://example.com/
             http://iptv.example.com/live/101.ts

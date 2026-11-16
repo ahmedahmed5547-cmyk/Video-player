@@ -46,6 +46,7 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -1469,6 +1470,120 @@ internal fun MainActivity.showThemeSelectorDialog() {
         cardContainer.addView(row)
         animatedItems.add(row)
     }
+
+    // Section 3: Material UI / Material You App Launcher Icons (2x3 Grid)
+    val tvIconSec = TextView(this).apply {
+        text = "✨  " + getString(R.string.app_icon_section_title)
+        setTextColor(PlaybackStore.getAccentColor(hostActivity))
+        textSize = 12.5f
+        setTypeface(typeface, Typeface.BOLD)
+        setPadding(dp(4), dp(10), dp(4), dp(2))
+    }
+    val tvIconSub = TextView(this).apply {
+        text = getString(R.string.app_icon_Sub)
+        setTextColor(PlaybackStore.getSecondaryTextColor(hostActivity))
+        textSize = 11.5f
+        setPadding(dp(4), 0, dp(4), dp(10))
+    }
+    cardContainer.addView(tvIconSec)
+    cardContainer.addView(tvIconSub)
+    animatedItems.add(tvIconSec)
+
+    data class MaterialIconItem(val resId: Int, val label: String, val accentHex: String)
+    val matIcons = listOf(
+        MaterialIconItem(R.drawable.ic_launcher_mat_you, getString(R.string.icon_mat_you), dynamicSysHex),
+        MaterialIconItem(R.drawable.ic_launcher_mat_blue, getString(R.string.icon_mat_blue), "#38BDF8"),
+        MaterialIconItem(R.drawable.ic_launcher_mat_gold, getString(R.string.icon_mat_gold), "#F59E0B"),
+        MaterialIconItem(R.drawable.ic_launcher_mat_emerald, getString(R.string.icon_mat_emerald), "#10B981"),
+        MaterialIconItem(R.drawable.ic_launcher_mat_crimson, getString(R.string.icon_mat_crimson), "#F43F5E"),
+        MaterialIconItem(R.drawable.ic_launcher_mat_violet, getString(R.string.icon_mat_violet), "#A855F7")
+    )
+    var selectedIconIdx = PlaybackStore.getAppIconIndex(this)
+    val iconCardViews = mutableListOf<LinearLayout>()
+    val iconLabelViews = mutableListOf<TextView>()
+
+    fun refreshIconCards(activeIconIdx: Int) {
+        val isLight = PlaybackStore.isLightThemeActive(this)
+        val activeBg = PlaybackStore.getBackgroundColor(this)
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
+        matIcons.forEachIndexed { iIdx, item ->
+            val isSel = (iIdx == activeIconIdx)
+            val cColor = Color.parseColor(item.accentHex)
+            val card = iconCardViews[iIdx]
+            val lbl = iconLabelViews[iIdx]
+            lbl.setTextColor(if (isSel) cColor else primaryText)
+            card.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(16).toFloat()
+                setColor(if (isSel) Color.argb(38, Color.red(cColor), Color.green(cColor), Color.blue(cColor)) else activeBg)
+                setStroke(
+                    dp(if (isSel) 2 else 1),
+                    if (isSel) cColor else if (isLight) Color.parseColor("#CBD5E1") else Color.parseColor("#22FFFFFF")
+                )
+            }
+        }
+    }
+
+    for (rowIdx in 0 until 2) {
+        val iconRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dp(10)
+            }
+        }
+        for (colIdx in 0 until 3) {
+            val itemIdx = rowIdx * 3 + colIdx
+            val item = matIcons[itemIdx]
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(dp(8), dp(12), dp(8), dp(10))
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    if (colIdx < 2) marginEnd = dp(8)
+                }
+            }
+            val iv = ImageView(this).apply {
+                setImageResource(item.resId)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                layoutParams = LinearLayout.LayoutParams(dp(48), dp(48)).apply {
+                    bottomMargin = dp(6)
+                }
+                clipToOutline = true
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dp(14).toFloat()
+                }
+            }
+            val lbl = TextView(this).apply {
+                text = item.label
+                textSize = 11.5f
+                gravity = Gravity.CENTER
+                setTypeface(typeface, Typeface.BOLD)
+                maxLines = 1
+            }
+            card.addView(iv)
+            card.addView(lbl)
+            card.setOnClickListener {
+                selectedIconIdx = itemIdx
+                PlaybackStore.setAppIconIndex(hostActivity, itemIdx)
+                refreshIconCards(selectedIconIdx)
+                Toast.makeText(
+                    hostActivity,
+                    getString(R.string.toast_app_icon_updated, item.label),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            iconCardViews.add(card)
+            iconLabelViews.add(lbl)
+            iconRow.addView(card)
+        }
+        cardContainer.addView(iconRow)
+        animatedItems.add(iconRow)
+    }
+    refreshIconCards(selectedIconIdx)
 
     val btnBack = TextView(this).apply {
         text = if (settingsBackStack.isNotEmpty()) getString(R.string.back_to_previous_menu) else getString(R.string.close)

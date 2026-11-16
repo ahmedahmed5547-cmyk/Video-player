@@ -441,4 +441,13 @@
     <string name="iptv_err_reenter_password">🔑 أعد إدخال كلمة المرور لتحديث هذا المصدر.</string>
     <string name="about_disclaimer_title">إخلاء مسؤولية المحتوى</string>
     <string name="about_disclaimer_sub">التطبيق مشغّل فقط ولا يوفر أي محتوى، والمستخدم مسؤول عن المحتوى الذي يضيفه</string>
+    <string name="app_icon_section_title">أيقونات التطبيق (Material UI)</string>
+    <string name="app_icon_Sub">اختر شكل أيقونة التطبيق المتوافقة مع Material UI</string>
+    <string name="icon_mat_you">ماتريال يو</string>
+    <string name="icon_mat_blue">أزرق سينمائي</string>
+    <string name="icon_mat_gold">ذهبي ملكي</string>
+    <string name="icon_mat_emerald">زمردي حديث</string>
+    <string name="icon_mat_crimson">قرمزي نيون</string>
+    <string name="icon_mat_violet">بنفسجي عصري</string>
+    <string name="toast_app_icon_updated">تم تحديث أيقونة التطبيق (%1$s)</string>
 </resources>

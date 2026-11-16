@@ -12,7 +12,6 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.Transaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
@@ -31,41 +30,39 @@ data class IptvSourceEntity(
     val radioCount: Int,
     val expDateSec: Long,
     val accountStatus: String
-) {
-    fun toDomain(): IptvSource = IptvSource(
-        id = id,
-        name = name,
-        type = runCatching { IptvSourceType.valueOf(type) }.getOrDefault(IptvSourceType.M3U_URL),
-        serverOrM3uUrl = serverOrM3uUrl,
-        username = username,
-        encryptedPassword = encryptedPassword,
-        lastUpdatedMs = lastUpdatedMs,
-        liveCount = liveCount,
-        movieCount = movieCount,
-        seriesCount = seriesCount,
-        radioCount = radioCount,
-        expDateSec = expDateSec,
-        accountStatus = accountStatus
-    )
+)
 
-    companion object {
-        fun fromDomain(s: IptvSource): IptvSourceEntity = IptvSourceEntity(
-            id = s.id,
-            name = s.name,
-            type = s.type.name,
-            serverOrM3uUrl = s.serverOrM3uUrl,
-            username = s.username,
-            encryptedPassword = s.encryptedPassword,
-            lastUpdatedMs = s.lastUpdatedMs,
-            liveCount = s.liveCount,
-            movieCount = s.movieCount,
-            seriesCount = s.seriesCount,
-            radioCount = s.radioCount,
-            expDateSec = s.expDateSec,
-            accountStatus = s.accountStatus
-        )
-    }
-}
+fun IptvSourceEntity.toDomain(): IptvSource = IptvSource(
+    id = id,
+    name = name,
+    type = runCatching { IptvSourceType.valueOf(type) }.getOrDefault(IptvSourceType.M3U_URL),
+    serverOrM3uUrl = serverOrM3uUrl,
+    username = username,
+    encryptedPassword = encryptedPassword,
+    lastUpdatedMs = lastUpdatedMs,
+    liveCount = liveCount,
+    movieCount = movieCount,
+    seriesCount = seriesCount,
+    radioCount = radioCount,
+    expDateSec = expDateSec,
+    accountStatus = accountStatus
+)
+
+fun IptvSource.toEntity(): IptvSourceEntity = IptvSourceEntity(
+    id = id,
+    name = name,
+    type = type.name,
+    serverOrM3uUrl = serverOrM3uUrl,
+    username = username,
+    encryptedPassword = encryptedPassword,
+    lastUpdatedMs = lastUpdatedMs,
+    liveCount = liveCount,
+    movieCount = movieCount,
+    seriesCount = seriesCount,
+    radioCount = radioCount,
+    expDateSec = expDateSec,
+    accountStatus = accountStatus
+)
 
 @Entity(
     tableName = "streams",
@@ -99,55 +96,53 @@ data class IptvStreamEntity(
     val containerExt: String,
     val httpUa: String,
     val httpRef: String
-) {
-    fun toDomain(): IptvStreamItem = IptvStreamItem(
-        id = streamId,
-        sourceId = sourceId,
-        contentType = runCatching { IptvContentType.valueOf(contentType) }.getOrDefault(IptvContentType.LIVE_TV),
-        categoryId = categoryId,
-        categoryName = categoryName,
-        title = title,
-        streamUrl = streamUrl,
-        logoUrl = logoUrl,
-        rating = rating,
-        plot = plot,
-        releaseDate = releaseDate,
-        durationLabel = durationLabel,
-        seriesId = seriesId,
-        seriesName = seriesName,
-        seasonNumber = seasonNum,
-        episodeNumber = episodeNum,
-        containerExtension = containerExt,
-        httpUserAgent = httpUa,
-        httpReferrer = httpRef
-    )
+)
 
-    companion object {
-        fun fromDomain(item: IptvStreamItem): IptvStreamEntity = IptvStreamEntity(
-            sourceId = item.sourceId,
-            streamId = item.id,
-            contentType = item.contentType.name,
-            categoryId = item.categoryId,
-            categoryName = item.categoryName,
-            normalizedCategory = item.normalizedCategory,
-            title = item.title,
-            normalizedTitle = item.normalizedTitle,
-            streamUrl = item.streamUrl,
-            logoUrl = item.logoUrl,
-            rating = item.rating,
-            plot = item.plot,
-            releaseDate = item.releaseDate,
-            durationLabel = item.durationLabel,
-            seriesId = item.seriesId,
-            seriesName = item.seriesName,
-            seasonNum = item.seasonNumber,
-            episodeNum = item.episodeNumber,
-            containerExt = item.containerExtension,
-            httpUa = item.httpUserAgent,
-            httpRef = item.httpReferrer
-        )
-    }
-}
+fun IptvStreamEntity.toDomain(): IptvStreamItem = IptvStreamItem(
+    id = streamId,
+    sourceId = sourceId,
+    contentType = runCatching { IptvContentType.valueOf(contentType) }.getOrDefault(IptvContentType.LIVE_TV),
+    categoryId = categoryId,
+    categoryName = categoryName,
+    title = title,
+    streamUrl = streamUrl,
+    logoUrl = logoUrl,
+    rating = rating,
+    plot = plot,
+    releaseDate = releaseDate,
+    durationLabel = durationLabel,
+    seriesId = seriesId,
+    seriesName = seriesName,
+    seasonNumber = seasonNum,
+    episodeNumber = episodeNum,
+    containerExtension = containerExt,
+    httpUserAgent = httpUa,
+    httpReferrer = httpRef
+)
+
+fun IptvStreamItem.toEntity(): IptvStreamEntity = IptvStreamEntity(
+    sourceId = sourceId,
+    streamId = id,
+    contentType = contentType.name,
+    categoryId = categoryId,
+    categoryName = categoryName,
+    normalizedCategory = normalizedCategory,
+    title = title,
+    normalizedTitle = normalizedTitle,
+    streamUrl = streamUrl,
+    logoUrl = logoUrl,
+    rating = rating,
+    plot = plot,
+    releaseDate = releaseDate,
+    durationLabel = durationLabel,
+    seriesId = seriesId,
+    seriesName = seriesName,
+    seasonNum = seasonNumber,
+    episodeNum = episodeNumber,
+    containerExt = containerExtension,
+    httpUa = httpUserAgent,
+    httpRef = httpReferrer
+)
 
 @Entity(
     tableName = "favorites",
@@ -199,7 +194,6 @@ data class CategorySummaryTuple(
 @Dao
 interface IptvDao {
 
-    // --- 1. Sources ---
     @Query("SELECT * FROM sources ORDER BY lastUpdatedMs DESC")
     fun getAllSourcesSync(): List<IptvSourceEntity>
 
@@ -215,7 +209,6 @@ interface IptvDao {
     @Query("DELETE FROM sources WHERE id = :sourceId")
     fun deleteSourceByIdSync(sourceId: String)
 
-    // --- 2. Streams ---
     @Query("SELECT COUNT(*) FROM streams WHERE sourceId = :sourceId")
     fun countStreamsForSourceSync(sourceId: String): Int
 
@@ -297,19 +290,6 @@ interface IptvDao {
     @Query("DELETE FROM streams WHERE sourceId = :sourceId")
     fun deleteStreamsForSourceSync(sourceId: String)
 
-    @Transaction
-    fun replaceAllStreamsForSourceSync(sourceId: String, items: List<IptvStreamEntity>) {
-        deleteStreamsForSourceSync(sourceId)
-        val chunkSize = 1000
-        var idx = 0
-        while (idx < items.size) {
-            val end = (idx + chunkSize).coerceAtMost(items.size)
-            insertStreamsBatchSync(items.subList(idx, end))
-            idx = end
-        }
-    }
-
-    // --- 3. Favorites ---
     @Query("SELECT itemId FROM favorites WHERE sourceId = :sourceId")
     fun getFavoriteItemIdsForSourceSync(sourceId: String): List<String>
 
@@ -338,7 +318,6 @@ interface IptvDao {
     """)
     fun getFavoriteStreamsSqlSync(sourceId: String, contentType: String?, limit: Int = 500): List<IptvStreamEntity>
 
-    // --- 4. Recents ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertRecentSync(recent: IptvRecentEntity)
 
@@ -367,7 +346,6 @@ interface IptvDao {
     """)
     fun getRecentStreamsSqlSync(sourceId: String, contentType: String?, limit: Int = 100): List<IptvStreamEntity>
 
-    // --- 5. Series Last Watched Episode ---
     @Query("SELECT * FROM series_last_episode WHERE sourceId = :sourceId")
     fun getAllSeriesLastEpForSourceSync(sourceId: String): List<IptvSeriesLastEpEntity>
 
@@ -385,15 +363,25 @@ interface IptvDao {
 
     @Query("DELETE FROM series_last_episode WHERE sourceId = :sourceId")
     fun deleteSeriesLastForSourceSync(sourceId: String)
+}
 
-    @Transaction
-    fun deleteAllDataForSourceSync(sourceId: String) {
-        deleteSourceByIdSync(sourceId)
-        deleteStreamsForSourceSync(sourceId)
-        deleteFavoritesForSourceSync(sourceId)
-        deleteRecentsForSourceSync(sourceId)
-        deleteSeriesLastForSourceSync(sourceId)
+fun IptvDao.replaceAllStreamsForSourceSync(sourceId: String, items: List<IptvStreamEntity>) {
+    deleteStreamsForSourceSync(sourceId)
+    val chunkSize = 1000
+    var idx = 0
+    while (idx < items.size) {
+        val end = (idx + chunkSize).coerceAtMost(items.size)
+        insertStreamsBatchSync(items.subList(idx, end))
+        idx = end
     }
+}
+
+fun IptvDao.deleteAllDataForSourceSync(sourceId: String) {
+    deleteSourceByIdSync(sourceId)
+    deleteStreamsForSourceSync(sourceId)
+    deleteFavoritesForSourceSync(sourceId)
+    deleteRecentsForSourceSync(sourceId)
+    deleteSeriesLastForSourceSync(sourceId)
 }
 
 @Database(
@@ -405,115 +393,115 @@ interface IptvDao {
         IptvSeriesLastEpEntity::class
     ],
     version = 2,
-    exportSchema = falseexportSchema = true
+    exportSchema = true
 )
 abstract class IptvRoomDatabase : RoomDatabase() {
     abstract fun iptvDao(): IptvDao
+}
 
-    companion object {
-        private const val DB_NAME = "pure_video_iptv_room.db"
+object IptvRoomDbHolder {
+    private const val DB_NAME = "pure_video_iptv_room.db"
 
-        val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("""
-                    CREATE TABLE IF NOT EXISTS `sources` (
-                        `id` TEXT NOT NULL,
-                        `name` TEXT NOT NULL,
-                        `type` TEXT NOT NULL,
-                        `serverOrM3uUrl` TEXT NOT NULL,
-                        `username` TEXT NOT NULL,
-                        `encryptedPassword` TEXT NOT NULL,
-                        `lastUpdatedMs` INTEGER NOT NULL,
-                        `liveCount` INTEGER NOT NULL,
-                        `movieCount` INTEGER NOT NULL,
-                        `seriesCount` INTEGER NOT NULL,
-                        `radioCount` INTEGER NOT NULL,
-                        `expDateSec` INTEGER NOT NULL,
-                        `accountStatus` TEXT NOT NULL,
-                        PRIMARY KEY(`id`)
-                    )
-                """.trimIndent())
-
-                db.execSQL("""
-                    CREATE TABLE IF NOT EXISTS `streams` (
-                        `rowId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                        `sourceId` TEXT NOT NULL,
-                        `streamId` TEXT NOT NULL,
-                        `contentType` TEXT NOT NULL,
-                        `categoryId` TEXT NOT NULL,
-                        `categoryName` TEXT NOT NULL,
-                        `normalizedCategory` TEXT NOT NULL,
-                        `title` TEXT NOT NULL,
-                        `normalizedTitle` TEXT NOT NULL,
-                        `streamUrl` TEXT NOT NULL,
-                        `logoUrl` TEXT NOT NULL,
-                        `rating` TEXT NOT NULL,
-                        `plot` TEXT NOT NULL,
-                        `releaseDate` TEXT NOT NULL,
-                        `durationLabel` TEXT NOT NULL,
-                        `seriesId` TEXT NOT NULL,
-                        `seriesName` TEXT NOT NULL,
-                        `seasonNum` INTEGER NOT NULL,
-                        `episodeNum` INTEGER NOT NULL,
-                        `containerExt` TEXT NOT NULL,
-                        `httpUa` TEXT NOT NULL,
-                        `httpRef` TEXT NOT NULL
-                    )
-                """.trimIndent())
-                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_streams_source_type_cat` ON `streams` (`sourceId`, `contentType`, `categoryName`)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_streams_norm_title` ON `streams` (`sourceId`, `normalizedTitle`)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_streams_norm_cat` ON `streams` (`sourceId`, `normalizedCategory`)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_streams_source_item` ON `streams` (`sourceId`, `streamId`)")
-
-                db.execSQL("""
-                    CREATE TABLE IF NOT EXISTS `favorites` (
-                        `sourceId` TEXT NOT NULL,
-                        `itemId` TEXT NOT NULL,
-                        `addedMs` INTEGER NOT NULL,
-                        PRIMARY KEY(`sourceId`, `itemId`)
-                    )
-                """.trimIndent())
-                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_fav_source_added` ON `favorites` (`sourceId`, `addedMs`)")
-
-                db.execSQL("""
-                    CREATE TABLE IF NOT EXISTS `recents` (
-                        `sourceId` TEXT NOT NULL,
-                        `itemId` TEXT NOT NULL,
-                        `watchedMs` INTEGER NOT NULL,
-                        PRIMARY KEY(`sourceId`, `itemId`)
-                    )
-                """.trimIndent())
-                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_recent_source_watched` ON `recents` (`sourceId`, `watchedMs`)")
-
-                db.execSQL("""
-                    CREATE TABLE IF NOT EXISTS `series_last_episode` (
-                        `sourceId` TEXT NOT NULL,
-                        `seriesKey` TEXT NOT NULL,
-                        `seasonNumber` INTEGER NOT NULL,
-                        `episodeNumber` INTEGER NOT NULL,
-                        `episodeTitle` TEXT NOT NULL,
-                        `streamUrl` TEXT NOT NULL,
-                        `updatedMs` INTEGER NOT NULL,
-                        PRIMARY KEY(`sourceId`, `seriesKey`)
-                    )
-                """.trimIndent())
-            }
-        }
-
-        @Volatile
-        private var instance: IptvRoomDatabase? = null
-
-        fun getInstance(context: Context): IptvRoomDatabase {
-            return instance ?: synchronized(this) {
-                instance ?: Room.databaseBuilder(
-                    context.applicationContext,
-                    IptvRoomDatabase::class.java,
-                    DB_NAME
+    private val MIGRATION_1_2: Migration = object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `sources` (
+                    `id` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `type` TEXT NOT NULL,
+                    `serverOrM3uUrl` TEXT NOT NULL,
+                    `username` TEXT NOT NULL,
+                    `encryptedPassword` TEXT NOT NULL,
+                    `lastUpdatedMs` INTEGER NOT NULL,
+                    `liveCount` INTEGER NOT NULL,
+                    `movieCount` INTEGER NOT NULL,
+                    `seriesCount` INTEGER NOT NULL,
+                    `radioCount` INTEGER NOT NULL,
+                    `expDateSec` INTEGER NOT NULL,
+                    `accountStatus` TEXT NOT NULL,
+                    PRIMARY KEY(`id`)
                 )
-                    .addMigrations(MIGRATION_1_2)
-                    .build()
-                    .also { instance = it }
-            }
+            """.trimIndent())
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `streams` (
+                    `rowId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `sourceId` TEXT NOT NULL,
+                    `streamId` TEXT NOT NULL,
+                    `contentType` TEXT NOT NULL,
+                    `categoryId` TEXT NOT NULL,
+                    `categoryName` TEXT NOT NULL,
+                    `normalizedCategory` TEXT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `normalizedTitle` TEXT NOT NULL,
+                    `streamUrl` TEXT NOT NULL,
+                    `logoUrl` TEXT NOT NULL,
+                    `rating` TEXT NOT NULL,
+                    `plot` TEXT NOT NULL,
+                    `releaseDate` TEXT NOT NULL,
+                    `durationLabel` TEXT NOT NULL,
+                    `seriesId` TEXT NOT NULL,
+                    `seriesName` TEXT NOT NULL,
+                    `seasonNum` INTEGER NOT NULL,
+                    `episodeNum` INTEGER NOT NULL,
+                    `containerExt` TEXT NOT NULL,
+                    `httpUa` TEXT NOT NULL,
+                    `httpRef` TEXT NOT NULL
+                )
+            """.trimIndent())
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_streams_source_type_cat` ON `streams` (`sourceId`, `contentType`, `categoryName`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_streams_norm_title` ON `streams` (`sourceId`, `normalizedTitle`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_streams_norm_cat` ON `streams` (`sourceId`, `normalizedCategory`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_streams_source_item` ON `streams` (`sourceId`, `streamId`)")
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `favorites` (
+                    `sourceId` TEXT NOT NULL,
+                    `itemId` TEXT NOT NULL,
+                    `addedMs` INTEGER NOT NULL,
+                    PRIMARY KEY(`sourceId`, `itemId`)
+                )
+            """.trimIndent())
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_fav_source_added` ON `favorites` (`sourceId`, `addedMs`)")
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `recents` (
+                    `sourceId` TEXT NOT NULL,
+                    `itemId` TEXT NOT NULL,
+                    `watchedMs` INTEGER NOT NULL,
+                    PRIMARY KEY(`sourceId`, `itemId`)
+                )
+            """.trimIndent())
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_recent_source_watched` ON `recents` (`sourceId`, `watchedMs`)")
+
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `series_last_episode` (
+                    `sourceId` TEXT NOT NULL,
+                    `seriesKey` TEXT NOT NULL,
+                    `seasonNumber` INTEGER NOT NULL,
+                    `episodeNumber` INTEGER NOT NULL,
+                    `episodeTitle` TEXT NOT NULL,
+                    `streamUrl` TEXT NOT NULL,
+                    `updatedMs` INTEGER NOT NULL,
+                    PRIMARY KEY(`sourceId`, `seriesKey`)
+                )
+            """.trimIndent())
+        }
+    }
+
+    @Volatile
+    private var instance: IptvRoomDatabase? = null
+
+    fun getInstance(context: Context): IptvRoomDatabase {
+        return instance ?: synchronized(this) {
+            instance ?: Room.databaseBuilder(
+                context.applicationContext,
+                IptvRoomDatabase::class.java,
+                DB_NAME
+            )
+                .addMigrations(MIGRATION_1_2)
+                .build()
+                .also { instance = it }
         }
     }
 }

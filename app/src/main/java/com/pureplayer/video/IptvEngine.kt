@@ -1569,7 +1569,7 @@ object LegacyIptvMigrator {
                         httpUserAgent = o.optString("ua"),
                         httpReferrer = o.optString("ref")
                     )
-                    batch.add(IptvStreamEntity.fromDomain(item))
+                    batch.add(item.toEntity())
                     expectedCount++
                     if (batch.size >= chunkSize) {
                         insertBatch(ArrayList(batch))
@@ -1626,7 +1626,7 @@ object IptvRepository {
         File(context.filesDir, "iptv_cache").apply { if (!exists()) mkdirs() }
 
     private fun dao(context: Context): IptvDao =
-        IptvRoomDatabase.getInstance(context).iptvDao()
+        IptvRoomDbHolder.getInstance(context).iptvDao()
 
     /**
      * Executes [block] on Dispatchers.IO if invoked from the main thread so Room never runs on UI thread.
@@ -1693,7 +1693,7 @@ object IptvRepository {
                     }
                 }
                 if (legacySources.isNotEmpty() && roomDao.countSourcesSync() == 0) {
-                    roomDao.upsertSourcesSync(legacySources.map { IptvSourceEntity.fromDomain(it) })
+                    roomDao.upsertSourcesSync(legacySources.map { it.toEntity() })
                 }
 
                 val allPrefs = sp.all
@@ -1782,7 +1782,7 @@ object IptvRepository {
         try {
             val roomDao = dao(context)
             roomDao.clearAllSourcesSync()
-            roomDao.upsertSourcesSync(sources.map { IptvSourceEntity.fromDomain(it) })
+            roomDao.upsertSourcesSync(sources.map { it.toEntity() })
         } catch (e: Exception) {
             runCatching { Log.w("IptvRepository", "saveSourcesListIo failed: ${e.javaClass.simpleName}") }
         }
@@ -2202,7 +2202,7 @@ object IptvRepository {
 
     private fun saveStreamsToRoomIo(context: Context, sourceId: String, items: List<IptvStreamItem>) {
         try {
-            val entities = items.map { IptvStreamEntity.fromDomain(it) }
+            val entities = items.map { it.toEntity() }
             dao(context).replaceAllStreamsForSourceSync(sourceId, entities)
         } catch (e: Exception) {
             runCatching { Log.w("IptvRepository", "saveStreamsToRoomIo failed: ${e.javaClass.simpleName}") }

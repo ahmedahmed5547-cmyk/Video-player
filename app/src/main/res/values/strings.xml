@@ -441,4 +441,13 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="iptv_err_reenter_password">🔑 Please re-enter the password to refresh this source.</string>
     <string name="about_disclaimer_title">Content &amp; Legal Disclaimer</string>
     <string name="about_disclaimer_sub">This app is a media player only and does not provide any content. The user is solely responsible for the content they add.</string>
+    <string name="app_icon_section_title">Material UI App Icons</string>
+    <string name="app_icon_Sub">Choose a Material You / Material UI home screen icon</string>
+    <string name="icon_mat_you">Material You</string>
+    <string name="icon_mat_blue">Cyber Blue</string>
+    <string name="icon_mat_gold">AMOLED Gold</string>
+    <string name="icon_mat_emerald">Emerald</string>
+    <string name="icon_mat_crimson">Crimson</string>
+    <string name="icon_mat_violet">Royal Violet</string>
+    <string name="toast_app_icon_updated">App icon updated (%1$s)</string>
 </resources>

@@ -1,5 +1,6 @@
 import java.util.Properties
 import java.io.FileInputStream
+import org.gradle.api.GradleException
 
 plugins {
     id("com.android.application")
@@ -14,44 +15,64 @@ val localProps = Properties().apply {
     }
 }
 
-fun resolveSigningConfigValue(key: String, defaultVal: String): String {
-    val fromProps = localProps.getProperty(key)?.trim()
+fun resolveSigningValue(primaryKey: String, fallbackKey: String? = null): String? {
+    val fromProps = localProps.getProperty(primaryKey)?.trim()
     if (!fromProps.isNullOrEmpty()) return fromProps
-    val fromEnv = System.getenv(key)?.trim()
+    if (fallbackKey != null) {
+        val fromFallbackProps = localProps.getProperty(fallbackKey)?.trim()
+        if (!fromFallbackProps.isNullOrEmpty()) return fromFallbackProps
+    }
+    val fromEnv = System.getenv(primaryKey)?.trim()
     if (!fromEnv.isNullOrEmpty()) return fromEnv
-    return defaultVal
+    if (fallbackKey != null) {
+        val fromFallbackEnv = System.getenv(fallbackKey)?.trim()
+        if (!fromFallbackEnv.isNullOrEmpty()) return fromFallbackEnv
+    }
+    return null
 }
 
-val resolvedKeystorePath = resolveSigningConfigValue("KEYSTORE_PATH", "release.keystore")
-val resolvedKeystorePassword = resolveSigningConfigValue("KEYSTORE_PASSWORD", "2855798Aa")
-val resolvedKeyAlias = resolveSigningConfigValue("KEY_ALIAS", "pureplayer_release_key")
-val resolvedKeyPassword = resolveSigningConfigValue("KEY_PASSWORD", "2855798Aa")
+val isReleaseTaskRequested = gradle.startParameter.taskNames.any {
+    it.contains("Release", ignoreCase = true)
+}
 
-val ksFile = file(resolvedKeystorePath)
-if (!ksFile.exists()) {
-    ksFile.parentFile?.mkdirs()
-    val pb = ProcessBuilder(
-        "keytool", "-genkeypair", "-v",
-        "-keystore", ksFile.absolutePath,
-        "-alias", resolvedKeyAlias,
-        "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000",
-        "-storepass", resolvedKeystorePassword,
-        "-keypass", resolvedKeyPassword,
-        "-dname", "CN=Pure Video Player, OU=Mobile, O=PurePlayer, L=Riyadh, ST=Riyadh, C=SA"
-    )
-    pb.inheritIO().start().waitFor()
+val resolvedKeystorePath = resolveSigningValue("KEYSTORE_PATH")
+val resolvedKeystorePassword = resolveSigningValue("KEYSTORE_PASSWORD", "RESOLVED_KS_PASS")
+val resolvedKeyAlias = resolveSigningValue("KEY_ALIAS", "RESOLVED_KEY_ALIAS")
+val resolvedKeyPassword = resolveSigningValue("KEY_PASSWORD", "RESOLVED_KEY_PASS")
+
+if (isReleaseTaskRequested) {
+    val missingKeys = mutableListOf<String>()
+    if (resolvedKeystorePath.isNullOrBlank()) missingKeys.add("KEYSTORE_PATH")
+    if (resolvedKeystorePassword.isNullOrBlank()) missingKeys.add("KEYSTORE_PASSWORD / RESOLVED_KS_PASS")
+    if (resolvedKeyAlias.isNullOrBlank()) missingKeys.add("KEY_ALIAS / RESOLVED_KEY_ALIAS")
+    if (resolvedKeyPassword.isNullOrBlank()) missingKeys.add("KEY_PASSWORD / RESOLVED_KEY_PASS")
+
+    if (missingKeys.isNotEmpty()) {
+        throw GradleException(
+            "Release build aborted: Missing required signing configuration: ${missingKeys.joinToString(", ")}. " +
+                "Configure KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD in GitHub Secrets " +
+                "or provide KEYSTORE_PATH, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD in local.properties."
+        )
+    }
+
+    val ksFile = file(resolvedKeystorePath!!)
+    if (!ksFile.exists() || !ksFile.isFile || ksFile.length() == 0L) {
+        throw GradleException(
+            "Release build aborted: Keystore file does not exist or is empty at '${ksFile.absolutePath}'."
+        )
+    }
 }
 
 android {
     namespace = "com.pureplayer.video"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.pureplayer.video"
         minSdk = 24
-        targetSdk = 34
-        versionCode = 61
-        versionName = "38.05"
+        targetSdk = 35
+        versionCode = 63
+        versionName = "38.07"
 
         buildConfigField("String", "SUBDL_API_KEY", "\"\"")
 
@@ -64,8 +85,8 @@ android {
     productFlavors {
         create("github") {
             dimension = "distribution"
-            buildConfigField("boolean", "ALLOW_SELF_UPDATE", "false")
-            buildConfigField("boolean", "ENABLE_IN_APP_UPDATER", "false")
+            buildConfigField("boolean", "ALLOW_SELF_UPDATE", "true")
+            buildConfigField("boolean", "ENABLE_IN_APP_UPDATER", "true")
         }
         create("play") {
             dimension = "distribution"
@@ -76,10 +97,19 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = ksFile
-            storePassword = resolvedKeystorePassword
-            keyAlias = resolvedKeyAlias
-            keyPassword = resolvedKeyPassword
+            if (!resolvedKeystorePath.isNullOrBlank() &&
+                !resolvedKeystorePassword.isNullOrBlank() &&
+                !resolvedKeyAlias.isNullOrBlank() &&
+                !resolvedKeyPassword.isNullOrBlank()
+            ) {
+                val ksFile = file(resolvedKeystorePath)
+                if (ksFile.exists() && ksFile.isFile) {
+                    storeFile = ksFile
+                    storePassword = resolvedKeystorePassword
+                    keyAlias = resolvedKeyAlias
+                    keyPassword = resolvedKeyPassword
+                }
+            }
         }
     }
 
@@ -127,6 +157,10 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {

@@ -1,6 +1,8 @@
 package com.pureplayer.video
 
+import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageManager
 import java.util.concurrent.TimeUnit
 import androidx.core.content.ContextCompat
 import android.graphics.Typeface
@@ -277,6 +279,47 @@ object PlaybackStore {
                 nightMask != Configuration.UI_MODE_NIGHT_YES
             }
             else -> false
+        }
+    }
+
+
+    private const val KEY_APP_ICON_INDEX = "app_launcher_icon_index_v1"
+
+    val LAUNCHER_ICON_ALIASES = arrayOf(
+        "com.pureplayer.video.LauncherIconMaterialYou",
+        "com.pureplayer.video.LauncherIconCyberBlue",
+        "com.pureplayer.video.LauncherIconAmoledGold",
+        "com.pureplayer.video.LauncherIconEmerald",
+        "com.pureplayer.video.LauncherIconCrimson",
+        "com.pureplayer.video.LauncherIconViolet"
+    )
+
+    fun getAppIconIndex(context: Context): Int =
+        prefs(context).getInt(KEY_APP_ICON_INDEX, 0).coerceIn(0, LAUNCHER_ICON_ALIASES.size - 1)
+
+    fun setAppIconIndex(context: Context, index: Int) {
+        val safeIdx = index.coerceIn(0, LAUNCHER_ICON_ALIASES.size - 1)
+        prefs(context).edit().putInt(KEY_APP_ICON_INDEX, safeIdx).apply()
+        applyLauncherIcon(context, safeIdx)
+    }
+
+    fun applyLauncherIcon(context: Context, selectedIndex: Int) {
+        try {
+            val pm = context.packageManager
+            val pkg = context.packageName
+            LAUNCHER_ICON_ALIASES.forEachIndexed { idx, aliasName ->
+                val state = if (idx == selectedIndex) {
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                } else {
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                }
+                val comp = ComponentName(pkg, aliasName)
+                if (pm.getComponentEnabledSetting(comp) != state) {
+                    pm.setComponentEnabledSetting(comp, state, PackageManager.DONT_KILL_APP)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("PlaybackStore", "Failed to switch launcher icon alias: ${e.javaClass.simpleName}")
         }
     }
 
