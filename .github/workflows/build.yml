@@ -15,21 +15,29 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Auto-Unpack ZIP or Nested Folder Cleanly
+      - name: Auto-Unpack Latest ZIP or Nested Folder & Sync Version
         run: |
-          LATEST_ZIP=$(ls -v PureVideoPlayer*.zip 2>/dev/null | tail -n 1 || true)
+          DETECTED_VER=""
+          LATEST_ZIP=$(find . -maxdepth 2 -type f -name "PureVideoPlayer*.zip" | sort -V | tail -n 1 || true)
           if [ -n "$LATEST_ZIP" ]; then
-            echo "Found uploaded archive $LATEST_ZIP — wiping old app folder and extracting cleanly..."
-            rm -rf app build.gradle.kts settings.gradle.kts gradle.properties
+            echo "Found uploaded archive $LATEST_ZIP — extracting into repository root..."
+            ZVER=$(echo "$LATEST_ZIP" | grep -oE '[0-9]+\.[0-9]+' | tail -n 1 || true)
+            if [ -n "$ZVER" ]; then DETECTED_VER="$ZVER"; fi
             unzip -o "$LATEST_ZIP"
-            rm -f PureVideoPlayer*.zip
+            find . -maxdepth 2 -type f -name "PureVideoPlayer*.zip" -delete
           fi
-          NESTED_DIR=$(find . -maxdepth 2 -type d -name "PureVideoPlayer*" | head -n 1 || true)
+          NESTED_DIR=$(find . -maxdepth 2 -type d -name "PureVideoPlayer*" | sort -V | tail -n 1 || true)
           if [ -n "$NESTED_DIR" ] && [ -d "$NESTED_DIR/app" ]; then
-            echo "Found nested folder $NESTED_DIR — wiping old app folder and syncing cleanly..."
-            rm -rf app build.gradle.kts settings.gradle.kts gradle.properties
+            echo "Found nested folder $NESTED_DIR — syncing into repository root..."
+            DVER=$(echo "$NESTED_DIR" | grep -oE '[0-9]+\.[0-9]+' | tail -n 1 || true)
+            if [ -n "$DVER" ]; then DETECTED_VER="$DVER"; fi
             cp -rf "$NESTED_DIR"/* .
-            rm -rf "$NESTED_DIR"
+            find . -maxdepth 2 -type d -name "PureVideoPlayer*" -exec rm -rf {} +
+          fi
+          CODE_VER=$(grep 'versionName =' app/build.gradle.kts | head -n 1 | cut -d'"' -f2)
+          if [ -n "$DETECTED_VER" ] && [ "$DETECTED_VER" != "$CODE_VER" ]; then
+            HIGHEST_VER=$(printf "%s\n%s\n" "$DETECTED_VER" "$CODE_VER" | sort -V | tail -n 1)
+            sed -i "s/versionName = \"$CODE_VER\"/versionName = \"$HIGHEST_VER\"/g" app/build.gradle.kts
           fi
 
       - name: Set up JDK 17
@@ -53,7 +61,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           VER=$(grep 'versionName =' app/build.gradle.kts | head -n 1 | cut -d'"' -f2)
-          if [ -z "$VER" ]; then VER="38.06"; fi
+          if [ -z "$VER" ]; then VER="38.07"; fi
           echo "APP_VERSION=$VER" >> $GITHUB_ENV
           gradle assembleGithubDebug assemblePlayDebug assembleGithubRelease assemblePlayRelease bundlePlayRelease --no-daemon --stacktrace
           mkdir -p dist_outputs
