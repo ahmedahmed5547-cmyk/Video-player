@@ -53,7 +53,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           VER=$(grep 'versionName =' app/build.gradle.kts | head -n 1 | cut -d'"' -f2)
-          if [ -z "$VER" ]; then VER="83.50"; fi
+          if [ -z "$VER" ]; then VER="38.06"; fi
           echo "APP_VERSION=$VER" >> $GITHUB_ENV
           gradle assembleGithubDebug assemblePlayDebug assembleGithubRelease assemblePlayRelease bundlePlayRelease --no-daemon --stacktrace
           mkdir -p dist_outputs
