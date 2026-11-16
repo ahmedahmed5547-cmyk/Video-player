@@ -15,17 +15,19 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Auto-Unpack ZIP or Nested Folder (If Uploaded Directly)
+      - name: Auto-Unpack ZIP or Nested Folder Cleanly
         run: |
           LATEST_ZIP=$(ls -v PureVideoPlayer*.zip 2>/dev/null | tail -n 1 || true)
           if [ -n "$LATEST_ZIP" ]; then
-            echo "Found uploaded archive $LATEST_ZIP — extracting into repository root..."
+            echo "Found uploaded archive $LATEST_ZIP — wiping old app folder and extracting cleanly..."
+            rm -rf app build.gradle.kts settings.gradle.kts gradle.properties
             unzip -o "$LATEST_ZIP"
             rm -f PureVideoPlayer*.zip
           fi
           NESTED_DIR=$(find . -maxdepth 2 -type d -name "PureVideoPlayer*" | head -n 1 || true)
           if [ -n "$NESTED_DIR" ] && [ -d "$NESTED_DIR/app" ]; then
-            echo "Found nested folder $NESTED_DIR — syncing into repository root..."
+            echo "Found nested folder $NESTED_DIR — wiping old app folder and syncing cleanly..."
+            rm -rf app build.gradle.kts settings.gradle.kts gradle.properties
             cp -rf "$NESTED_DIR"/* .
             rm -rf "$NESTED_DIR"
           fi
@@ -44,47 +46,15 @@ jobs:
       - name: Run Unit Tests (GitHub & Play Flavors)
         run: gradle testGithubDebugUnitTest testPlayDebugUnitTest --no-daemon --stacktrace
 
-      - name: Verify & Decode Release Keystore
+      - name: Build Debug & Signed Release APKs + Google Play AAB
         env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::error::Missing required GitHub Secret: KEYSTORE_BASE64"
-            exit 1
-          fi
-          if [ -z "$KEYSTORE_PASSWORD" ]; then
-            echo "::error::Missing required GitHub Secret: KEYSTORE_PASSWORD"
-            exit 1
-          fi
-          if [ -z "$KEY_ALIAS" ]; then
-            echo "::error::Missing required GitHub Secret: KEY_ALIAS"
-            exit 1
-          fi
-          if [ -z "$KEY_PASSWORD" ]; then
-            echo "::error::Missing required GitHub Secret: KEY_PASSWORD"
-            exit 1
-          fi
-
-          KS_OUT="$RUNNER_TEMP/release.keystore"
-          printf '%s' "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > "$KS_OUT"
-          if [ ! -s "$KS_OUT" ]; then
-            echo "::error::Decoded keystore file is empty or invalid ($KS_OUT). Check KEYSTORE_BASE64 secret."
-            exit 1
-          fi
-
-          echo "KEYSTORE_PATH=$KS_OUT" >> "$GITHUB_ENV"
-          echo "RESOLVED_KS_PASS=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-          echo "RESOLVED_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
-          echo "RESOLVED_KEY_PASS=$KEY_PASSWORD" >> "$GITHUB_ENV"
-
-      - name: Build Debug & Signed Release APKs + Google Play AAB
-        run: |
           VER=$(grep 'versionName =' app/build.gradle.kts | head -n 1 | cut -d'"' -f2)
-          if [ -z "$VER" ]; then VER="38.05"; fi
-          echo "APP_VERSION=$VER" >> "$GITHUB_ENV"
+          if [ -z "$VER" ]; then VER="83.50"; fi
+          echo "APP_VERSION=$VER" >> $GITHUB_ENV
           gradle assembleGithubDebug assemblePlayDebug assembleGithubRelease assemblePlayRelease bundlePlayRelease --no-daemon --stacktrace
           mkdir -p dist_outputs
           find app/build/outputs/apk/github/debug -name "*.apk" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-github-debug.apk" \;
@@ -92,10 +62,6 @@ jobs:
           find app/build/outputs/apk/github/release -name "*.apk" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-github-release.apk" \;
           find app/build/outputs/apk/play/release -name "*.apk" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-play-release.apk" \;
           find app/build/outputs/bundle/playRelease -name "*.aab" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-play-release.aab" \;
-
-      - name: Cleanup Temporary Keystore
-        if: always()
-        run: rm -f "$RUNNER_TEMP/release.keystore"
 
       - name: Upload Signed Release APKs & Google Play Bundle (AAB)
         uses: actions/upload-artifact@v4
