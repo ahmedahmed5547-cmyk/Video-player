@@ -543,4 +543,12 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="changelog_v90_13_title">v%1$s — Theme Picker, PiP Audio-Only &amp; Folder Thumbnails Fix</string>
     <string name="changelog_v90_13_desc">• Redesigned Theme Picker: 3 clean brightness chips (Follow System, Light, Dark) with Luxury Dark in the theme list and safe migration for old settings.\n• Added Headphone (Audio-Only) &amp; Play/Pause action buttons directly on the floating PiP mini player, plus tap-notification-to-resume video.\n• Fixed folder 2x2 video collage thumbnails with count badge and representative video frames (internal storage &amp; SD card) with disk + memory caching.\n• Redesigned bottom navigation bar to clean Material 3 icon-only tabs (filled active / outlined inactive) with themed pill indicator, TalkBack labels, and long-press tooltips.</string>
     <string name="audio_only_mode_label">Audio Only</string>
+    <string name="appearance_seg_system">System</string>
+    <string name="appearance_seg_light">Light</string>
+    <string name="appearance_seg_dark">Dark</string>
+    <string name="audio_search_hint">Search audio…</string>
+    <string name="loading_media_label">Loading…</string>
+    <string name="audio_playlists_manage">Create / Manage Playlists</string>
+    <string name="changelog_v90_14_title">v%1$s — Persistent Bottom Bar, Smooth IPTV Switch &amp; Segmented Theme Control</string>
+    <string name="changelog_v90_14_desc">• Fixed persistent bottom navigation bar across all 4 tabs (Video, Audio, Private, IPTV) with in-place Audio tab, per-tab scroll/folder/search preservation, and tap-active-tab to scroll to top.\n• Eliminated Video-to-IPTV stutter by caching IPTV sources off the main thread, cancelling pending video thumbnail decoders on leave, and deferring IPTV auto-refresh until after the first frame.\n• Replaced Theme Picker top chips with a uniform Material 3 Segmented Control (System / Light / Dark) with crisp vector icons.\n• Removed duplicated version badge from the Changelog top header while keeping versions inside each release entry.</string>
 </resources>

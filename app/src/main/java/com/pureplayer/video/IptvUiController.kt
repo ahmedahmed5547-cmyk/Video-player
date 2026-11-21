@@ -109,7 +109,7 @@ internal fun MainActivity.renderIptvCurrentLevel() {
     adapter.isVaultMode = false
     updateRecyclerLayoutManager()
 
-    val sources = IptvRepository.getSources(this)
+    val sources = getCachedOrLoadIptvSources()
     if (activeIptvSource != null) {
         activeIptvSource = sources.find { it.id == activeIptvSource?.id }
     }
@@ -131,7 +131,7 @@ internal fun MainActivity.renderIptvCurrentLevel() {
                 subtitle = getString(R.string.iptv_add_source_subtitle)
             )
         )
-        adapter.submitIptvList(initialCards)
+        adapter.submitIptvList(initialCards, resetAnimation = false)
         return
     }
 
@@ -152,7 +152,7 @@ internal fun MainActivity.renderIptvCurrentLevel() {
                     subtitle = getString(R.string.iptv_add_source_subtitle)
                 )
             )
-            adapter.submitIptvList(list)
+            adapter.submitIptvList(list, resetAnimation = false)
         }
         1 -> {
             // Level 1: IPTV Smarters Pro Dashboard for Active Source (Shows ONLY non-empty sections + Favorites & Continue Watching!)

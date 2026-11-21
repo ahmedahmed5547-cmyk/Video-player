@@ -323,7 +323,8 @@ internal fun MainActivity.showPremiumMenuDialog(
     headerIcon: String,
     title: String,
     subtitle: String?,
-    items: List<PremiumMenuItem>
+    items: List<PremiumMenuItem>,
+    showHeaderVersionBadge: Boolean = true
 ) {
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
@@ -420,7 +421,9 @@ internal fun MainActivity.showPremiumMenuDialog(
             setStroke(dp(1), Color.argb(95, Color.red(accent), Color.green(accent), Color.blue(accent)))
         }
     }
-    titlePillRow.addView(tvVersionPill)
+    if (showHeaderVersionBadge) {
+        titlePillRow.addView(tvVersionPill)
+    }
     headerTextCol.addView(titlePillRow)
 
     if (!subtitle.isNullOrBlank()) {

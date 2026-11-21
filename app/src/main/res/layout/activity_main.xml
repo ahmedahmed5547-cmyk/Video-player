@@ -425,6 +425,68 @@
         app:layout_constraintEnd_toEndOf="parent" />
 
 
+        <!-- In-Place Audio Library Tab (hosted above persistent bottomNavBar so bottom bar never hides or flickers) -->
+    <LinearLayout
+        android:id="@+id/audioTabContainer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        app:layout_constraintBottom_toTopOf="@id/bottomNavBar"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topBar">
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:layout_marginBottom="8dp">
+
+            <LinearLayout
+                android:id="@+id/audioSubTabsRow"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
+        <EditText
+            android:id="@+id/etAudioTabSearch"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:layout_marginBottom="8dp"
+            android:hint="@string/audio_search_hint"
+            android:imeOptions="actionSearch"
+            android:inputType="text"
+            android:maxLines="1"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvAudioTabStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:padding="24dp"
+            android:textSize="14.5sp"
+            android:visibility="gone" />
+
+        <ListView
+            android:id="@+id/audioTabListView"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:divider="@android:color/transparent"
+            android:dividerHeight="6dp"
+            android:clipToPadding="false"
+            android:paddingBottom="72dp" />
+    </LinearLayout>
+
     <!-- Persistent Background Audio / Audio-Only Mini Player Bar -->
     <LinearLayout
         android:id="@+id/miniAudioPlayerBar"

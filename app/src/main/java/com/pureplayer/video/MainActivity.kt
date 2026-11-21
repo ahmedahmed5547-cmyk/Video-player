@@ -27,6 +27,7 @@ import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Parcelable
 import android.os.Environment
 import android.os.CancellationSignal
 import android.provider.MediaStore
@@ -127,6 +128,13 @@ class MainActivity : AppCompatActivity() {
     internal var isInVaultTab = false
     internal var isInIptvTab = false
     private var isAudioTabHighlighted = false
+    private val tabScrollStates = mutableMapOf<Int, Parcelable?>()
+    private val tabSearchQueries = mutableMapOf<Int, String>()
+    private var savedVideoFolder: VideoFolder? = null
+    private var savedVaultFolder: VideoFolder? = null
+    private var activeAudioSubTab: Int = 0
+    @Volatile
+    internal var cachedIptvSources: List<IptvSource>? = null
     private var lastAnimatedBottomTab = -1
     internal var isVaultSessionUnlocked = false
     internal var currentIptvCategoryOffset = 0
@@ -286,6 +294,12 @@ class MainActivity : AppCompatActivity() {
         setupInstantDebouncedSearchFlow()
         applyUserTheme()
         observeVideoLibraryState()
+        binding.recyclerView.setHasFixedSize(true)
+        binding.recyclerView.setItemViewCacheSize(12)
+        lifecycleScope.launch(Dispatchers.IO) {
+            cachedIptvSources = IptvRepository.getSources(this@MainActivity)
+        }
+        setupInPlaceAudioTabUi()
         observeBackgroundAudioMiniPlayer()
         handleNotificationReopenIntent(intent)
         checkPermissionAndLoad()
@@ -1253,27 +1267,50 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.tabVideos.setOnClickListener {
-            isAudioTabHighlighted = false
-            if (currentMainTab != 0) {
+            if (currentMainTab != 0 || isAudioTabHighlighted) {
+                saveCurrentTabUiState()
                 if (currentMainTab == 2) {
                     iptvSessionSyncGuard.onLeaveMainIptvSection()
                     setSubtleIptvSyncIndicatorVisible(false)
                 }
+                isAudioTabHighlighted = false
+                binding.audioTabContainer.visibility = View.GONE
+                binding.swipeRefresh.visibility = View.VISIBLE
                 currentMainTab = 0
                 isInVaultTab = false
                 isInIptvTab = false
                 binding.swipeRefresh.isEnabled = true
-                if (isSearchActive) closeSearchBar()
+                restoreTabSearchState(0)
                 updateBottomTabsVisualState()
-                applyFolderVisibilityAndRefreshUI()
+                if (savedVideoFolder != null) {
+                    openFolder(savedVideoFolder!!)
+                } else {
+                    applyFolderVisibilityAndRefreshUI()
+                }
+                restoreTabScrollState(0)
                 updateResumeLastFab()
             } else if (isShowingFolderVideos) {
+                savedVideoFolder = null
                 showFoldersList()
+            } else {
+                binding.recyclerView.smoothScrollToPosition(0)
             }
         }
 
         binding.tabVault.setOnClickListener {
+            if (currentMainTab == 1 && isVaultSessionUnlocked && !isAudioTabHighlighted) {
+                if (isShowingFolderVideos) {
+                    savedVaultFolder = null
+                    showFoldersList()
+                } else {
+                    binding.recyclerView.smoothScrollToPosition(0)
+                }
+                return@setOnClickListener
+            }
+            saveCurrentTabUiState()
             isAudioTabHighlighted = false
+            binding.audioTabContainer.visibility = View.GONE
+            binding.swipeRefresh.visibility = View.VISIBLE
             if (currentMainTab == 1 && isVaultSessionUnlocked) {
                 if (isShowingFolderVideos) {
                     showFoldersList()
@@ -1335,21 +1372,32 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.tabIptv.setOnClickListener {
-            isAudioTabHighlighted = false
-            if (currentMainTab != 2) {
+            if (currentMainTab != 2 || isAudioTabHighlighted) {
+                saveCurrentTabUiState()
+                VideoThumbnailLoader.cancelAllPending()
+                isAudioTabHighlighted = false
+                binding.audioTabContainer.visibility = View.GONE
+                binding.swipeRefresh.visibility = View.VISIBLE
                 currentMainTab = 2
                 isInVaultTab = false
                 isInIptvTab = true
-                if (isSearchActive) closeSearchBar()
+                restoreTabSearchState(2)
                 updateBottomTabsVisualState()
                 renderIptvCurrentLevel()
-                triggerAutoRefreshOnEnteringIptvSection()
+                restoreTabScrollState(2)
                 updateResumeLastFab()
+                binding.recyclerView.post {
+                    if (currentMainTab == 2 && !isFinishing) {
+                        triggerAutoRefreshOnEnteringIptvSection()
+                    }
+                }
             } else if (iptvNavLevel > 0) {
                 iptvNavLevel = 0
                 activeIptvContentType = null
                 iptvSessionSyncGuard.onInternalSectionNavigation(iptvNavLevel, activeIptvContentType, activeIptvCategoryId, iptvSectionSubTab)
                 renderIptvCurrentLevel()
+            } else {
+                binding.recyclerView.smoothScrollToPosition(0)
             }
         }
 
@@ -1365,9 +1413,26 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.tabAudio.setOnClickListener {
+            if (isAudioTabHighlighted) {
+                binding.audioTabListView.smoothScrollToPosition(0)
+                return@setOnClickListener
+            }
+            saveCurrentTabUiState()
+            VideoThumbnailLoader.cancelAllPending()
+            if (currentMainTab == 2) {
+                iptvSessionSyncGuard.onLeaveMainIptvSection()
+                setSubtleIptvSyncIndicatorVisible(false)
+            }
             isAudioTabHighlighted = true
+            binding.iptvHeaderBar.visibility = View.GONE
+            binding.emptyLayout.visibility = View.GONE
+            binding.swipeRefresh.visibility = View.GONE
+            binding.fabResumeLast.visibility = View.GONE
+            binding.audioTabContainer.visibility = View.VISIBLE
+            binding.tvToolbarTitle.text = getString(R.string.tab_audio)
+            binding.btnBackFolder.visibility = View.GONE
             updateBottomTabsVisualState()
-            openVlcStyleAudioLibraryDialog()
+            showInPlaceAudioLibraryTab()
         }
 
         binding.btnMiniPlayPause.setOnClickListener {
@@ -1866,6 +1931,281 @@ class MainActivity : AppCompatActivity() {
             val title = st.title
             VexoPlaybackService.sendAction(this, VexoPlaybackService.ACTION_STOP_AND_CLOSE)
             launchPlayer(uri, title, pos)
+        }
+    }
+
+    
+    internal fun getCachedOrLoadIptvSources(): List<IptvSource> {
+        val cached = cachedIptvSources
+        if (cached != null) return cached
+        val loaded = IptvRepository.getSources(this)
+        cachedIptvSources = loaded
+        return loaded
+    }
+
+    internal fun invalidateIptvSourcesCache() {
+        cachedIptvSources = null
+        lifecycleScope.launch(Dispatchers.IO) {
+            cachedIptvSources = IptvRepository.getSources(this@MainActivity)
+        }
+    }
+
+    private fun saveCurrentTabUiState() {
+        val activeKey = if (isAudioTabHighlighted) 3 else currentMainTab
+        if (activeKey != 3) {
+            tabScrollStates[activeKey] = binding.recyclerView.layoutManager?.onSaveInstanceState()
+            tabSearchQueries[activeKey] = if (isSearchActive) binding.etSearchVideos.text?.toString().orEmpty() else ""
+        }
+        if (activeKey == 0) {
+            savedVideoFolder = if (isShowingFolderVideos) currentOpenedFolder else null
+        } else if (activeKey == 1) {
+            savedVaultFolder = if (isShowingFolderVideos) currentOpenedFolder else null
+        }
+    }
+
+    private fun restoreTabScrollState(tabKey: Int) {
+        val saved = tabScrollStates[tabKey] ?: return
+        binding.recyclerView.post {
+            binding.recyclerView.layoutManager?.onRestoreInstanceState(saved)
+        }
+    }
+
+    private fun restoreTabSearchState(tabKey: Int) {
+        val savedQ = tabSearchQueries[tabKey].orEmpty()
+        if (savedQ.isNotEmpty()) {
+            if (!isSearchActive) openSearchBar()
+            if (binding.etSearchVideos.text?.toString() != savedQ) {
+                binding.etSearchVideos.setText(savedQ)
+            }
+        } else if (isSearchActive) {
+            closeSearchBar()
+        }
+    }
+
+    private fun setupInPlaceAudioTabUi() {
+        val accent = PlaybackStore.getAccentColor(this)
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
+        val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+
+        binding.etAudioTabSearch.setTextColor(primaryText)
+        binding.etAudioTabSearch.setHintTextColor(secondaryText)
+        binding.etAudioTabSearch.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(12).toFloat()
+            setColor(surface)
+            setStroke(dp(1), Color.argb(60, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+        binding.etAudioTabSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                if (isAudioTabHighlighted) renderInPlaceAudioContent()
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+        val subLabels = listOf(
+            getString(R.string.audio_sec_tracks),
+            getString(R.string.audio_sec_artists),
+            getString(R.string.audio_sec_albums),
+            getString(R.string.audio_sec_genres),
+            getString(R.string.audio_sec_playlists)
+        )
+        binding.audioSubTabsRow.removeAllViews()
+        subLabels.forEachIndexed { idx, title ->
+            val chip = TextView(this).apply {
+                text = title
+                textSize = 12.5f
+                gravity = Gravity.CENTER
+                setPadding(dp(14), dp(6), dp(14), dp(6))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                ).apply { marginEnd = dp(8) }
+                setOnClickListener {
+                    activeAudioSubTab = idx
+                    updateAudioSubTabChips()
+                    renderInPlaceAudioContent()
+                }
+            }
+            binding.audioSubTabsRow.addView(chip)
+        }
+        updateAudioSubTabChips()
+
+        lifecycleScope.launch {
+            audioLibraryViewModel.uiState.collect {
+                if (isAudioTabHighlighted) renderInPlaceAudioContent()
+            }
+        }
+    }
+
+    private fun updateAudioSubTabChips() {
+        val accent = PlaybackStore.getAccentColor(this)
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
+        val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        for (i in 0 until binding.audioSubTabsRow.childCount) {
+            val tv = binding.audioSubTabsRow.getChildAt(i) as? TextView ?: continue
+            val sel = (i == activeAudioSubTab)
+            tv.setTextColor(if (sel) primaryText else secondaryText)
+            tv.setTypeface(null, if (sel) Typeface.BOLD else Typeface.NORMAL)
+            tv.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(18).toFloat()
+                setColor(if (sel) Color.argb(46, Color.red(accent), Color.green(accent), Color.blue(accent)) else surface)
+                setStroke(dp(1), if (sel) accent else Color.parseColor("#24FFFFFF"))
+            }
+        }
+    }
+
+    private fun showInPlaceAudioLibraryTab() {
+        updateAudioSubTabChips()
+        if (!audioLibraryViewModel.hasAudioPermission()) {
+            val perms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                arrayOf(Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+            audioPermissionLauncher.launch(perms)
+            binding.tvAudioTabStatus.text = getString(R.string.permission_needed)
+            binding.tvAudioTabStatus.visibility = View.VISIBLE
+            binding.audioTabListView.visibility = View.GONE
+            return
+        }
+        if (audioLibraryViewModel.uiState.value !is AudioLibraryUiState.Success) {
+            audioLibraryViewModel.refreshAudioLibrary()
+        }
+        renderInPlaceAudioContent()
+    }
+
+    private fun renderInPlaceAudioContent() {
+        val state = audioLibraryViewModel.uiState.value
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
+        val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val accent = PlaybackStore.getAccentColor(this)
+
+        binding.tvAudioTabStatus.setTextColor(secondaryText)
+
+        when (state) {
+            is AudioLibraryUiState.Loading -> {
+                binding.tvAudioTabStatus.text = getString(R.string.loading_media_label)
+                binding.tvAudioTabStatus.visibility = View.VISIBLE
+                binding.audioTabListView.visibility = View.GONE
+            }
+            is AudioLibraryUiState.Empty -> {
+                binding.tvAudioTabStatus.text = getString(R.string.audio_empty_msg)
+                binding.tvAudioTabStatus.visibility = View.VISIBLE
+                binding.audioTabListView.visibility = View.GONE
+            }
+            is AudioLibraryUiState.PermissionDenied -> {
+                binding.tvAudioTabStatus.text = getString(R.string.permission_needed)
+                binding.tvAudioTabStatus.visibility = View.VISIBLE
+                binding.audioTabListView.visibility = View.GONE
+            }
+            is AudioLibraryUiState.Success -> {
+                val q = binding.etAudioTabSearch.text?.toString().orEmpty().trim().lowercase()
+                val rows = mutableListOf<Triple<String, String, () -> Unit>>()
+                when (activeAudioSubTab) {
+                    0 -> {
+                        val filtered = state.tracks.filter {
+                            q.isEmpty() || it.title.lowercase().contains(q) || it.artist.lowercase().contains(q) || it.album.lowercase().contains(q)
+                        }
+                        filtered.forEachIndexed { idx, tr ->
+                            rows.add(Triple("🎵  ${tr.title}", "${tr.artist} • ${tr.album}", {
+                                VexoPlaybackService.playAudioQueue(this, filtered, idx)
+                            }))
+                        }
+                    }
+                    1 -> {
+                        val filtered = state.artists.filter { q.isEmpty() || it.name.lowercase().contains(q) }
+                        filtered.forEach { ar ->
+                            rows.add(Triple("🎤  ${ar.name}", "${ar.tracks.size} tracks", {
+                                showAudioTracksListDialog(ar.name, ar.tracks)
+                            }))
+                        }
+                    }
+                    2 -> {
+                        val filtered = state.albums.filter {
+                            q.isEmpty() || it.title.lowercase().contains(q) || it.artist.lowercase().contains(q)
+                        }
+                        filtered.forEach { al ->
+                            rows.add(Triple("💿  ${al.title}", "${al.artist} • ${al.tracks.size} tracks", {
+                                showAudioTracksListDialog(al.title, al.tracks)
+                            }))
+                        }
+                    }
+                    3 -> {
+                        val filtered = state.genres.filter { q.isEmpty() || it.name.lowercase().contains(q) }
+                        filtered.forEach { gr ->
+                            rows.add(Triple("🎼  ${gr.name}", "${gr.tracks.size} tracks", {
+                                showAudioTracksListDialog(gr.name, gr.tracks)
+                            }))
+                        }
+                    }
+                    else -> {
+                        rows.add(Triple("➕  ${getString(R.string.audio_playlists_manage)}", getString(R.string.audio_sec_playlists_sub), {
+                            showAudioPlaylistsManagerDialog(state.tracks)
+                        }))
+                        val filtered = state.playlists.filter { q.isEmpty() || it.name.lowercase().contains(q) }
+                        filtered.forEach { pl ->
+                            rows.add(Triple("📑  ${pl.name}", "${pl.trackCount} tracks", {
+                                showAudioPlaylistsManagerDialog(state.tracks)
+                            }))
+                        }
+                    }
+                }
+
+                if (rows.isEmpty()) {
+                    binding.tvAudioTabStatus.text = getString(R.string.audio_empty_msg)
+                    binding.tvAudioTabStatus.visibility = View.VISIBLE
+                    binding.audioTabListView.visibility = View.GONE
+                } else {
+                    binding.tvAudioTabStatus.visibility = View.GONE
+                    binding.audioTabListView.visibility = View.VISIBLE
+                    binding.audioTabListView.adapter = object : android.widget.BaseAdapter() {
+                        override fun getCount(): Int = rows.size
+                        override fun getItem(position: Int): Any = rows[position]
+                        override fun getItemId(position: Int): Long = position.toLong()
+                        override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+                            val rowLayout = (convertView as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
+                                orientation = LinearLayout.VERTICAL
+                                setPadding(dp(14), dp(12), dp(14), dp(12))
+                                addView(TextView(this@MainActivity).apply {
+                                    tag = "title"
+                                    textSize = 14.5f
+                                    maxLines = 1
+                                    ellipsize = android.text.TextUtils.TruncateAt.END
+                                    setTypeface(null, Typeface.BOLD)
+                                })
+                                addView(TextView(this@MainActivity).apply {
+                                    tag = "sub"
+                                    textSize = 12f
+                                    maxLines = 1
+                                    ellipsize = android.text.TextUtils.TruncateAt.END
+                                    setPadding(0, dp(2), 0, 0)
+                                })
+                            }
+                            rowLayout.background = GradientDrawable().apply {
+                                shape = GradientDrawable.RECTANGLE
+                                cornerRadius = dp(12).toFloat()
+                                setColor(surface)
+                                setStroke(dp(1), Color.argb(36, Color.red(accent), Color.green(accent), Color.blue(accent)))
+                            }
+                            val tvT = rowLayout.findViewWithTag<TextView>("title")
+                            val tvS = rowLayout.findViewWithTag<TextView>("sub")
+                            tvT.text = rows[position].first
+                            tvT.setTextColor(primaryText)
+                            tvS.text = rows[position].second
+                            tvS.setTextColor(secondaryText)
+                            return rowLayout
+                        }
+                    }
+                    binding.audioTabListView.setOnItemClickListener { _, _, position, _ ->
+                        rows.getOrNull(position)?.third?.invoke()
+                    }
+                }
+            }
         }
     }
 

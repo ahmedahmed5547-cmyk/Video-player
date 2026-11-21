@@ -1,3 +1,9 @@
+## v90.14 (2026-11-21)
+- **Persistent Bottom Navigation Bar**: Hosted Audio Library in-place above the fixed bottom bar so all 4 tabs (Video, Audio, Private, IPTV) share one persistent bar with zero flicker or recreation, per-tab scroll/folder/search state preservation, and re-tap to scroll to top or pop to root.
+- **Smooth Tab Switching (Video -> IPTV)**: Eliminated main-thread stutter by caching IPTV sources off the main thread, cancelling pending `VideoThumbnailLoader` jobs on tab leave, disabling reset entrance animations on tab switch, enabling `setHasFixedSize(true)`, and deferring IPTV auto-refresh until after the first frame.
+- **Uniform Theme Picker Segmented Control**: Replaced uneven top chips with a uniform 48dp Material 3 Segmented Control (`System` | `Light` | `Dark`) with crisp vector icons, single-line auto-sizing labels, and full Material You / Luxury Dark / RTL support.
+- **Changelog Header Cleanup**: Removed the duplicated top version pill on the Changelog screen while keeping version numbers inside each entry.
+
 ## v90.13 (2026-11-21)
 - **Icon-Only Material 3 Bottom Navigation**: Replaced truncated bottom-bar text labels with consistent 24dp filled/outlined Material vector icons (Video, Audio, Private, IPTV), themed pill indicator with smooth selection animation, >=48dp touch targets, TalkBack contentDescriptions, and long-press tooltips.
 - **Theme Picker Redesign**: Top row now has 3 clean brightness options (Follow System, Light Mode, Dark Mode). Moved Luxury Dark into the theme palette below, enforced Android 12+ guard on Material You, kept dark-only themes coherent in light mode, and added safe legacy preference migration.

@@ -1077,10 +1077,18 @@ internal fun MainActivity.showChangelogPage() {
         ChangelogReleaseEntry(
             version = verName,
             date = "2026-11-21",
-            iconEmoji = "🔧",
-            title = getString(R.string.changelog_v90_13_title, verName),
-            description = getString(R.string.changelog_v90_13_desc),
+            iconEmoji = "⚡",
+            title = getString(R.string.changelog_v90_14_title, verName),
+            description = getString(R.string.changelog_v90_14_desc),
             isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.13",
+            date = "2026-11-21",
+            iconEmoji = "🔧",
+            title = getString(R.string.changelog_v90_13_title, "90.13"),
+            description = getString(R.string.changelog_v90_13_desc),
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.12",
@@ -1156,7 +1164,8 @@ internal fun MainActivity.showChangelogPage() {
         headerIcon = "📋",
         title = getString(R.string.about_changelog_title),
         subtitle = "${getString(R.string.app_name)} • Latest 4 Releases",
-        items = items
+        items = items,
+        showHeaderVersionBadge = false
     )
 }
 
@@ -1343,19 +1352,25 @@ internal fun MainActivity.showThemeSelectorDialog() {
 
     val modeRow = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        clipToOutline = true
+        outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
+            dp(48)
         ).apply {
             bottomMargin = dp(14)
         }
     }
     val modeOptions = listOf(
-        Triple(PlaybackStore.APPEARANCE_SYSTEM, "📱", getString(R.string.appearance_mode_follow_system)),
-        Triple(PlaybackStore.APPEARANCE_LIGHT, "☀️", getString(R.string.appearance_mode_light)),
-        Triple(PlaybackStore.APPEARANCE_DARK, "🌙", getString(R.string.appearance_mode_dark))
+        Triple(PlaybackStore.APPEARANCE_SYSTEM, R.drawable.ic_mode_system, getString(R.string.appearance_seg_system)),
+        Triple(PlaybackStore.APPEARANCE_LIGHT, R.drawable.ic_mode_light, getString(R.string.appearance_seg_light)),
+        Triple(PlaybackStore.APPEARANCE_DARK, R.drawable.ic_mode_dark, getString(R.string.appearance_seg_dark))
     )
-    val modeButtons = mutableListOf<TextView>()
+    val modeSegments = mutableListOf<LinearLayout>()
+    val modeSegmentIcons = mutableListOf<ImageView>()
+    val modeSegmentLabels = mutableListOf<TextView>()
+    val modeDividers = mutableListOf<View>()
 
     // Section 2: Accent Color Presets
     val tvAccentSec = TextView(this).apply {
@@ -1388,21 +1403,26 @@ internal fun MainActivity.showThemeSelectorDialog() {
         tvAccentSec.setTextColor(activeAccent)
         (topPill.background as? GradientDrawable)?.setColor(activeAccent)
 
-        modeButtons.forEachIndexed { mIdx, btn ->
+        val segStrokeColor = if (isLight) Color.parseColor("#CBD5E1") else Color.parseColor("#2AFFFFFF")
+        modeRow.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(14).toFloat()
+            setColor(activeBg)
+            setStroke(dp(1), segStrokeColor)
+        }
+        modeDividers.forEach { div -> div.setBackgroundColor(segStrokeColor) }
+        val secondaryTint = PlaybackStore.getSecondaryTextColor(this)
+        modeSegments.forEachIndexed { mIdx, seg ->
             val isModeSelected = (modeOptions[mIdx].first == activeMode)
-            btn.setTextColor(if (isModeSelected) primaryText else PlaybackStore.getSecondaryTextColor(this))
-            btn.background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dp(13).toFloat()
-                setColor(
-                    if (isModeSelected) Color.argb(42, Color.red(activeAccent), Color.green(activeAccent), Color.blue(activeAccent))
-                    else activeBg
-                )
-                setStroke(
-                    dp(if (isModeSelected) 2 else 1),
-                    if (isModeSelected) activeAccent else if (isLight) Color.parseColor("#CBD5E1") else Color.parseColor("#22FFFFFF")
-                )
-            }
+            seg.isSelected = isModeSelected
+            seg.setBackgroundColor(
+                if (isModeSelected) Color.argb(48, Color.red(activeAccent), Color.green(activeAccent), Color.blue(activeAccent))
+                else Color.TRANSPARENT
+            )
+            val fgColor = if (isModeSelected) activeAccent else secondaryTint
+            modeSegmentIcons[mIdx].imageTintList = ColorStateList.valueOf(fgColor)
+            modeSegmentLabels[mIdx].setTextColor(if (isModeSelected) primaryText else secondaryTint)
+            modeSegmentLabels[mIdx].setTypeface(null, if (isModeSelected) Typeface.BOLD else Typeface.NORMAL)
         }
 
         themes.forEachIndexed { idx, opt ->
@@ -1444,16 +1464,15 @@ internal fun MainActivity.showThemeSelectorDialog() {
         }
     }
 
-    modeOptions.forEachIndexed { mIdx, (modeCode, emoji, label) ->
-        val btn = TextView(this).apply {
-            text = "$emoji  $label"
+    modeOptions.forEachIndexed { mIdx, (modeCode, iconRes, label) ->
+        val seg = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            textSize = 12f
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(dp(8), dp(10), dp(8), dp(10))
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginEnd = if (mIdx < modeOptions.lastIndex) dp(8) else 0
-            }
+            isClickable = true
+            isFocusable = true
+            contentDescription = label
+            setPadding(dp(6), 0, dp(6), 0)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
             setOnClickListener {
                 selectedMode = modeCode
                 PlaybackStore.setAppearanceMode(hostActivity, modeCode)
@@ -1461,8 +1480,40 @@ internal fun MainActivity.showThemeSelectorDialog() {
                 applyUserTheme(animated = true)
             }
         }
-        modeButtons.add(btn)
-        modeRow.addView(btn)
+        val ivIcon = ImageView(this).apply {
+            setImageResource(iconRes)
+            layoutParams = LinearLayout.LayoutParams(dp(16), dp(16)).apply {
+                marginEnd = dp(6)
+            }
+        }
+        val tvLbl = TextView(this).apply {
+            text = label
+            gravity = Gravity.CENTER_VERTICAL
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
+                this, 10, 13, 1, TypedValue.COMPLEX_UNIT_SP
+            )
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+        seg.addView(ivIcon)
+        seg.addView(tvLbl)
+        modeSegments.add(seg)
+        modeSegmentIcons.add(ivIcon)
+        modeSegmentLabels.add(tvLbl)
+        modeRow.addView(seg)
+
+        if (mIdx < modeOptions.lastIndex) {
+            val div = View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(1), ViewGroup.LayoutParams.MATCH_PARENT)
+            }
+            modeDividers.add(div)
+            modeRow.addView(div)
+        }
     }
     cardContainer.addView(modeRow)
     cardContainer.addView(tvAccentSec)
