@@ -46,7 +46,6 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -143,6 +142,31 @@ internal fun MainActivity.showResumeBehaviorSettingsDialog() {
 }
 
 
+internal fun MainActivity.applySortAndLayoutChangeToActiveScreen() {
+    updateRecyclerLayoutManager()
+    if (currentMainTab == 2) {
+        if (iptvNavLevel == 3 && currentIptvPagedList.isNotEmpty()) {
+            val sortMode = PlaybackStore.getSortOrderMode(this)
+            val streamsOnly = currentIptvPagedList.filterIsInstance<IptvStreamItem>()
+            if (streamsOnly.size == currentIptvPagedList.size) {
+                val sorted = when (sortMode) {
+                    1 -> streamsOnly.reversed()
+                    2 -> streamsOnly.sortedBy { it.title.lowercase(Locale.getDefault()) }
+                    3 -> streamsOnly.sortedByDescending { it.title.lowercase(Locale.getDefault()) }
+                    else -> streamsOnly
+                }
+                currentIptvPagedList.clear()
+                currentIptvPagedList.addAll(sorted)
+                adapter.submitIptvList(ArrayList(currentIptvPagedList), resetAnimation = false)
+                return
+            }
+        }
+        renderIptvCurrentLevel()
+    } else {
+        applyFolderVisibilityAndRefreshUI()
+    }
+}
+
 internal fun MainActivity.showSortAndLayoutDialog() {
     val isGrid = PlaybackStore.isGridLayoutEnabled(this)
     val sortMode = PlaybackStore.getSortOrderMode(this)
@@ -158,7 +182,7 @@ internal fun MainActivity.showSortAndLayoutDialog() {
             onClick = {
                 PlaybackStore.setGridLayoutEnabled(this, false)
                 updateRecyclerLayoutManager()
-                applyFolderVisibilityAndRefreshUI()
+                applySortAndLayoutChangeToActiveScreen()
                 popSettingsBackStack()
             }
         ),
@@ -170,7 +194,7 @@ internal fun MainActivity.showSortAndLayoutDialog() {
             onClick = {
                 PlaybackStore.setGridLayoutEnabled(this, true)
                 updateRecyclerLayoutManager()
-                applyFolderVisibilityAndRefreshUI()
+                applySortAndLayoutChangeToActiveScreen()
                 popSettingsBackStack()
             }
         ),
@@ -183,7 +207,7 @@ internal fun MainActivity.showSortAndLayoutDialog() {
             sectionHeader = getString(R.string.section_sort_by),
             onClick = {
                 PlaybackStore.setSortOrderMode(this, 0)
-                applyFolderVisibilityAndRefreshUI()
+                applySortAndLayoutChangeToActiveScreen()
                 popSettingsBackStack()
             }
         ),
@@ -194,7 +218,7 @@ internal fun MainActivity.showSortAndLayoutDialog() {
             isAccentHighlighted = (sortMode == 1),
             onClick = {
                 PlaybackStore.setSortOrderMode(this, 1)
-                applyFolderVisibilityAndRefreshUI()
+                applySortAndLayoutChangeToActiveScreen()
                 popSettingsBackStack()
             }
         ),
@@ -205,7 +229,7 @@ internal fun MainActivity.showSortAndLayoutDialog() {
             isAccentHighlighted = (sortMode == 2),
             onClick = {
                 PlaybackStore.setSortOrderMode(this, 2)
-                applyFolderVisibilityAndRefreshUI()
+                applySortAndLayoutChangeToActiveScreen()
                 popSettingsBackStack()
             }
         ),
@@ -216,7 +240,7 @@ internal fun MainActivity.showSortAndLayoutDialog() {
             isAccentHighlighted = (sortMode == 3),
             onClick = {
                 PlaybackStore.setSortOrderMode(this, 3)
-                applyFolderVisibilityAndRefreshUI()
+                applySortAndLayoutChangeToActiveScreen()
                 popSettingsBackStack()
             }
         ),
@@ -227,7 +251,7 @@ internal fun MainActivity.showSortAndLayoutDialog() {
             isAccentHighlighted = (sortMode == 4),
             onClick = {
                 PlaybackStore.setSortOrderMode(this, 4)
-                applyFolderVisibilityAndRefreshUI()
+                applySortAndLayoutChangeToActiveScreen()
                 popSettingsBackStack()
             }
         ),
@@ -238,7 +262,7 @@ internal fun MainActivity.showSortAndLayoutDialog() {
             isAccentHighlighted = (sortMode == 5),
             onClick = {
                 PlaybackStore.setSortOrderMode(this, 5)
-                applyFolderVisibilityAndRefreshUI()
+                applySortAndLayoutChangeToActiveScreen()
                 popSettingsBackStack()
             }
         ),
@@ -249,7 +273,7 @@ internal fun MainActivity.showSortAndLayoutDialog() {
             isAccentHighlighted = (sortMode == 6),
             onClick = {
                 PlaybackStore.setSortOrderMode(this, 6)
-                applyFolderVisibilityAndRefreshUI()
+                applySortAndLayoutChangeToActiveScreen()
                 popSettingsBackStack()
             }
         )
@@ -321,20 +345,20 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
         getString(R.string.theme_violet),
         getString(R.string.theme_material_you),
         getString(R.string.theme_sunset_coral),
-        getString(R.string.theme_teal_aqua)
+        getString(R.string.theme_teal_aqua),
+        getString(R.string.theme_luxury_gold)
     )
     val currentThemeName = themeNames[PlaybackStore.getThemeIndex(this).coerceIn(0, themeNames.size - 1)]
     val langTag = PlaybackStore.getAppLanguageTag(this)
     val langSub = getAppLanguageDisplayName(langTag)
-    val isGrid = PlaybackStore.isGridLayoutEnabled(this)
-    val layoutLabel = if (isGrid) getString(R.string.layout_mode_grid) else getString(R.string.layout_mode_list)
+
 
     val decoderShort = when (PlaybackStore.getDecoderModeIndex(this)) {
         1 -> "HW"
         2 -> "SW"
         else -> "HW+"
     }
-    val pipBadge = if (PlaybackStore.isAutoPipEnabled(this)) "Auto-PiP ✅" else "Auto-PiP 🚫"
+    val pipBadge = if (PlaybackStore.isAutoPipEnabled(this)) "Auto-PiP On" else "Auto-PiP Off"
     val subLangs = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(" → ") { it.uppercase() }
     val subSize = PlaybackStore.getSubSizeSp(this).toInt()
 
@@ -346,6 +370,8 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
             subtitle = "Decoder: $decoderShort • $pipBadge",
             isAccentHighlighted = true,
             sectionHeader = getString(R.string.settings_sec_media_engine),
+            iconResId = R.drawable.ic_lux_play_engine,
+            statusChip = decoderShort,
             onClick = {
                 pushSettingsBackStack { showProSettingsDialog(false) }
                 showSettingsPlaybackEnginePage()
@@ -356,6 +382,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
             title = getString(R.string.settings_hub_audio_title),
             subtitle = getAudioModeDisplayName(PlaybackStore.getAudioPresetMode(this)),
             isAccentHighlighted = true,
+            iconResId = R.drawable.ic_lux_audio,
             onClick = {
                 pushSettingsBackStack { showProSettingsDialog(false) }
                 showSettingsAudioEqualizerPage()
@@ -365,18 +392,20 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
             iconEmoji = "💬",
             title = getString(R.string.settings_hub_subtitles_only_title),
             subtitle = "$subLangs • ${subSize}sp",
+            iconResId = R.drawable.ic_lux_subtitles,
             onClick = {
                 pushSettingsBackStack { showProSettingsDialog(false) }
                 showSettingsSubtitlesPlaybackPage()
             }
         ),
-        // Group 2: Appearance, Language & Layout
+        // Group 2: Appearance & Language (Sort & Layout is unified in the top 3-line menu)
         PremiumMenuItem(
             iconEmoji = "🎨",
             title = getString(R.string.settings_hub_appearance_title),
-            subtitle = "$currentThemeName • $langSub • $layoutLabel",
+            subtitle = "$currentThemeName • $langSub",
             isAccentHighlighted = true,
             sectionHeader = getString(R.string.settings_sec_interface_theme),
+            iconResId = R.drawable.ic_lux_palette,
             onClick = {
                 pushSettingsBackStack { showProSettingsDialog(false) }
                 showSettingsAppearanceDisplayPage()
@@ -389,6 +418,8 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
             subtitle = privacySub,
             isAccentHighlighted = hasPin,
             sectionHeader = getString(R.string.settings_sec_privacy_folders),
+            iconResId = R.drawable.ic_lux_shield,
+            statusChip = if (hasPin) "Active" else null,
             onClick = {
                 pushSettingsBackStack { showProSettingsDialog(false) }
                 showSettingsPrivacyFoldersPage()
@@ -401,6 +432,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
             title = getString(R.string.settings_hub_updates_title),
             subtitle = "v${BuildConfig.VERSION_NAME} • GitHub Release Auto-Updater",
             sectionHeader = getString(R.string.settings_sec_system_updates),
+            iconResId = R.drawable.ic_lux_update,
             onClick = {
                 pushSettingsBackStack { showProSettingsDialog(false) }
                 openGitHubUpdaterFlow()
@@ -422,7 +454,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
     showPremiumMenuDialog(
         headerIcon = "⚙️",
         title = getString(R.string.settings_header),
-        subtitle = "Pure Video Player v${BuildConfig.VERSION_NAME}",
+        subtitle = "${getString(R.string.app_name)} v${BuildConfig.VERSION_NAME}",
         items = items
     )
 }
@@ -575,21 +607,16 @@ internal fun MainActivity.showSettingsAppearanceDisplayPage() {
         getString(R.string.theme_violet),
         getString(R.string.theme_material_you),
         getString(R.string.theme_sunset_coral),
-        getString(R.string.theme_teal_aqua)
+        getString(R.string.theme_teal_aqua),
+        getString(R.string.theme_luxury_gold)
     )
     val currentThemeName = themeNames[PlaybackStore.getThemeIndex(this).coerceIn(0, themeNames.size - 1)]
     val modeLabel = when (PlaybackStore.getAppearanceMode(this)) {
         PlaybackStore.APPEARANCE_LIGHT -> getString(R.string.appearance_mode_light)
-        PlaybackStore.APPEARANCE_SYSTEM -> getString(R.string.appearance_mode_system)
+        PlaybackStore.APPEARANCE_SYSTEM -> getString(R.string.appearance_mode_material_you)
+        PlaybackStore.APPEARANCE_LUXURY_DARK -> getString(R.string.appearance_mode_luxury_dark)
         else -> getString(R.string.appearance_mode_dark)
     }
-    val isGrid = PlaybackStore.isGridLayoutEnabled(this)
-    val layoutSub = if (isGrid) {
-        "${getString(R.string.layout_mode_grid)} (${calculateAdaptiveGridSpanCount()} Columns)"
-    } else {
-        getString(R.string.layout_mode_list)
-    }
-
     val items = listOf(
         PremiumMenuItem(
             iconEmoji = "🎨",
@@ -610,17 +637,6 @@ internal fun MainActivity.showSettingsAppearanceDisplayPage() {
             onClick = {
                 pushSettingsBackStack { showSettingsAppearanceDisplayPage() }
                 showAppLanguageDialog()
-            }
-        ),
-        PremiumMenuItem(
-            iconEmoji = "📐",
-            title = getString(R.string.sort_and_layout_title),
-            subtitle = layoutSub,
-            isAccentHighlighted = isGrid,
-            sectionHeader = getString(R.string.settings_subsec_grid_and_sort),
-            onClick = {
-                pushSettingsBackStack { showSettingsAppearanceDisplayPage() }
-                showSortAndLayoutDialog()
             }
         )
     )
@@ -1019,11 +1035,17 @@ internal fun MainActivity.showAboutAppPage() {
                 showChangelogPage()
             }
         ),
+
         PremiumMenuItem(
-            iconEmoji = "🏷️",
-            title = getString(R.string.about_version_label),
-            subtitle = "Pure Video Player v$verName (64-bit LibVLC Cinema Engine)",
-            isInteractive = false
+            iconEmoji = "🔒",
+            title = getString(R.string.about_privacy_policy_title),
+            subtitle = getString(R.string.about_privacy_policy_sub),
+            isAccentHighlighted = true,
+            isInteractive = true,
+            onClick = {
+                pushSettingsBackStack { showAboutAppPage() }
+                showPrivacyPolicyFullPage()
+            }
         ),
         PremiumMenuItem(
             iconEmoji = "⚖️",
@@ -1043,51 +1065,89 @@ internal fun MainActivity.showAboutAppPage() {
     showPremiumMenuDialog(
         headerIcon = "ℹ️",
         title = getString(R.string.settings_hub_about_title),
-        subtitle = "Pure Video Player • v$verName",
+        subtitle = "${getString(R.string.app_name)} • ${getString(R.string.app_subtitle)} • v$verName",
         items = items
     )
 }
 
 internal fun MainActivity.showChangelogPage() {
     val verName = BuildConfig.VERSION_NAME
-    val items = listOf(
-        PremiumMenuItem(
+    // Display ONLY the latest 4 versions (newest first), each with full notes, while keeping full source history intact
+    val allConfiguredReleases = listOf(
+        ChangelogReleaseEntry(
+            version = verName,
+            date = "2026-11-21",
             iconEmoji = "✨",
-            title = "v$verName — Cast Screen & Performance Improvements",
-            subtitle = getString(R.string.changelog_v36_2_desc),
-            isAccentHighlighted = true,
-            isInteractive = false
+            title = getString(R.string.changelog_v90_12_title, verName),
+            description = getString(R.string.changelog_v90_12_desc),
+            isLatest = true
         ),
-        PremiumMenuItem(
-            iconEmoji = "🎨",
-            title = "v36.1 — Categorized Settings & Fluid Theme Studio",
-            subtitle = getString(R.string.changelog_v36_1_desc),
-            isInteractive = false
+        ChangelogReleaseEntry(
+            version = "90.11",
+            date = "2026-11-20",
+            iconEmoji = "🛠️",
+            title = getString(R.string.changelog_v90_11_title, "90.11"),
+            description = getString(R.string.changelog_v90_11_desc),
+            isLatest = false
         ),
-        PremiumMenuItem(
-            iconEmoji = "❤️",
-            title = "v34.0 — IPTV Favorites, Watch History & Back-Swipe",
-            subtitle = getString(R.string.changelog_v34_0_desc),
-            isInteractive = false
+        ChangelogReleaseEntry(
+            version = "90.10",
+            date = "2026-11-18",
+            iconEmoji = "📦",
+            title = getString(R.string.changelog_v90_10_title),
+            description = getString(R.string.changelog_v90_10_desc),
+            isLatest = false
         ),
-        PremiumMenuItem(
-            iconEmoji = "📺",
-            title = "v30.0 — Integrated IPTV Hub (Xtream Codes & M3U)",
-            subtitle = getString(R.string.changelog_v30_0_desc),
-            isInteractive = false
-        ),
-        PremiumMenuItem(
+        ChangelogReleaseEntry(
+            version = "90.09",
+            date = "2026-11-18",
             iconEmoji = "🛡️",
-            title = "v28.0 — Private Vault, Grid/List Layout & Smart Sort",
-            subtitle = getString(R.string.changelog_v28_0_desc),
-            isInteractive = false
+            title = getString(R.string.changelog_v90_09_title),
+            description = getString(R.string.changelog_v90_09_desc),
+            isLatest = false
+        ),
+        ChangelogReleaseEntry(
+            version = "90.08",
+            date = "2026-11-18",
+            iconEmoji = "🚀",
+            title = getString(R.string.changelog_v90_08_title),
+            description = getString(R.string.changelog_v90_08_desc),
+            isLatest = false
+        ),
+        ChangelogReleaseEntry(
+            version = "90.07",
+            date = "2026-11-18",
+            iconEmoji = "✅",
+            title = getString(R.string.changelog_v90_07_title),
+            description = getString(R.string.changelog_v90_07_desc),
+            isLatest = false
+        ),
+        ChangelogReleaseEntry(
+            version = "90.06",
+            date = "2026-11-18",
+            iconEmoji = "🔍",
+            title = getString(R.string.changelog_v90_06_title),
+            description = getString(R.string.changelog_v90_06_desc),
+            isLatest = false
         )
     )
+    val latestFourReleases = ChangelogVersionManager.retainLatestVersions(allConfiguredReleases, 4)
+    val items = latestFourReleases.map { release ->
+        PremiumMenuItem(
+            iconEmoji = release.iconEmoji,
+            title = release.title,
+            subtitle = "${release.date}\n${release.description}",
+            isAccentHighlighted = release.isLatest,
+            isInteractive = false,
+            iconResId = R.drawable.ic_lux_info,
+            statusChip = "v${release.version}"
+        )
+    }
 
     showPremiumMenuDialog(
         headerIcon = "📋",
         title = getString(R.string.about_changelog_title),
-        subtitle = "Pure Video Player • Ahmed M Moumen",
+        subtitle = "${getString(R.string.app_name)} • Latest 4 Releases",
         items = items
     )
 }
@@ -1217,7 +1277,8 @@ internal fun MainActivity.showThemeSelectorDialog() {
         ThemeOption("🔮", getString(R.string.theme_violet), "#A855F7", "#090D16"),
         ThemeOption("🌈", getString(R.string.theme_material_you), dynamicSysHex, "#090D16"),
         ThemeOption("🍊", getString(R.string.theme_sunset_coral), "#FB923C", "#090D16"),
-        ThemeOption("🩵", getString(R.string.theme_teal_aqua), "#14B8A6", "#090D16")
+        ThemeOption("🩵", getString(R.string.theme_teal_aqua), "#14B8A6", "#0A0A0F"),
+        ThemeOption("👑", getString(R.string.theme_luxury_gold), "#D4AF37", "#0A0A0F")
     )
 
     val outerScroll = ScrollView(this).apply {
@@ -1281,9 +1342,10 @@ internal fun MainActivity.showThemeSelectorDialog() {
         }
     }
     val modeOptions = listOf(
-        Triple(0, "🌙", getString(R.string.appearance_mode_dark)),
-        Triple(1, "☀️", getString(R.string.appearance_mode_light)),
-        Triple(2, "📱", getString(R.string.appearance_mode_system))
+        Triple(PlaybackStore.APPEARANCE_SYSTEM, "🎨", getString(R.string.appearance_mode_material_you)),
+        Triple(PlaybackStore.APPEARANCE_LIGHT, "☀️", getString(R.string.appearance_mode_light)),
+        Triple(PlaybackStore.APPEARANCE_DARK, "🌙", getString(R.string.appearance_mode_dark)),
+        Triple(PlaybackStore.APPEARANCE_LUXURY_DARK, "👑", getString(R.string.appearance_mode_luxury_dark))
     )
     val modeButtons = mutableListOf<TextView>()
 
@@ -1312,8 +1374,6 @@ internal fun MainActivity.showThemeSelectorDialog() {
         cardContainer.setBackgroundColor(activeSurface)
         activeFullScreenHost?.setBackgroundColor(activeSurface)
         activeFullScreenDialog?.window?.setBackgroundDrawable(ColorDrawable(activeSurface))
-        activeFullScreenDialog?.window?.statusBarColor = activeSurface
-        activeFullScreenDialog?.window?.navigationBarColor = activeSurface
 
         tvTitle.setTextColor(primaryText)
         tvModeSec.setTextColor(activeAccent)
@@ -1470,120 +1530,6 @@ internal fun MainActivity.showThemeSelectorDialog() {
         cardContainer.addView(row)
         animatedItems.add(row)
     }
-
-    // Section 3: Material UI / Material You App Launcher Icons (2x3 Grid)
-    val tvIconSec = TextView(this).apply {
-        text = "✨  " + getString(R.string.app_icon_section_title)
-        setTextColor(PlaybackStore.getAccentColor(hostActivity))
-        textSize = 12.5f
-        setTypeface(typeface, Typeface.BOLD)
-        setPadding(dp(4), dp(10), dp(4), dp(2))
-    }
-    val tvIconSub = TextView(this).apply {
-        text = getString(R.string.app_icon_Sub)
-        setTextColor(PlaybackStore.getSecondaryTextColor(hostActivity))
-        textSize = 11.5f
-        setPadding(dp(4), 0, dp(4), dp(10))
-    }
-    cardContainer.addView(tvIconSec)
-    cardContainer.addView(tvIconSub)
-    animatedItems.add(tvIconSec)
-
-    data class MaterialIconItem(val resId: Int, val label: String, val accentHex: String)
-    val matIcons = listOf(
-        MaterialIconItem(R.drawable.ic_launcher_mat_you, getString(R.string.icon_mat_you), dynamicSysHex),
-        MaterialIconItem(R.drawable.ic_launcher_mat_blue, getString(R.string.icon_mat_blue), "#38BDF8"),
-        MaterialIconItem(R.drawable.ic_launcher_mat_gold, getString(R.string.icon_mat_gold), "#F59E0B"),
-        MaterialIconItem(R.drawable.ic_launcher_mat_emerald, getString(R.string.icon_mat_emerald), "#10B981"),
-        MaterialIconItem(R.drawable.ic_launcher_mat_crimson, getString(R.string.icon_mat_crimson), "#F43F5E"),
-        MaterialIconItem(R.drawable.ic_launcher_mat_violet, getString(R.string.icon_mat_violet), "#A855F7")
-    )
-    var selectedIconIdx = PlaybackStore.getAppIconIndex(this)
-    val iconCardViews = mutableListOf<LinearLayout>()
-    val iconLabelViews = mutableListOf<TextView>()
-
-    fun refreshIconCards(activeIconIdx: Int) {
-        val isLight = PlaybackStore.isLightThemeActive(this)
-        val activeBg = PlaybackStore.getBackgroundColor(this)
-        val primaryText = PlaybackStore.getPrimaryTextColor(this)
-        matIcons.forEachIndexed { iIdx, item ->
-            val isSel = (iIdx == activeIconIdx)
-            val cColor = Color.parseColor(item.accentHex)
-            val card = iconCardViews[iIdx]
-            val lbl = iconLabelViews[iIdx]
-            lbl.setTextColor(if (isSel) cColor else primaryText)
-            card.background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dp(16).toFloat()
-                setColor(if (isSel) Color.argb(38, Color.red(cColor), Color.green(cColor), Color.blue(cColor)) else activeBg)
-                setStroke(
-                    dp(if (isSel) 2 else 1),
-                    if (isSel) cColor else if (isLight) Color.parseColor("#CBD5E1") else Color.parseColor("#22FFFFFF")
-                )
-            }
-        }
-    }
-
-    for (rowIdx in 0 until 2) {
-        val iconRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = dp(10)
-            }
-        }
-        for (colIdx in 0 until 3) {
-            val itemIdx = rowIdx * 3 + colIdx
-            val item = matIcons[itemIdx]
-            val card = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                setPadding(dp(8), dp(12), dp(8), dp(10))
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                    if (colIdx < 2) marginEnd = dp(8)
-                }
-            }
-            val iv = ImageView(this).apply {
-                setImageResource(item.resId)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                layoutParams = LinearLayout.LayoutParams(dp(48), dp(48)).apply {
-                    bottomMargin = dp(6)
-                }
-                clipToOutline = true
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.RECTANGLE
-                    cornerRadius = dp(14).toFloat()
-                }
-            }
-            val lbl = TextView(this).apply {
-                text = item.label
-                textSize = 11.5f
-                gravity = Gravity.CENTER
-                setTypeface(typeface, Typeface.BOLD)
-                maxLines = 1
-            }
-            card.addView(iv)
-            card.addView(lbl)
-            card.setOnClickListener {
-                selectedIconIdx = itemIdx
-                PlaybackStore.setAppIconIndex(hostActivity, itemIdx)
-                refreshIconCards(selectedIconIdx)
-                Toast.makeText(
-                    hostActivity,
-                    getString(R.string.toast_app_icon_updated, item.label),
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-            iconCardViews.add(card)
-            iconLabelViews.add(lbl)
-            iconRow.addView(card)
-        }
-        cardContainer.addView(iconRow)
-        animatedItems.add(iconRow)
-    }
-    refreshIconCards(selectedIconIdx)
 
     val btnBack = TextView(this).apply {
         text = if (settingsBackStack.isNotEmpty()) getString(R.string.back_to_previous_menu) else getString(R.string.close)
@@ -1811,4 +1757,238 @@ internal fun MainActivity.showDefaultOrientationDialog() {
         }
     )
     showPremiumMenuDialog("🔄", getString(R.string.setting_default_orientation), null, items)
+}
+
+
+internal fun MainActivity.showPrivacyPolicyFullPage() {
+    val items = listOf(
+        PremiumMenuItem(
+            iconEmoji = "🛡️",
+            title = getString(R.string.privacy_policy_sec1_title),
+            subtitle = getString(R.string.privacy_policy_sec1_desc),
+            isAccentHighlighted = true,
+            isInteractive = false
+        ),
+        PremiumMenuItem(
+            iconEmoji = "🎬",
+            title = getString(R.string.privacy_policy_sec2_title),
+            subtitle = getString(R.string.privacy_policy_sec2_desc),
+            isInteractive = false
+        ),
+        PremiumMenuItem(
+            iconEmoji = "🔐",
+            title = getString(R.string.privacy_policy_sec3_title),
+            subtitle = getString(R.string.privacy_policy_sec3_desc),
+            isInteractive = false
+        ),
+        PremiumMenuItem(
+            iconEmoji = "⚖️",
+            title = getString(R.string.about_disclaimer_title),
+            subtitle = getString(R.string.about_disclaimer_sub),
+            isInteractive = false
+        )
+    )
+    showPremiumMenuDialog(
+        headerIcon = "🔒",
+        title = getString(R.string.about_privacy_policy_title),
+        subtitle = "${getString(R.string.app_name)} — ${getString(R.string.app_subtitle)}",
+        items = items
+    )
+}
+
+
+internal fun androidx.appcompat.app.AppCompatActivity.showVexoAudioEffectsStudioDialog() {
+    val ctx = this
+    fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+    val snap = VexoAudioEffectsManager.loadSnapshot(ctx)
+    var fxEnabled = snap.enabled
+    var selectedPresetName = snap.presetName
+    var preAmpDb = snap.preAmpDb
+    var bassStrength = snap.bassBoostStrength
+    var virtStrength = snap.virtualizerStrength
+    var boostPct = snap.volumeBoostPercent
+    val freqs = VexoAudioEffectsManager.getDeviceBandFrequenciesHz()
+    val bands = VexoAudioEffectsManager.resampleBands(snap.customBandsDb.toFloatArray(), freqs.size).toMutableList()
+
+    val accent = PlaybackStore.getAccentColor(ctx)
+    val primaryText = PlaybackStore.getPrimaryTextColor(ctx)
+    val secondaryText = PlaybackStore.getSecondaryTextColor(ctx)
+
+    val scroll = ScrollView(ctx)
+    val container = LinearLayout(ctx).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(20), dp(16), dp(20), dp(16))
+    }
+    scroll.addView(container)
+
+    val cbEnable = CheckBox(ctx).apply {
+        text = getString(R.string.audio_fx_enable_switch)
+        isChecked = fxEnabled
+        setTextColor(primaryText)
+        buttonTintList = ColorStateList.valueOf(accent)
+        setOnCheckedChangeListener { _, checked -> fxEnabled = checked }
+    }
+    container.addView(cbEnable)
+
+    val tvPresetLabel = TextView(ctx).apply {
+        text = "Preset: $selectedPresetName"
+        setTextColor(accent)
+        textSize = 13.5f
+        setTypeface(typeface, Typeface.BOLD)
+        setPadding(0, dp(8), 0, dp(4))
+    }
+    container.addView(tvPresetLabel)
+
+    val btnPickPreset = android.widget.Button(ctx).apply {
+        text = getString(R.string.audio_fx_choose_preset)
+        setOnClickListener {
+            val allPresets = VexoAudioEffectsManager.getAllPresets(ctx)
+            val names = allPresets.map { if (it.isCustom) "★ ${it.name}" else it.name }.toTypedArray()
+            AlertDialog.Builder(ctx)
+                .setTitle(getString(R.string.audio_fx_choose_preset))
+                .setItems(names) { _, which ->
+                    val chosen = allPresets[which]
+                    selectedPresetName = chosen.name
+                    preAmpDb = chosen.preAmpDb
+                    val mapped = VexoAudioEffectsManager.resampleBands(chosen.bandsDb, freqs.size)
+                    for (i in mapped.indices) bands[i] = mapped[i]
+                    tvPresetLabel.text = "Preset: $selectedPresetName"
+                }
+                .show()
+        }
+    }
+    container.addView(btnPickPreset)
+
+    val tvBoostLabel = TextView(ctx).apply {
+        text = "${getString(R.string.audio_fx_volume_boost)}: $boostPct%"
+        setTextColor(primaryText)
+        setPadding(0, dp(10), 0, dp(2))
+    }
+    val tvBoostWarn = TextView(ctx).apply {
+        text = getString(R.string.audio_fx_boost_warning)
+        setTextColor(Color.parseColor("#F59E0B"))
+        textSize = 11.5f
+        setPadding(0, 0, 0, dp(4))
+    }
+    val seekBoost = SeekBar(ctx).apply {
+        max = 100
+        progress = (boostPct - 100).coerceIn(0, 100)
+        setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, f: Boolean) {
+                boostPct = 100 + p
+                tvBoostLabel.text = "${getString(R.string.audio_fx_volume_boost)}: $boostPct%"
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+    }
+    container.addView(tvBoostLabel)
+    container.addView(tvBoostWarn)
+    container.addView(seekBoost)
+
+    if (VexoAudioEffectsManager.supportsBassBoost) {
+        val tvBass = TextView(ctx).apply {
+            text = "${getString(R.string.audio_fx_bass_boost)}: ${bassStrength / 10}%"
+            setTextColor(primaryText)
+            setPadding(0, dp(10), 0, dp(2))
+        }
+        val seekBass = SeekBar(ctx).apply {
+            max = 1000
+            progress = bassStrength
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, f: Boolean) {
+                    bassStrength = p
+                    tvBass.text = "${getString(R.string.audio_fx_bass_boost)}: ${bassStrength / 10}%"
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        }
+        container.addView(tvBass)
+        container.addView(seekBass)
+    }
+
+    if (VexoAudioEffectsManager.supportsVirtualizer) {
+        val tvVirt = TextView(ctx).apply {
+            text = "${getString(R.string.audio_fx_virtualizer)}: ${virtStrength / 10}%"
+            setTextColor(primaryText)
+            setPadding(0, dp(10), 0, dp(2))
+        }
+        val seekVirt = SeekBar(ctx).apply {
+            max = 1000
+            progress = virtStrength
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, f: Boolean) {
+                    virtStrength = p
+                    tvVirt.text = "${getString(R.string.audio_fx_virtualizer)}: ${virtStrength / 10}%"
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        }
+        container.addView(tvVirt)
+        container.addView(seekVirt)
+    }
+
+    freqs.forEachIndexed { idx, hz ->
+        val label = if (hz >= 1000) "${hz / 1000} kHz" else "$hz Hz"
+        val tvBand = TextView(ctx).apply {
+            text = "$label: ${String.format(Locale.US, "%+.1f dB", bands[idx])}"
+            setTextColor(secondaryText)
+            setPadding(0, dp(8), 0, dp(2))
+        }
+        val seekBand = SeekBar(ctx).apply {
+            max = 300
+            progress = ((bands[idx] + 15f) * 10f).toInt().coerceIn(0, 300)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, f: Boolean) {
+                    bands[idx] = (p / 10f) - 15f
+                    tvBand.text = "$label: ${String.format(Locale.US, "%+.1f dB", bands[idx])}"
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        }
+        container.addView(tvBand)
+        container.addView(seekBand)
+    }
+
+    AlertDialog.Builder(ctx)
+        .setTitle(getString(R.string.audio_fx_studio_title))
+        .setView(scroll)
+        .setPositiveButton(getString(R.string.save)) { _, _ ->
+            VexoAudioEffectsManager.saveSnapshot(
+                ctx,
+                AudioEffectsSnapshot(
+                    enabled = fxEnabled,
+                    presetName = selectedPresetName,
+                    preAmpDb = preAmpDb,
+                    customBandsDb = bands.toList(),
+                    bassBoostStrength = bassStrength,
+                    virtualizerStrength = virtStrength,
+                    volumeBoostPercent = boostPct
+                )
+            )
+            VexoAudioEffectsManager.applySavedEffects(ctx)
+            popSettingsBackStack()
+        }
+        .setNeutralButton(getString(R.string.audio_fx_save_preset)) { _, _ ->
+            val input = EditText(ctx).apply { hint = "My Custom Preset" }
+            AlertDialog.Builder(ctx)
+                .setTitle(getString(R.string.audio_fx_save_preset))
+                .setView(input)
+                .setPositiveButton(getString(R.string.save)) { _, _ ->
+                    val name = input.text.toString().trim()
+                    if (name.isNotEmpty()) {
+                        VexoAudioEffectsManager.saveCustomPreset(ctx, name, preAmpDb, bands)
+                        Toast.makeText(ctx, "Saved: $name", Toast.LENGTH_SHORT).show()
+                    }
+                    popSettingsBackStack()
+                }
+                .setNegativeButton(getString(R.string.cancel)) { _, _ -> popSettingsBackStack() }
+                .show()
+        }
+        .setNegativeButton(getString(R.string.cancel)) { _, _ -> popSettingsBackStack() }
+        .setOnCancelListener { popSettingsBackStack() }
+        .show()
 }

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Pure Video Player</string>
+    <string name="app_name">VEXO Player</string>
+    <string name="app_subtitle">IPTV and Video player</string>
     <string name="folders_title">مجلدات الفيديو</string>
     <string name="back">رجوع</string>
     <string name="close">إغلاق</string>
@@ -214,7 +215,7 @@
     <string name="layout_mode_list">📋 عرض قائمة تفصيلية (List View)</string>
     <string name="layout_mode_list_sub">بطاقات أفقية كلاسيكية مع كامل التفاصيل</string>
     <string name="layout_mode_grid">🔲 عرض شبكة مصغرة (Grid View)</string>
-    <string name="layout_mode_grid_sub">شبكة سينمائية من عمودين للمجلدات والفيديوهات</string>
+    <string name="layout_mode_grid_sub">شبكة سينمائية متجاوبة للهواتف والتابلت والشاشات الكبيرة</string>
     <string name="section_sort_by">🔃 ترتيب المحتويات حسب (Sort By)</string>
     <string name="sort_date_newest">📅 التاريخ (الأحدث أولاً)</string>
     <string name="sort_date_oldest">🕰️ التاريخ (الأقدم أولاً)</string>
@@ -253,7 +254,7 @@
     <string name="iptv_hint_server_url">رابط أو دومين السيرفر (مثال: example.com أو example.com:8080 بدون الحاجة لـ http)</string>
     <string name="iptv_hint_username">اسم المستخدم (Username)</string>
     <string name="iptv_hint_password">كلمة المرور (Password)</string>
-    <string name="iptv_loading_data">جاري الاتصال بالسيرفر وجلب وتصنيف المحتوى...</string>
+    <string name="iptv_loading_data">جاري مزامنة مكتبة IPTV...</string>
     <string name="iptv_loading_series_episodes">جاري جلب المواسم والحلقات...</string>
     <string name="iptv_sync_success_toast">✅ تم تحميل المصدر "%1$s" بنجاح (%2$d عنصر)</string>
     <string name="iptv_items_unit">عنصر</string>
@@ -296,7 +297,7 @@
     <string name="resume_mode_always_resume">الاستئناف تلقائياً دائماً من حيث توقفت دون سؤال</string>
     <string name="resume_mode_always_restart">البدء من الأول (00:00) تلقائياً دائماً دون سؤال</string>
     <string name="settings_cat_developer">👨‍💻 مطور التطبيق ومعلومات الإصدار</string>
-    <string name="developer_credit_subtitle">مطور التطبيق • النسخة النهائية الاحترافية (v%1$s)</string>
+    <string name="developer_credit_subtitle">مطور التطبيق • VEXO Player — IPTV and Video player (v%1$s)</string>
     <string name="iptv_show_password_toggle">إظهار كلمة المرور للتأكد من صحتها</string>
     <string name="press_back_again_to_exit">اسحب للخلف مرة أخرى للخروج من التطبيق</string>
     <string name="iptv_subtab_all">📂 التصنيفات</string>
@@ -325,7 +326,7 @@
     <string name="about_changelog_sub">استعراض كافة المميزات والإضافات الجديدة في الإصدار v%1$s</string>
     <string name="changelog_v36_2_desc">• تحويل قوائم الإعدادات والأقسام الفرعية إلى شاشة كاملة بنفس الأنيميشن الانسيابي.
 • إضافة قسم (حول التطبيق / About) ويضم اسم المطور Ahmed M Moumen ورقم الإصدار وسجل التغييرات.
-• توحيد اسم وهوية المشروع إلى Pure Video Player.</string>
+• توحيد اسم وهوية المشروع إلى IPTV and Video player.</string>
     <string name="changelog_v36_1_desc">• إعادة هيكلة الإعدادات في 4 أقسام رئيسية منظمة بدون ازدحام.
 • إضافة استوديو الثيمات التفاعلي مع دوائر الألوان الحية وتدرج الألوان المتحرك.</string>
     <string name="changelog_v34_0_desc">• إضافة تبويبات المفضلة (❤️) وأُكمل مشاهدته (⏱️) وزر القلب المباشر داخل قسم IPTV.
@@ -346,9 +347,9 @@
     <string name="cast_opening_settings_toast">اختر شاشة التلفزيون من قائمة البث اللاسلكي</string>
     <string name="toast_rewind_hold">ترجيع سريع</string>
     <string name="iptv_download_btn">تحميل للمشاهدة بدون إنترنت (Download)</string>
-    <string name="iptv_download_sub">حفظ الفيديو محلياً على الهاتف داخل مجلد Movies/PureVideoPlayer</string>
+    <string name="iptv_download_sub">حفظ الفيديو محلياً على الهاتف داخل مجلد Movies/IPTV_and_Video_player</string>
     <string name="iptv_download_started_toast">⬇️ بدأ التحميل: %1$s (تابع التقدم في شريط الإشعارات)</string>
-    <string name="iptv_download_completed_toast">✅ اكتمل التحميل في مجلد Movies/PureVideoPlayer: %1$s</string>
+    <string name="iptv_download_completed_toast">✅ اكتمل التحميل في مجلد Movies/IPTV_and_Video_player: %1$s</string>
     <string name="iptv_download_failed_toast">⚠️ تعذر بدء التحميل المباشر لهذا الرابط</string>
     <string name="iptv_episode_play_option">تشغيل الحلقة الآن</string>
     <string name="appearance_mode_section">وضع المظهر (داكن / فاتح / تلقائي)</string>
@@ -415,7 +416,7 @@
     <string name="lang_japanese">اليابانية (日本語)</string>
     <string name="lang_korean">الكورية (한국어)</string>
     <string name="settings_sec_media_engine">🎬 المشغل والصوت والترجمة</string>
-    <string name="settings_sec_interface_theme">🎨 المظهر واللغة وتخطيط العرض</string>
+    <string name="settings_sec_interface_theme">🎨 المظهر واللغة</string>
     <string name="settings_sec_privacy_folders">🛡️ الخزنة السرية وإدارة المجلدات</string>
     <string name="settings_sec_system_updates">🚀 النظام والتحديثات</string>
     <string name="settings_hub_playback_engine_title">المشغل وفك التشفير (Player &amp; Decoder)</string>
@@ -441,13 +442,98 @@
     <string name="iptv_err_reenter_password">🔑 أعد إدخال كلمة المرور لتحديث هذا المصدر.</string>
     <string name="about_disclaimer_title">إخلاء مسؤولية المحتوى</string>
     <string name="about_disclaimer_sub">التطبيق مشغّل فقط ولا يوفر أي محتوى، والمستخدم مسؤول عن المحتوى الذي يضيفه</string>
-    <string name="app_icon_section_title">أيقونات التطبيق (Material UI)</string>
-    <string name="app_icon_Sub">اختر شكل أيقونة التطبيق المتوافقة مع Material UI</string>
-    <string name="icon_mat_you">ماتريال يو</string>
-    <string name="icon_mat_blue">أزرق سينمائي</string>
-    <string name="icon_mat_gold">ذهبي ملكي</string>
-    <string name="icon_mat_emerald">زمردي حديث</string>
-    <string name="icon_mat_crimson">قرمزي نيون</string>
-    <string name="icon_mat_violet">بنفسجي عصري</string>
-    <string name="toast_app_icon_updated">تم تحديث أيقونة التطبيق (%1$s)</string>
+    <string name="about_privacy_policy_title">سياسة الخصوصية وأمان البيانات</string>
+    <string name="about_privacy_policy_sub">معالجة محلية 100% على جهازك؛ يتم تشفير باسورد الخزنة (PBKDF2 بـ 100,000 تكرار) وبيانات IPTV (AES-256-GCM) عبر AndroidKeyStore مع استثنائها من النسخ السحابي، ولا يتم جمع أو مشاركة أي بيانات شخصية.</string>
+    <string name="privacy_policy_sec1_title">1. عدم جمع أو مشاركة أي بيانات شخصية</string>
+    <string name="privacy_policy_sec1_desc">لا يقوم تطبيق VEXO Player (IPTV and Video player) بجمع أو إرسال أو بيع أو مشاركة أي بيانات شخصية أو سجل مشاهدة مع أي خوادم خارجية إطلاقاً.</string>
+    <string name="privacy_policy_sec2_title">2. الأذونات والوصول المحلي للملفات</string>
+    <string name="privacy_policy_sec2_desc">تُستخدم صلاحية الفيديو (READ_MEDIA_VIDEO) محلياً فقط لعرض وتشغيل مجلدات الفيديو على جهازك، وتُستخدم صلاحية البصمة محلياً لفتح الخزنة الخاصة.</string>
+    <string name="privacy_policy_sec3_title">3. التشفير العتادي واستثناء النسخ السحابي</string>
+    <string name="privacy_policy_sec3_desc">يتم تشفير الرقم السري للخزنة بخوارزمية PBKDF2-HMAC-SHA256 (100,000 تكرار) وبيانات القوائم بـ AES-256-GCM عبر AndroidKeyStore مع استثنائها من النسخ السحابي. للتواصل: AHMEDAHMED5547@GMAIL.COM</string>
+    <string name="iptv_bg_syncing_subtle">جاري مزامنة المكتبة في الخلفية...</string>
+    <string name="changelog_v90_04_title">v90.04 (2026-11-18) — مزامنة IPTV التلقائية والتصميم المتجاوب وتحديث الهوية</string>
+    <string name="changelog_v90_04_desc">• تغيير اسم التطبيق: تحديث اسم التطبيق في كافة الشاشات والقوائم وقسم حول التطبيق إلى IPTV and Video player.
+• مزامنة IPTV التلقائية في الخلفية: تحديث ومزامنة مكتبة IPTV تلقائياً وبسرعة عالية فور فتح قسم IPTV الرئيسي مع مؤشر تقدم علوي هادئ (إلغاء رسالة جاري الاتصال بالسيرفر المزعجة).
+• تصفح سلس بدون انقطاع: الاحتفاظ بالبيانات المحمّلة في الذاكرة أثناء التنقل بين الأفلام والمسلسلات والبث المباشر أو التمرير لأسفل دون إعادة التحديث، ولا يتكرر التحديث إلا عند مغادرة قسم IPTV وإعادة فتحه.
+• إزالة تكرار إعدادات الترتيب والعرض: إزالة خيار الترتيب وطريقة العرض المكرر من الإعدادات والاكتفاء بنقطة وصول موحدة عبر القائمة العلوية الثلاثية (☰).
+• تصميم متجاوب لكافة الشاشات: دعم متكامل للهواتف الذكية والأجهزة اللوحية (Tablets) والشاشات الكبيرة مع تكيّف تلقائي للأعمدة والملصقات وأزرار المشغل.</string>
+    <string name="changelog_v90_03_title">v90.03 (2026-11-17) — الجاهزية الكاملة لمتجر Google Play وسياسة الخصوصية</string>
+    <string name="changelog_v90_03_desc">• إضافة صفحة سياسة الخصوصية وأمان البيانات التفاعلية وإخلاء المسؤولية القانونية داخل قسم حول التطبيق.
+• عزل مصدر IPTV التجريبي ليكون في نسخة GitHub فقط لضمان توافق نسخة Google Play بالكامل.
+• تحسين ضغط ومحاذاة المكتبات الأصلية لحزم Android App Bundle (AAB).</string>
+    <string name="changelog_v90_02_title">v90.02 (2026-11-17) — تعزيز الأمان والتوافق مع سياسات Google Play</string>
+    <string name="changelog_v90_02_desc">• ترقية تشفير الرقم السري للخزنة الخاصة إلى PBKDF2-HMAC-SHA256 (100,000 تكرار) مع الحماية من المحاولات المتكررة.
+• فرض تشفير AES-256-GCM عبر AndroidKeyStore لبيانات IPTV واستثناء الملفات الحساسة من النسخ الاحتياطي السحابي.
+• تأمين مشاركة البث الخارجي عبر FileProvider وإضافة خيار شهادات SSL في الإعدادات.</string>
+    <string name="changelog_v90_01_title">v90.01 (2026-11-16) — نظام البناء المزدوج وقاعدة بيانات Room SQLite</string>
+    <string name="changelog_v90_01_desc">• دعم نكهتي البناء GitHub وGoogle Play مع الاختبارات البرمجية والتوقيع التلقائي.
+• ترقية محرك تخزين IPTV إلى قاعدة بيانات Room 2.6.1 SQLite لسرعة فائقة مع القوائم الضخمة.</string>
+    <string name="changelog_v90_06_title">v90.06 (2026-11-18) — استعادة البحث المستقر المقيد بالقسم ونظام آخر 3 إصدارات</string>
+    <string name="changelog_v90_06_desc">• استعادة نظام البحث المستقر: إرجاع منطق البحث الأصلي السريع والمستقر وإلغاء الإضافات التجريبية السابقة.
+• تقييد البحث بالقسم الحالي فقط: عند البحث داخل قسم الأفلام تظهر نتائج الأفلام فقط، وعند البحث داخل المسلسلات تظهر المسلسلات فقط، وعند البحث داخل البث المباشر تظهر القنوات المباشرة فقط دون خلط الأقسام.
+• بحث لحظي فوري أثناء الكتابة: تحديث النتائج تلقائياً وفورياً منذ كتابة الحرف الأول ومع كل حرف إضافي بدون أي تأخير أو الحاجة للضغط على زر الإدخال.
+• تحديث نظام سجل التغييرات (Changelog): ضبط سجل التغييرات ليعرض دائماً أحدث 3 إصدارات فقط مع حذف الإصدار الأقدم تلقائياً عند كل تحديث جديد.</string>
+    <string name="changelog_v90_05_title">v90.05 (2026-11-18) — ضبط تحجيم القائمة مع لوحة المفاتيح (Keyboard Resize)</string>
+    <string name="changelog_v90_05_desc">• ضبط تفاعل النافذة مع لوحة المفاتيح عبر adjustResize وWindowInsetsCompat.Type.ime() لضمان عدم اختفاء النتائج خلف الكيبورد.</string>
+    <string name="changelog_v90_07_title">v90.07 (2026-11-18) — الجاهزية الكاملة للإطلاق على Google Play وتوحيد الهوية</string>
+    <string name="changelog_v90_07_desc">• توحيد كامل لهوية التطبيق: اعتماد الاسم الرسمي IPTV and Video player في جميع مجلدات التحميل وجلسات الوسائط وسياسة الخصوصية وكافة شاشات التطبيق.
+• التحقق النهائي لمتجر Google Play: مراجعة شاملة للتوافق مع سياسات أمان البيانات والتشفير العتادي عبر AndroidKeyStore وبناء حزمة AAB الرسمية.</string>
+    <string name="changelog_v90_08_title">الإصدار v90.08 — إطلاق هوية VEXO Player (IPTV and Video player) لمتجر جوجل بلاي</string>
+    <string name="changelog_v90_08_desc">• الهوية الرسمية للمتجر: اعتماد الاسم الرئيسي VEXO Player والاسم الفرعي تحته IPTV and Video player في الشريط العلوي وقسم حول التطبيق ومتجر Google Play.
+• توثيق بيانات التواصل والخصوصية: إدراج البريد الرسمي للمطور (AHMEDAHMED5547@GMAIL.COM) وروابط سياسة الخصوصية المعتمدة على GitHub.
+• سجل التغييرات الذكي (آخر 3 إصدارات): الاحتفاظ التلقائي بآخر 3 إصدارات فقط (v90.08 وv90.07 وv90.06).</string>
+    <string name="changelog_v90_09_title">الإصدار v90.09 — الترقية إلى Android 16 (API 36) لقبول متجر Google Play</string>
+    <string name="changelog_v90_09_desc">• التوافق مع متطلبات Google Play: ترقية targetSdk وcompileSdk إلى المستوى 36 (Android 16) لضمان قبول الحزمة في Google Play Console.
+• استقرار البناء على GitHub: الحفاظ على التوافق التام مع بيئة البناء الحالية عبر تفعيل android.suppressUnsupportedCompileSdk=36.
+• سجل التغييرات الذكي (آخر 3 إصدارات): الاحتفاظ التلقائي بآخر 3 إصدارات فقط (v90.09 وv90.08 وv90.07).</string>
+    <string name="changelog_v90_10_title">الإصدار v90.10 — حزمة النشر الجديدة لمتجر Google Play (رمز الإصدار 9010)</string>
+    <string name="changelog_v90_10_desc">• ترقية رمز الإصدار للنشر: اعتماد رمز الإصدار الجديد 9010 مع التوافق الكامل مع Android 16 (API 36) وتضمين رموز تصحيح الأخطاء الأصلية داخل حزمة AAB.
+• سجل التغييرات الذكي (آخر 3 إصدارات): الاحتفاظ التلقائي بآخر 3 إصدارات فقط (v90.10 وv90.09 وv90.08).</string>
+    <string name="scale_original">الأصلي (Original)</string>
+    <string name="refresh_library">تحديث القائمة</string>
+    <string name="loading_videos_msg">جارٍ فحص مكتبة الفيديوهات...</string>
+    <string name="changelog_v90_11_title">الإصدار v%1$s — تصميم Luxury Dark ودعم الهواتف القابلة للطي والإصلاحات الشاملة</string>
+    <string name="changelog_v90_11_desc">• التصميم الفاخر Luxury Dark وثيم Luxury Gold: إعادة تصميم شاشة الإعدادات والمشغل بلوحات زجاجية وأيقونات فيكتور رفيعة وشريط تقدم متوهج وتمرير تلقائي لاسم الفيديو.
+• دعم كامل للأجهزة القابلة للطي والشاشات الكبيرة: إضافة Jetpack WindowManager لدعم أوضاع Tabletop وBook والطي والفتح دون إيقاف التشغيل وتجنب المفصل.
+• إصلاحات التدوير والأبعاد والتثبيت الأول: تنظيم أزرار التحكم، وتطبيق محرك VLC للأبعاد لإزالة اقتصاص Stretch، ونقل مسح المكتبة إلى ViewModel مع ContentObserver.
+• توافق Android 15/16 وسجل 4 إصدارات: تفعيل العرض حتى الحافة ومحاذاة 16 KB (AGP 8.5.1 وLibVLC 3.6.5) وعرض آخر 4 إصدارات كاملة بتفاصيلها.</string>
+    <string name="theme_luxury_gold">الذهبي الفاخر (Luxury Gold)</string>
+    <string name="appearance_mode_material_you">النظام (Material You)</string>
+    <string name="appearance_mode_luxury_dark">الداكن الفاخر (Luxury Dark)</string>
+    <string name="tab_audio">الصوتيات</string>
+    <string name="audio_empty_msg">لم يتم العثور على ملفات صوتية في الجهاز</string>
+    <string name="audio_sec_tracks">المقاطع الصوتية</string>
+    <string name="audio_sec_tracks_sub">تشغيل جميع الصوتيات في الخلفية مع قائمة انتظار</string>
+    <string name="audio_sec_artists">الفنانون</string>
+    <string name="audio_sec_albums">الألبومات</string>
+    <string name="audio_sec_genres">التصنيفات</string>
+    <string name="audio_sec_playlists">قوائم التشغيل</string>
+    <string name="audio_create_playlist">إنشاء قائمة تشغيل</string>
+    <string name="audio_playlist_name_hint">اسم قائمة التشغيل...</string>
+    <string name="audio_only_mode_title">وضع الصوت فقط بالخلفية</string>
+    <string name="audio_only_started_toast">تم التحويل إلى وضع الصوت بالخلفية</string>
+    <string name="return_to_video">العودة إلى الفيديو</string>
+    <string name="sleep_timer_title">مؤقت النوم</string>
+    <string name="sleep_timer_minutes">دقيقة</string>
+    <string name="sleep_timer_end_of_media">عند نهاية الفيديو / المقطع الحالي</string>
+    <string name="sleep_timer_end_short">النهاية</string>
+    <string name="sleep_timer_custom">وقت مخصص (بالدقائق)</string>
+    <string name="sleep_timer_extend_5m">تمديد +5 دقائق</string>
+    <string name="sleep_timer_cancel">إلغاء المؤقت</string>
+    <string name="sleep_timer_cancelled_toast">تم إلغاء مؤقت النوم</string>
+    <string name="sleep_timer_triggered_toast">انتهى مؤقت النوم — تم إيقاف التشغيل مؤقتاً</string>
+    <string name="audio_fx_studio_title">المعادل ومعزز الصوت (حتى 200%)</string>
+    <string name="audio_fx_studio_sub">16 إعداد VLC مسبق وتعزيز الجهير والمحيطي ورفع الصوت</string>
+    <string name="audio_fx_enable_switch">تفعيل المعادل والمؤثرات الصوتية</string>
+    <string name="audio_fx_choose_preset">اختيار إعداد مسبق (VLC أو مخصص)</string>
+    <string name="audio_fx_volume_boost">معزز مستوى الصوت</string>
+    <string name="audio_fx_boost_warning">تحذير: رفع الصوت فوق 100% قد يسبب تشويشاً أو يضر بسماعات الجهاز.</string>
+    <string name="audio_fx_bass_boost">تعزيز الجهير (Bass Boost)</string>
+    <string name="audio_fx_virtualizer">الصوت المحيطي (Virtualizer)</string>
+    <string name="audio_fx_save_preset">حفظ كإعداد مخصص</string>
+    <string name="changelog_v90_12_title">الإصدار v%1$s — مكتبة الصوتيات وAndroid Auto وأغلفة المجلدات وMaterial You ومؤقت النوم</string>
+    <string name="changelog_v90_12_desc">• إصلاح Luxury Dark ودعم Material You: إظهار وحفظ ثيم Luxury Dark، دعم ألوان Material You وأيقونة متكيفة أحادية اللون، وإزالة خيار رقم الإصدار المكرر.
+• مكتبة الصوتيات وAndroid Auto: إضافة تبويب الصوتيات (فنانون، ألبومات، مقاطع، تصنيفات، وقوائم تشغيل عبر Room MIGRATION_2_3) وخدمة Media3 لـ Android Auto.
+• أغلفة المجلدات 2x2: استبدال أيقونة المجلد بكولاج من 4 لقطات فيديو مع كاش بالذاكرة والقرص وشارة عدد الفيديوهات.
+• مؤقت النوم ومعزز الصوت 200% ووضع الصوت بالخلفية: مؤقت نوم متقدم مع خفض صوت تدريجي، 16 إعداد VLC مع BassBoost وLoudnessEnhancer، وتشغيل الفيديو كصوت في الخلفية.</string>
 </resources>

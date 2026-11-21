@@ -28,6 +28,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -417,7 +419,7 @@ object IptvImageLoader {
                 connectTimeout = 7000
                 readTimeout = 7000
                 instanceFollowRedirects = true
-                setRequestProperty("User-Agent", "IPTVSmartersPlayer")
+                setRequestProperty("User-Agent", "IPTVAndVideoPlayer/1.0 LibVLC/3.6.3")
             }
             if (conn.responseCode !in 200..299) return null
             val bytes = conn.inputStream.use { it.readBytes() }
@@ -644,7 +646,7 @@ object M3uPlaylistParser {
  * - Fast Sequential Port & Protocol Probing (fails fast on closed TCP ports without retrying 4 User-Agents on a dead socket, and avoids triggering Xtream max_connections=1 / Cloudflare anti-DDoS).
  * - Preserves `/player_api.php?...` when a domain redirect (like `example.com` -> `http://host:port/`) points to root `/`.
  * - Streams large JSON arrays directly from `InputStream` via `JsonReader` without loading 50MB strings into memory.
- * - Supports on-demand per-category stream loading (`&category_id=...`) just like IPTV Smarters Pro!
+ * - Supports on-demand per-category stream loading (`&category_id=...`) with on-demand category support
  */
 object XtreamCodesClient {
     @Volatile
@@ -656,7 +658,7 @@ object XtreamCodesClient {
         val sysUa = System.getProperty("http.agent")?.takeIf { it.isNotBlank() }
             ?: "Dalvik/2.1.0 (Linux; U; Android 14; Mobile)"
         listOf(
-            "IPTVSmartersPlayer",
+            "IPTVAndVideoPlayer/1.0 LibVLC/3.6.3",
             sysUa,
             "okhttp/3.12.1",
             "VLC/3.0.20 LibVLC/3.0.20"
@@ -965,7 +967,7 @@ object XtreamCodesClient {
         for ((idx, triple) in endpoints.withIndex()) {
             val (targetUrl, postBody, apiPath) = triple
             try {
-                val (rawResp, finalUrl) = httpRequestWithRedirects(targetUrl, timeoutMs = 5_500, postFormBody = postBody)
+                val (rawResp, finalUrl) = httpRequestWithRedirects(targetUrl, timeoutMs = 3_800, postFormBody = postBody)
                 val cleanJsonStr = extractCleanJsonString(rawResp)
                 if (cleanJsonStr.startsWith("{")) {
                     val json = JSONObject(cleanJsonStr)
@@ -1087,9 +1089,12 @@ object XtreamCodesClient {
 
         // Fetch Categories & Streams sequentially using direct InputStream -> JsonReader streaming
         // (Zero RAM bloat and zero risk of triggering Xtream max_connections=1 rate limits!)
-        val liveCatMap = fetchCategoryMap("$apiBase&action=get_live_categories")
-        val vodCatMap = fetchCategoryMap("$apiBase&action=get_vod_categories")
-        val seriesCatMap = fetchCategoryMap("$apiBase&action=get_series_categories")
+        val (liveCatMap, vodCatMap, seriesCatMap) = coroutineScope {
+            val dLive = async(Dispatchers.IO) { fetchCategoryMap("$apiBase&action=get_live_categories") }
+            val dVod = async(Dispatchers.IO) { fetchCategoryMap("$apiBase&action=get_vod_categories") }
+            val dSeries = async(Dispatchers.IO) { fetchCategoryMap("$apiBase&action=get_series_categories") }
+            Triple(dLive.await(), dVod.await(), dSeries.await())
+        }
 
         val allItems = ArrayList<IptvStreamItem>(8192)
         allItems.addAll(
@@ -1569,7 +1574,7 @@ object LegacyIptvMigrator {
                         httpUserAgent = o.optString("ua"),
                         httpReferrer = o.optString("ref")
                     )
-                    batch.add(item.toEntity())
+                    batch.add(IptvStreamEntity.fromDomain(item))
                     expectedCount++
                     if (batch.size >= chunkSize) {
                         insertBatch(ArrayList(batch))
@@ -1614,10 +1619,33 @@ object IptvRepository {
 
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // Thread-safe in-memory caches so MediaAdapter.bind() never queries Room on the main thread
+    // Thread-safe in-memory caches so MediaAdapter.bind() and internal IPTV navigation (Movies/Series/Live TV) run in 0ms
     private val favoriteIdsMemoryCache = ConcurrentHashMap<String, MutableSet<String>>()
     private val seriesLastEpMemoryCache = ConcurrentHashMap<String, IptvSeriesLastEpEntity>()
+    private val sectionCountsMemoryCache = ConcurrentHashMap<String, Map<IptvContentType, Int>>()
+    private val categoriesMemoryCache = ConcurrentHashMap<String, List<IptvCategory>>()
+    private val firstPageStreamsMemoryCache = ConcurrentHashMap<String, List<IptvStreamItem>>()
+    private val seriesInfoMemoryCache = ConcurrentHashMap<String, IptvSeriesInfoResult>()
     private val warmedUpSources = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+
+    fun invalidateSourceMemoryCaches(sourceId: String) {
+        if (sourceId.isBlank()) return
+        sectionCountsMemoryCache.remove(sourceId)
+        val prefix = "${sourceId}_"
+        categoriesMemoryCache.keys.removeIf { it.startsWith(prefix) }
+        firstPageStreamsMemoryCache.keys.removeIf { it.startsWith(prefix) }
+        seriesInfoMemoryCache.keys.removeIf { it.startsWith(prefix) }
+    }
+
+    fun getCachedSeriesInfo(sourceId: String, seriesId: String): IptvSeriesInfoResult? {
+        if (sourceId.isBlank() || seriesId.isBlank()) return null
+        return seriesInfoMemoryCache["${sourceId}_$seriesId"]
+    }
+
+    fun putCachedSeriesInfo(sourceId: String, seriesId: String, info: IptvSeriesInfoResult) {
+        if (sourceId.isBlank() || seriesId.isBlank()) return
+        seriesInfoMemoryCache["${sourceId}_$seriesId"] = info
+    }
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREF_IPTV, Context.MODE_PRIVATE)
@@ -1626,7 +1654,7 @@ object IptvRepository {
         File(context.filesDir, "iptv_cache").apply { if (!exists()) mkdirs() }
 
     private fun dao(context: Context): IptvDao =
-        IptvRoomDbHolder.getInstance(context).iptvDao()
+        IptvRoomDatabase.getInstance(context).iptvDao()
 
     /**
      * Executes [block] on Dispatchers.IO if invoked from the main thread so Room never runs on UI thread.
@@ -1654,6 +1682,13 @@ object IptvRepository {
                 for (ep in lastEps) {
                     seriesLastEpMemoryCache["${sourceId}_${ep.seriesKey}"] = ep
                 }
+                val rows = roomDao.getContentTypeCountsSync(sourceId)
+                val countsMap = EnumMap<IptvContentType, Int>(IptvContentType::class.java)
+                for (r in rows) {
+                    val ct = runCatching { IptvContentType.valueOf(r.contentType) }.getOrNull() ?: continue
+                    countsMap[ct] = r.cnt
+                }
+                sectionCountsMemoryCache[sourceId] = countsMap
                 warmedUpSources.add(sourceId)
             } catch (e: Exception) {
                 runCatching { Log.w("IptvRepository", "warmUpSourceCachesIo failed: ${e.javaClass.simpleName}") }
@@ -1693,7 +1728,7 @@ object IptvRepository {
                     }
                 }
                 if (legacySources.isNotEmpty() && roomDao.countSourcesSync() == 0) {
-                    roomDao.upsertSourcesSync(legacySources.map { it.toEntity() })
+                    roomDao.upsertSourcesSync(legacySources.map { IptvSourceEntity.fromDomain(it) })
                 }
 
                 val allPrefs = sp.all
@@ -1782,7 +1817,7 @@ object IptvRepository {
         try {
             val roomDao = dao(context)
             roomDao.clearAllSourcesSync()
-            roomDao.upsertSourcesSync(sources.map { it.toEntity() })
+            roomDao.upsertSourcesSync(sources.map { IptvSourceEntity.fromDomain(it) })
         } catch (e: Exception) {
             runCatching { Log.w("IptvRepository", "saveSourcesListIo failed: ${e.javaClass.simpleName}") }
         }
@@ -1986,6 +2021,7 @@ object IptvRepository {
             dao(context).deleteAllDataForSourceSync(sourceId)
             favoriteIdsMemoryCache.remove(sourceId)
             warmedUpSources.remove(sourceId)
+            invalidateSourceMemoryCaches(sourceId)
             File(cacheDir(context), "streams_$sourceId.json").delete()
         } catch (e: Exception) {
             runCatching { Log.w("IptvRepository", "deleteSource failed: ${e.javaClass.simpleName}") }
@@ -2033,6 +2069,7 @@ object IptvRepository {
         try {
             val newCatId = "${newType.name}_${categoryName.lowercase(Locale.ROOT).hashCode()}"
             dao(context).updateCategoryContentTypeSync(sourceId, categoryName, newType.name, newCatId)
+            invalidateSourceMemoryCaches(sourceId)
             updateSourceCountsFromSqlIo(context, sourceId)
         } catch (e: Exception) {
             runCatching { Log.w("IptvRepository", "setCategoryOverride SQL update failed: ${e.javaClass.simpleName}") }
@@ -2061,20 +2098,26 @@ object IptvRepository {
         }
     }
 
-    fun getSectionCountsSql(context: Context, sourceId: String): Map<IptvContentType, Int> = runOnIoPool {
-        ensureMigratedToRoomIo(context)
-        ensureSourceStreamsMigratedIo(context, sourceId)
-        try {
-            val rows = dao(context).getContentTypeCountsSync(sourceId)
-            val map = EnumMap<IptvContentType, Int>(IptvContentType::class.java)
-            for (r in rows) {
-                val ct = runCatching { IptvContentType.valueOf(r.contentType) }.getOrNull() ?: continue
-                map[ct] = r.cnt
+    fun getSectionCountsSql(context: Context, sourceId: String): Map<IptvContentType, Int> {
+        sectionCountsMemoryCache[sourceId]?.let { if (it.isNotEmpty()) return it }
+        return runOnIoPool {
+            ensureMigratedToRoomIo(context)
+            ensureSourceStreamsMigratedIo(context, sourceId)
+            try {
+                val rows = dao(context).getContentTypeCountsSync(sourceId)
+                val map = EnumMap<IptvContentType, Int>(IptvContentType::class.java)
+                for (r in rows) {
+                    val ct = runCatching { IptvContentType.valueOf(r.contentType) }.getOrNull() ?: continue
+                    map[ct] = r.cnt
+                }
+                if (map.isNotEmpty()) {
+                    sectionCountsMemoryCache[sourceId] = map
+                }
+                map
+            } catch (e: Exception) {
+                runCatching { Log.w("IptvRepository", "getSectionCountsSql failed: ${e.javaClass.simpleName}") }
+                emptyMap()
             }
-            map
-        } catch (e: Exception) {
-            runCatching { Log.w("IptvRepository", "getSectionCountsSql failed: ${e.javaClass.simpleName}") }
-            emptyMap()
         }
     }
 
@@ -2083,39 +2126,46 @@ object IptvRepository {
         sourceId: String,
         contentType: IptvContentType,
         allCategoryLabel: String
-    ): List<IptvCategory> = runOnIoPool {
-        ensureMigratedToRoomIo(context)
-        ensureSourceStreamsMigratedIo(context, sourceId)
-        try {
-            val roomDao = dao(context)
-            val rows = roomDao.getCategoriesForTypeSync(sourceId, contentType.name)
-            if (rows.isEmpty()) return@runOnIoPool emptyList()
-            val totalInType = rows.sumOf { it.cnt }
-            val result = ArrayList<IptvCategory>(rows.size + 1)
-            result.add(
-                IptvCategory(
-                    id = "__ALL__",
-                    name = "🌐  $allCategoryLabel",
-                    contentType = contentType,
-                    itemCount = totalInType
-                )
-            )
-            for (r in rows) {
-                if (r.cnt > 0) {
-                    result.add(
-                        IptvCategory(
-                            id = r.categoryId,
-                            name = r.categoryName,
-                            contentType = contentType,
-                            itemCount = r.cnt
-                        )
+    ): List<IptvCategory> {
+        val cacheKey = "${sourceId}_${contentType.name}_$allCategoryLabel"
+        categoriesMemoryCache[cacheKey]?.let { if (it.isNotEmpty()) return it }
+        return runOnIoPool {
+            ensureMigratedToRoomIo(context)
+            ensureSourceStreamsMigratedIo(context, sourceId)
+            try {
+                val roomDao = dao(context)
+                val rows = roomDao.getCategoriesForTypeSync(sourceId, contentType.name)
+                if (rows.isEmpty()) return@runOnIoPool emptyList()
+                val totalInType = rows.sumOf { it.cnt }
+                val result = ArrayList<IptvCategory>(rows.size + 1)
+                result.add(
+                    IptvCategory(
+                        id = "__ALL__",
+                        name = "🌐  $allCategoryLabel",
+                        contentType = contentType,
+                        itemCount = totalInType
                     )
+                )
+                for (r in rows) {
+                    if (r.cnt > 0) {
+                        result.add(
+                            IptvCategory(
+                                id = r.categoryId,
+                                name = r.categoryName,
+                                contentType = contentType,
+                                itemCount = r.cnt
+                            )
+                        )
+                    }
                 }
+                if (result.isNotEmpty()) {
+                    categoriesMemoryCache[cacheKey] = result
+                }
+                result
+            } catch (e: Exception) {
+                runCatching { Log.w("IptvRepository", "getCategoriesForTypeSql failed: ${e.javaClass.simpleName}") }
+                emptyList()
             }
-            result
-        } catch (e: Exception) {
-            runCatching { Log.w("IptvRepository", "getCategoriesForTypeSql failed: ${e.javaClass.simpleName}") }
-            emptyList()
         }
     }
 
@@ -2128,21 +2178,31 @@ object IptvRepository {
         groupM3uSeries: Boolean,
         limit: Int = DEFAULT_PAGE_SIZE,
         offset: Int = 0
-    ): List<IptvStreamItem> = runOnIoPool {
-        ensureMigratedToRoomIo(context)
-        ensureSourceStreamsMigratedIo(context, sourceId)
-        try {
-            val isAll = if (categoryId == "__ALL__" || categoryId.isNullOrEmpty()) 1 else 0
-            val roomDao = dao(context)
-            val entities = if (groupM3uSeries && contentType == IptvContentType.SERIES) {
-                roomDao.getGroupedM3uSeriesPageSync(sourceId, isAll, categoryName, categoryId ?: "", limit, offset)
-            } else {
-                roomDao.getStreamsPageSync(sourceId, contentType.name, isAll, categoryName, categoryId ?: "", limit, offset)
+    ): List<IptvStreamItem> {
+        val pageCacheKey = "${sourceId}_${contentType.name}_${categoryId ?: "__ALL__"}_${categoryName}_${groupM3uSeries}_$limit"
+        if (offset == 0) {
+            firstPageStreamsMemoryCache[pageCacheKey]?.let { if (it.isNotEmpty()) return it }
+        }
+        return runOnIoPool {
+            ensureMigratedToRoomIo(context)
+            ensureSourceStreamsMigratedIo(context, sourceId)
+            try {
+                val isAll = if (categoryId == "__ALL__" || categoryId.isNullOrEmpty()) 1 else 0
+                val roomDao = dao(context)
+                val entities = if (groupM3uSeries && contentType == IptvContentType.SERIES) {
+                    roomDao.getGroupedM3uSeriesPageSync(sourceId, isAll, categoryName, categoryId ?: "", limit, offset)
+                } else {
+                    roomDao.getStreamsPageSync(sourceId, contentType.name, isAll, categoryName, categoryId ?: "", limit, offset)
+                }
+                val domainList = entities.map { it.toDomain() }
+                if (offset == 0 && domainList.isNotEmpty()) {
+                    firstPageStreamsMemoryCache[pageCacheKey] = domainList
+                }
+                domainList
+            } catch (e: Exception) {
+                runCatching { Log.w("IptvRepository", "getStreamsPageSql failed: ${e.javaClass.simpleName}") }
+                emptyList()
             }
-            entities.map { it.toDomain() }
-        } catch (e: Exception) {
-            runCatching { Log.w("IptvRepository", "getStreamsPageSql failed: ${e.javaClass.simpleName}") }
-            emptyList()
         }
     }
 
@@ -2183,17 +2243,61 @@ object IptvRepository {
         }
     }
 
-    fun searchStreamsSql(context: Context, sourceId: String, normQuery: String, limit: Int = 400): List<IptvStreamItem> = runOnIoPool {
+    fun searchStreamsSql(
+        context: Context,
+        sourceId: String,
+        normQuery: String,
+        limit: Int = 400,
+        contentType: IptvContentType? = null,
+        groupM3uSeries: Boolean = false
+    ): List<IptvStreamItem> = runOnIoPool {
         ensureMigratedToRoomIo(context)
         ensureSourceStreamsMigratedIo(context, sourceId)
         try {
             val roomDao = dao(context)
-            val rows = if (normQuery.isBlank()) {
-                roomDao.getInitialStreamsBoundedSync(sourceId, limit)
+            val cleanNorm = IptvSearchNormalizer.normalize(normQuery)
+            val results: List<IptvStreamItem> = if (contentType == IptvContentType.SERIES && groupM3uSeries) {
+                val allSeries = roomDao.getAllGroupedM3uSeriesForSourceSync(sourceId).map { it.toDomain() }
+                if (cleanNorm.isBlank()) {
+                    allSeries.take(limit)
+                } else {
+                    allSeries.filter { item ->
+                        IptvSearchNormalizer.matches(item.title, item.categoryName, cleanNorm)
+                    }.take(limit)
+                }
+            } else if (cleanNorm.isBlank()) {
+                roomDao.getInitialStreamsBySectionSync(
+                    sourceId = sourceId,
+                    contentType = contentType?.name,
+                    categoryId = null,
+                    categoryName = "",
+                    limit = limit
+                ).map { it.toDomain() }
             } else {
-                roomDao.searchStreamsBoundedSync(sourceId, "%$normQuery%", limit)
+                val directSql = roomDao.searchStreamsBySectionSync(
+                    sourceId = sourceId,
+                    contentType = contentType?.name,
+                    pattern = "%$cleanNorm%",
+                    limit = limit
+                ).map { it.toDomain() }
+                if (directSql.isNotEmpty() || !cleanNorm.contains(" ")) {
+                    directSql
+                } else {
+                    // Multi-word fallback using the original IptvSearchNormalizer.matches within the exact section
+                    roomDao.getAllStreamsForSectionSync(sourceId, contentType?.name)
+                        .asSequence()
+                        .map { it.toDomain() }
+                        .filter { item -> IptvSearchNormalizer.matches(item.title, item.categoryName, cleanNorm) }
+                        .take(limit)
+                        .toList()
+                }
             }
-            rows.map { it.toDomain() }
+            // Enforce strict section isolation: never return items from any other section
+            if (contentType != null) {
+                results.filter { it.contentType == contentType }
+            } else {
+                results
+            }
         } catch (e: Exception) {
             runCatching { Log.w("IptvRepository", "searchStreamsSql failed: ${e.javaClass.simpleName}") }
             emptyList()
@@ -2202,7 +2306,7 @@ object IptvRepository {
 
     private fun saveStreamsToRoomIo(context: Context, sourceId: String, items: List<IptvStreamItem>) {
         try {
-            val entities = items.map { it.toEntity() }
+            val entities = items.map { IptvStreamEntity.fromDomain(it) }
             dao(context).replaceAllStreamsForSourceSync(sourceId, entities)
         } catch (e: Exception) {
             runCatching { Log.w("IptvRepository", "saveStreamsToRoomIo failed: ${e.javaClass.simpleName}") }
@@ -2283,6 +2387,7 @@ object IptvRepository {
             }
 
             saveStreamsToRoomIo(context, sourceId, items)
+            invalidateSourceMemoryCaches(sourceId)
             warmUpSourceCachesIo(context, sourceId)
             val currentList = getSources(context).toMutableList()
             val idx = currentList.indexOfFirst { it.id == sourceId }

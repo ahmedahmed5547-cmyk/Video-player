@@ -29,7 +29,6 @@ object SubtitleSearchEngine {
         StremioOpenSubtitlesV3Provider,
         OpenSubtitlesRestProvider,
         PodnapisiProvider,
-        YifySubtitlesProvider,
         SubdlProvider
     )
 
@@ -63,7 +62,7 @@ object SubtitleSearchEngine {
             .replace(Regex("\\b\\d{1,2}x\\d{1,3}\\b.*"), "")
             .replace(Regex("(?:[Ee][Pp]?|Episode|الحلقة)\\s*\\d{1,3}.*", RegexOption.IGNORE_CASE), "")
             .replace(Regex("\\b(19\\d{2}|20\\d{2})\\b.*"), "")
-            .replace(Regex("(2160p|1080p|720p|480p|360p|4K|BluRay|BRRip|WEBRip|WEB-DL|WEB|HDRip|HDTV|x264|x265|HEVC|AAC|10bit|YTS|YIFY|RARBG|PSA|EgyBest|Wecima|MyCima|FaselHD|ArabSeed|Cima4u|AnimeSlayer).*", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("(2160p|1080p|720p|480p|360p|4K|UHD|BluRay|BRRip|BDRip|WEBRip|WEB-DL|WEB|HDRip|HDTV|DVDRip|x264|x265|H264|H265|HEVC|AAC|AC3|10bit|HDR10|REPACK|PROPER|EXTENDED).*", RegexOption.IGNORE_CASE), "")
             .replace(Regex("\\s+"), " ")
             .trim()
             .ifEmpty { baseName.trim().ifEmpty { "Movie" } }

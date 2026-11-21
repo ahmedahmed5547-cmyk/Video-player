@@ -6,6 +6,12 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
+import java.io.File
+import java.io.FileOutputStream
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.media.MediaMetadataRetriever
@@ -104,6 +110,118 @@ object VideoThumbnailLoader {
                 }
             }
         }
+    }
+
+
+    fun loadFolderCollageThumbnail(context: Context, folder: VideoFolder, imageView: ImageView, accentColor: Int): Job {
+        val sampleVideos = folder.videos.take(4)
+        val signature = sampleVideos.joinToString("|") { it.uri.toString() }
+        val key = "folder_collage:${folder.name}:$signature"
+        imageView.tag = key
+
+        val cached = memoryCache.get(key)
+        if (cached != null && !cached.isRecycled) {
+            imageView.animate().cancel()
+            imageView.alpha = 1f
+            imageView.imageTintList = null
+            imageView.scaleType = ImageView.ScaleType.CENTER_CROP
+            imageView.setPadding(0, 0, 0, 0)
+            imageView.setImageBitmap(cached)
+            return Job().apply { complete() }
+        }
+
+        // Placeholder while loading
+        imageView.animate().cancel()
+        imageView.alpha = 0.85f
+        imageView.scaleType = ImageView.ScaleType.CENTER_INSIDE
+        imageView.setPadding(24, 24, 24, 24)
+        imageView.imageTintList = ColorStateList.valueOf(accentColor)
+        imageView.setImageResource(R.drawable.ic_folder_cinema)
+
+        return scope.launch {
+            val diskDir = File(context.cacheDir, "folder_thumbs").apply { mkdirs() }
+            val diskFile = File(diskDir, "${key.hashCode()}.jpg")
+            var collageBmp: Bitmap? = if (diskFile.exists() && diskFile.length() > 0L) {
+                runCatching { BitmapFactory.decodeFile(diskFile.absolutePath) }.getOrNull()
+            } else null
+
+            if (collageBmp == null && sampleVideos.isNotEmpty()) {
+                val frames = mutableListOf<Bitmap>()
+                for (vid in sampleVideos) {
+                    val bmp = loadSemaphore.withPermit { fetchBitmap(context, vid) }
+                    if (bmp != null && !bmp.isRecycled) frames.add(bmp)
+                }
+                if (frames.isNotEmpty()) {
+                    collageBmp = composeFolderCollage(frames)
+                    runCatching {
+                        FileOutputStream(diskFile).use { fos ->
+                            collageBmp.compress(Bitmap.CompressFormat.JPEG, 82, fos)
+                        }
+                    }
+                }
+            }
+
+            if (collageBmp != null) {
+                memoryCache.put(key, collageBmp)
+                withContext(Dispatchers.Main) {
+                    if (imageView.tag == key) {
+                        imageView.alpha = 0f
+                        imageView.imageTintList = null
+                        imageView.scaleType = ImageView.ScaleType.CENTER_CROP
+                        imageView.setPadding(0, 0, 0, 0)
+                        imageView.setImageBitmap(collageBmp)
+                        imageView.animate().alpha(1f).setDuration(200L).setInterpolator(DecelerateInterpolator()).start()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun composeFolderCollage(frames: List<Bitmap>): Bitmap {
+        val outW = 320
+        val outH = 180
+        val out = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        canvas.drawColor(Color.parseColor("#0A0A0F"))
+        val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+        val gap = 2
+
+        fun drawCropped(src: Bitmap, dst: Rect) {
+            val srcRatio = src.width.toFloat() / src.height.coerceAtLeast(1).toFloat()
+            val dstRatio = dst.width().toFloat() / dst.height().coerceAtLeast(1).toFloat()
+            val srcRect = if (srcRatio > dstRatio) {
+                val cropW = (src.height * dstRatio).toInt()
+                val left = ((src.width - cropW) / 2).coerceAtLeast(0)
+                Rect(left, 0, (left + cropW).coerceAtMost(src.width), src.height)
+            } else {
+                val cropH = (src.width / dstRatio).toInt()
+                val top = ((src.height - cropH) / 2).coerceAtLeast(0)
+                Rect(0, top, src.width, (top + cropH).coerceAtMost(src.height))
+            }
+            canvas.drawBitmap(src, srcRect, dst, paint)
+        }
+
+        val halfW = outW / 2
+        val halfH = outH / 2
+        when (frames.size) {
+            1 -> drawCropped(frames[0], Rect(0, 0, outW, outH))
+            2 -> {
+                drawCropped(frames[0], Rect(0, 0, halfW - gap / 2, outH))
+                drawCropped(frames[1], Rect(halfW + gap / 2, 0, outW, outH))
+            }
+            3 -> {
+                drawCropped(frames[0], Rect(0, 0, halfW - gap / 2, outH))
+                drawCropped(frames[1], Rect(halfW + gap / 2, 0, outW, halfH - gap / 2))
+                drawCropped(frames[2], Rect(halfW + gap / 2, halfH + gap / 2, outW, outH))
+            }
+            else -> {
+                drawCropped(frames[0], Rect(0, 0, halfW - gap / 2, halfH - gap / 2))
+                drawCropped(frames[1], Rect(halfW + gap / 2, 0, outW, halfH - gap / 2))
+                drawCropped(frames[2], Rect(0, halfH + gap / 2, halfW - gap / 2, outH))
+                drawCropped(frames[3], Rect(halfW + gap / 2, halfH + gap / 2, outW, outH))
+            }
+        }
+        return out
     }
 
     private fun fetchBitmap(context: Context, video: VideoItem): Bitmap? {
@@ -209,8 +327,10 @@ class MediaAdapter(
         submitList(videos.toList())
     }
 
-    fun submitIptvList(iptvElements: List<Any>) {
-        lastAnimatedPosition = -1
+    fun submitIptvList(iptvElements: List<Any>, resetAnimation: Boolean = true) {
+        if (resetAnimation) {
+            lastAnimatedPosition = -1
+        }
         submitList(iptvElements.toList())
     }
 
@@ -282,12 +402,21 @@ class MediaAdapter(
             binding.btnFavoriteHeart.visibility = View.GONE
             binding.btnDownloadIptv.visibility = View.GONE
 
-            // Configure List vs Grid layout dynamically
+            // Configure List vs Grid layout dynamically & responsively across phones, tablets, and large screens
+            val cfg = ctx.resources.configuration
+            val isPosterItem = item is IptvStreamItem &&
+                (item.contentType == IptvContentType.MOVIES || item.contentType == IptvContentType.SERIES)
+            val (thumbW, thumbH) = ResponsiveUiMetrics.getThumbnailDimensionsDp(
+                screenWidthDp = cfg.screenWidthDp,
+                smallestScreenWidthDp = cfg.smallestScreenWidthDp,
+                isGridMode = isGridMode,
+                isPosterItem = isPosterItem
+            )
             if (isGridMode) {
                 binding.itemContentLayout.orientation = LinearLayout.VERTICAL
                 binding.thumbContainer.layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    dp(ctx, 108)
+                    dp(ctx, thumbH)
                 )
                 binding.textContainer.layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -299,8 +428,8 @@ class MediaAdapter(
             } else {
                 binding.itemContentLayout.orientation = LinearLayout.HORIZONTAL
                 binding.thumbContainer.layoutParams = LinearLayout.LayoutParams(
-                    dp(ctx, 116),
-                    dp(ctx, 68)
+                    dp(ctx, thumbW),
+                    dp(ctx, thumbH)
                 )
                 binding.textContainer.layoutParams = LinearLayout.LayoutParams(
                     0,

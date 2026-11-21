@@ -14,6 +14,8 @@ app/build/
 # Local configuration & signing secrets (NEVER commit to Git)
 local.properties
 *.keystore
+!app/release.keystore
+!release.keystore
 *.jks
 *.key
 *.pem

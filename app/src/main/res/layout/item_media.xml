@@ -3,10 +3,10 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginStart="8dp"
-    android:layout_marginTop="6dp"
-    android:layout_marginEnd="8dp"
-    android:layout_marginBottom="6dp"
+    android:layout_marginStart="@dimen/media_card_margin_horizontal"
+    android:layout_marginTop="@dimen/media_card_margin_vertical"
+    android:layout_marginEnd="@dimen/media_card_margin_horizontal"
+    android:layout_marginBottom="@dimen/media_card_margin_vertical"
     app:cardBackgroundColor="#131C2E"
     app:cardCornerRadius="18dp"
     app:cardElevation="3dp"
@@ -19,7 +19,7 @@
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="12dp">
+        android:padding="@dimen/media_card_padding">
 
         <FrameLayout
             android:id="@+id/thumbContainer"
@@ -99,7 +99,7 @@
                 android:ellipsize="end"
                 android:maxLines="2"
                 android:textColor="?attr/colorOnSurface"
-                android:textSize="15sp"
+                android:textSize="@dimen/media_title_text_size"
                 android:textStyle="bold" />
 
             <TextView
@@ -110,7 +110,7 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:textColor="?android:attr/textColorSecondary"
-                android:textSize="12sp" />
+                android:textSize="@dimen/media_subtitle_text_size" />
         </LinearLayout>
 
         <ImageButton

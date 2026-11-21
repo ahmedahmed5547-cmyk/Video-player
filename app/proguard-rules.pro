@@ -1,4 +1,4 @@
-# Pure Video Player R8 Release Optimization, Log Stripping & Keep Rules
+# IPTV and Video player R8 Release Optimization, Log Stripping & Keep Rules
 -dontwarn org.videolan.**
 -dontwarn androidx.media3.**
 -dontwarn com.google.android.exoplayer2.**
@@ -64,3 +64,26 @@
 -keepclassmembers class * implements android.os.Parcelable {
     public static final ** CREATOR;
 }
+
+# Keep ViewModel subclasses instantiated via ViewModelProvider reflection
+-keep class * extends androidx.lifecycle.ViewModel {
+    public <init>(...);
+}
+-keep class * extends androidx.lifecycle.AndroidViewModel {
+    public <init>(android.app.Application);
+}
+-keep class com.pureplayer.video.VideoLibraryViewModel { *; }
+-keep class com.pureplayer.video.VlcSurfaceLayoutMath { *; }
+-keep class com.pureplayer.video.VlcAspectMode { *; }
+
+# Keep Jetpack WindowManager FoldingFeature & FoldableAdaptiveController
+-dontwarn androidx.window.**
+-keep class androidx.window.** { *; }
+-keep class com.pureplayer.video.FoldableAdaptiveMath { *; }
+-keep class com.pureplayer.video.FoldPosture { *; }
+
+# Keep Media3 Playback Service, Audio Library & AudioFX
+-keep class com.pureplayer.video.VexoPlaybackService { *; }
+-keep class com.pureplayer.video.AudioLibraryViewModel { *; }
+-keep class com.pureplayer.video.AudioPlaylistEntity { *; }
+-keep class com.pureplayer.video.AudioPlaylistTrackEntity { *; }

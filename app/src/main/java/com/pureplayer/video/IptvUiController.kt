@@ -103,8 +103,11 @@ internal fun MainActivity.renderIptvCurrentLevel() {
     if (currentMainTab != 2) return
     binding.iptvHeaderBar.visibility = View.VISIBLE
     binding.fabResumeLast.visibility = View.GONE
-    binding.btnBackFolder.visibility = View.GONE
+    binding.btnBackFolder.visibility = if (iptvNavLevel > 0) View.VISIBLE else View.GONE
+    binding.swipeRefresh.isRefreshing = false
+    binding.swipeRefresh.isEnabled = iptvSessionSyncGuard.shouldEnableSwipeRefreshGesture(currentMainTab, iptvNavLevel)
     adapter.isVaultMode = false
+    updateRecyclerLayoutManager()
 
     val sources = IptvRepository.getSources(this)
     if (activeIptvSource != null) {
@@ -270,7 +273,18 @@ internal fun MainActivity.renderIptvCurrentLevel() {
                 adapter.submitIptvList(categories)
             } else {
                 binding.tvToolbarTitle.text = activeIptvCategoryName
-                loadInitialIptvStreamsPage(src, cType)
+                if (iptvSessionSyncGuard.shouldReuseLoadedCategoryPage(
+                        sourceId = src.id,
+                        contentType = cType,
+                        categoryId = activeIptvCategoryId,
+                        currentListNotEmpty = currentIptvPagedList.isNotEmpty()
+                    )
+                ) {
+                    binding.tvIptvStatusSubtitle.text = "${currentIptvPagedList.size}${if (hasMoreIptvCategoryPages) "+" else ""} ${getString(R.string.iptv_items_unit)}"
+                    adapter.submitIptvList(ArrayList(currentIptvPagedList), resetAnimation = false)
+                } else {
+                    loadInitialIptvStreamsPage(src, cType)
+                }
             }
         }
         4 -> {
@@ -320,7 +334,7 @@ internal fun MainActivity.loadInitialIptvStreamsPage(src: IptvSource, cType: Ipt
     currentIptvCategoryOffset = firstPage.size
     hasMoreIptvCategoryPages = (firstPage.size >= IptvRepository.DEFAULT_PAGE_SIZE)
     binding.tvIptvStatusSubtitle.text = "${currentIptvPagedList.size}${if (hasMoreIptvCategoryPages) "+" else ""} ${getString(R.string.iptv_items_unit)}"
-    adapter.submitIptvList(ArrayList(currentIptvPagedList))
+    adapter.submitIptvList(ArrayList(currentIptvPagedList), resetAnimation = false)
 }
 
 internal fun MainActivity.loadNextIptvStreamsPage() {
@@ -351,7 +365,7 @@ internal fun MainActivity.loadNextIptvStreamsPage() {
                 currentIptvCategoryOffset += nextPage.size
                 hasMoreIptvCategoryPages = (nextPage.size >= IptvRepository.DEFAULT_PAGE_SIZE)
                 binding.tvIptvStatusSubtitle.text = "${currentIptvPagedList.size}${if (hasMoreIptvCategoryPages) "+" else ""} ${getString(R.string.iptv_items_unit)}"
-                adapter.submitIptvList(ArrayList(currentIptvPagedList))
+                adapter.submitIptvList(ArrayList(currentIptvPagedList), resetAnimation = false)
             } else {
                 hasMoreIptvCategoryPages = false
             }
@@ -372,9 +386,16 @@ internal fun MainActivity.navigateBackInIptvHierarchy() {
             iptvSectionSubTab = 0
             iptvNavLevel = 2
         }
-        iptvNavLevel == 2 -> iptvNavLevel = 1
-        else -> iptvNavLevel = 0
+        iptvNavLevel == 2 -> {
+            iptvNavLevel = 1
+            activeIptvContentType = null
+        }
+        else -> {
+            iptvNavLevel = 0
+            activeIptvContentType = null
+        }
     }
+    iptvSessionSyncGuard.onInternalSectionNavigation(iptvNavLevel, activeIptvContentType, activeIptvCategoryId, iptvSectionSubTab)
     renderIptvCurrentLevel()
 }
 
@@ -401,13 +422,19 @@ internal fun MainActivity.handleIptvItemClick(item: Any) {
             activeIptvContentType = item.contentType
             iptvSectionSubTab = 0
             iptvNavLevel = 2
+            iptvSessionSyncGuard.onInternalSectionNavigation(iptvNavLevel, activeIptvContentType, activeIptvCategoryId, iptvSectionSubTab)
             renderIptvCurrentLevel()
         }
         is IptvCategory -> {
+            val prevCatId = activeIptvCategoryId
             activeIptvCategoryId = item.id
             activeIptvCategoryName = item.name.removePrefix("🌐  ")
+            if (prevCatId != item.id) {
+                iptvSessionSyncGuard.clearLoadedCategoryKey()
+            }
             iptvSectionSubTab = 0
             iptvNavLevel = 3
+            iptvSessionSyncGuard.onInternalSectionNavigation(iptvNavLevel, activeIptvContentType, activeIptvCategoryId, iptvSectionSubTab)
             renderIptvCurrentLevel()
         }
         is IptvStreamItem -> {
@@ -598,7 +625,8 @@ internal fun MainActivity.showAddIptvSourceDialog() {
                 pushSettingsBackStack { showAddIptvSourceDialog() }
                 showAddOrEditXtreamDialog()
             }
-        ),
+        )
+    ) + (if (BuildConfig.ALLOW_DEMO_IPTV_SOURCE) listOf(
         PremiumMenuItem(
             iconEmoji = "🧪",
             title = getString(R.string.iptv_add_demo_source_option),
@@ -607,7 +635,7 @@ internal fun MainActivity.showAddIptvSourceDialog() {
                 addBuiltInDemoIptvSource()
             }
         )
-    )
+    ) else emptyList())
 
     showPremiumMenuDialog(
         headerIcon = "➕",
@@ -916,20 +944,89 @@ internal fun MainActivity.showAddOrEditXtreamDialog(
     dialog.show()
 }
 
+internal fun MainActivity.setSubtleIptvSyncIndicatorVisible(visible: Boolean) {
+    binding.iptvSubtleSyncBar.visibility = if (visible) View.VISIBLE else View.GONE
+    binding.iptvInlineSyncSpinner.visibility = if (visible) View.VISIBLE else View.GONE
+    binding.iptvLoadingOverlay.visibility = View.GONE
+    binding.tvIptvLoadingStatus.visibility = View.GONE
+}
+
+/**
+ * Automatically refreshes and synchronizes the IPTV library in the background
+ * ONLY when the user enters/opens the main IPTV section.
+ *
+ * - Uses a subtle top progress indicator (never shows "Connecting to Servers").
+ * - Keeps existing cached data immediately available for browsing.
+ * - Does NOT trigger again while navigating between Movies, TV Series, and Live TV or scrolling.
+ * - Triggers again only after the user leaves the main IPTV section and reopens it.
+ */
+internal fun MainActivity.triggerAutoRefreshOnEnteringIptvSection() {
+    if (!iptvSessionSyncGuard.onEnterMainIptvSection()) return
+    val hostActivity = this
+    val sources = IptvRepository.getSources(this)
+    if (sources.isEmpty()) return
+
+    val targetSource = activeIptvSource ?: sources.find { it.id == IptvRepository.getActiveSourceId(this) } ?: sources.first()
+    activeIptvSource = targetSource
+
+    // Pre-warm memory caches immediately so switching between Movies / TV Series / Live TV is instantaneous (0ms)
+    lifecycleScope.launch(Dispatchers.IO) {
+        IptvRepository.warmUpSourceCachesIo(hostActivity, targetSource.id)
+    }
+
+    val decryptedPass = if (targetSource.type == IptvSourceType.XTREAM) {
+        IptvCredentialVault.decryptSecretOrNull(targetSource.encryptedPassword) ?: ""
+    } else ""
+
+    if (targetSource.type == IptvSourceType.XTREAM && decryptedPass.isEmpty()) {
+        return
+    }
+
+    iptvSyncJob?.cancel()
+    setSubtleIptvSyncIndicatorVisible(true)
+
+    iptvSyncJob = lifecycleScope.launch {
+        val res = IptvRepository.syncAndSaveSource(
+            context = hostActivity,
+            existingSourceId = targetSource.id,
+            name = targetSource.name,
+            type = targetSource.type,
+            serverOrM3uUrl = targetSource.serverOrM3uUrl,
+            username = targetSource.username,
+            passwordPlain = decryptedPass
+        )
+        setSubtleIptvSyncIndicatorVisible(false)
+        if (res is IptvSyncResult.Success) {
+            if (activeIptvSource?.id == res.source.id) {
+                activeIptvSource = res.source
+            }
+            if (currentMainTab == 2 && !isSearchActive) {
+                // If user is at level 0 or 1, update counts/cards smoothly in place;
+                // if user is already deep inside Movies/Series/Live TV (level >= 2), keep their current screen uninterrupted!
+                if (iptvNavLevel <= 1) {
+                    renderIptvCurrentLevel()
+                } else {
+                    binding.tvIptvStatusSubtitle.text = "${currentIptvPagedList.size}${if (hasMoreIptvCategoryPages) "+" else ""} ${getString(R.string.iptv_items_unit)}"
+                }
+            }
+        }
+    }
+}
+
 internal fun MainActivity.syncIptvSourceWithProgress(
     existingSourceId: String?,
     name: String,
     type: IptvSourceType,
     serverOrM3uUrl: String,
     username: String = "",
-    passwordPlain: String = ""
+    passwordPlain: String = "",
+    silentBackground: Boolean = false
 ) {
     val hostActivity = this
     settingsBackStack.clear()
     closeActiveFullScreenDialogSmoothly()
     iptvSyncJob?.cancel()
-    binding.iptvLoadingOverlay.visibility = View.VISIBLE
-    binding.tvIptvLoadingStatus.text = getString(R.string.iptv_loading_data)
+    setSubtleIptvSyncIndicatorVisible(true)
 
     iptvSyncJob = lifecycleScope.launch {
         val res = IptvRepository.syncAndSaveSource(
@@ -941,44 +1038,48 @@ internal fun MainActivity.syncIptvSourceWithProgress(
             username = username,
             passwordPlain = passwordPlain
         )
-        binding.iptvLoadingOverlay.visibility = View.GONE
+        setSubtleIptvSyncIndicatorVisible(false)
         when (res) {
             is IptvSyncResult.Success -> {
                 activeIptvSource = res.source
-                iptvNavLevel = 1
-                Toast.makeText(
-                    hostActivity,
-                    getString(R.string.iptv_sync_success_toast, res.source.name, res.totalLoaded),
-                    Toast.LENGTH_LONG
-                ).show()
+                if (!silentBackground) {
+                    iptvNavLevel = 1
+                    Toast.makeText(
+                        hostActivity,
+                        getString(R.string.iptv_sync_success_toast, res.source.name, res.totalLoaded),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
                 renderIptvCurrentLevel()
             }
             is IptvSyncResult.Error -> {
-                Toast.makeText(hostActivity, res.userMessage, Toast.LENGTH_LONG).show()
-                if (type == IptvSourceType.XTREAM) {
-                    val diagInfo = "Server: $serverOrM3uUrl\nUser: $username\nStatus: ${res.technicalDiagnostic}"
-                    showPremiumMenuDialog(
-                        headerIcon = "⚠️",
-                        title = res.userMessage,
-                        subtitle = diagInfo,
-                        items = listOf(
-                            PremiumMenuItem(
-                                iconEmoji = "✏️",
-                                title = getString(R.string.iptv_source_edit_action),
-                                subtitle = "مراجعة وتعديل الرابط أو اليوزر أو الباسورد",
-                                isAccentHighlighted = true,
-                                onClick = {
-                                    showAddOrEditXtreamDialog(
-                                        existingSource = null,
-                                        prefillName = name,
-                                        prefillServer = serverOrM3uUrl,
-                                        prefillUser = username,
-                                        prefillPass = passwordPlain
-                                    )
-                                }
+                if (!silentBackground) {
+                    Toast.makeText(hostActivity, res.userMessage, Toast.LENGTH_LONG).show()
+                    if (type == IptvSourceType.XTREAM) {
+                        val diagInfo = "Server: $serverOrM3uUrl\nUser: $username\nStatus: ${res.technicalDiagnostic}"
+                        showPremiumMenuDialog(
+                            headerIcon = "⚠️",
+                            title = res.userMessage,
+                            subtitle = diagInfo,
+                            items = listOf(
+                                PremiumMenuItem(
+                                    iconEmoji = "✏️",
+                                    title = getString(R.string.iptv_source_edit_action),
+                                    subtitle = getString(R.string.iptv_source_edit_action),
+                                    isAccentHighlighted = true,
+                                    onClick = {
+                                        showAddOrEditXtreamDialog(
+                                            existingSource = null,
+                                            prefillName = name,
+                                            prefillServer = serverOrM3uUrl,
+                                            prefillUser = username,
+                                            prefillPass = passwordPlain
+                                        )
+                                    }
+                                )
                             )
                         )
-                    )
+                    }
                 }
                 renderIptvCurrentLevel()
             }
@@ -986,12 +1087,14 @@ internal fun MainActivity.syncIptvSourceWithProgress(
     }
 }
 
-internal fun MainActivity.refreshExistingIptvSource(source: IptvSource) {
+internal fun MainActivity.refreshExistingIptvSource(source: IptvSource, silentBackground: Boolean = false) {
     val decryptedPass = if (source.type == IptvSourceType.XTREAM) {
         val dec = IptvCredentialVault.decryptSecretOrNull(source.encryptedPassword)
         if (dec == null || dec.isEmpty()) {
-            Toast.makeText(this, getString(R.string.iptv_err_reenter_password), Toast.LENGTH_LONG).show()
-            showAddOrEditXtreamDialog(source)
+            if (!silentBackground) {
+                Toast.makeText(this, getString(R.string.iptv_err_reenter_password), Toast.LENGTH_LONG).show()
+                showAddOrEditXtreamDialog(source)
+            }
             return
         }
         dec
@@ -1002,7 +1105,8 @@ internal fun MainActivity.refreshExistingIptvSource(source: IptvSource) {
         type = source.type,
         serverOrM3uUrl = source.serverOrM3uUrl,
         username = source.username,
-        passwordPlain = decryptedPass
+        passwordPlain = decryptedPass,
+        silentBackground = silentBackground
     )
 }
 
@@ -1130,7 +1234,7 @@ internal fun MainActivity.downloadIptvMediaLocally(
         .replace(Regex("[\\\\/:*?\"<>|]"), "_")
         .replace(Regex("\\s+"), " ")
         .trim()
-        .ifEmpty { "PureVideo_${System.currentTimeMillis()}" }
+        .ifEmpty { "IPTV_Video_${System.currentTimeMillis()}" }
 
     val fileName = if (sanitizedBase.lowercase(Locale.ROOT).endsWith(".$ext")) {
         sanitizedBase
@@ -1146,7 +1250,7 @@ internal fun MainActivity.downloadIptvMediaLocally(
         val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val req = DownloadManager.Request(Uri.parse(cleanUrl)).apply {
             setTitle(title)
-            setDescription("Pure Video Player • Offline Download")
+            setDescription("${getString(R.string.app_name)} • Offline Download")
             setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             setAllowedOverMetered(true)
             setAllowedOverRoaming(true)
@@ -1156,12 +1260,12 @@ internal fun MainActivity.downloadIptvMediaLocally(
             }
             @Suppress("DEPRECATION")
             allowScanningByMediaScanner()
-            setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES, "PureVideoPlayer/$fileName")
+            setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES, "IPTV_and_Video_player/$fileName")
         }
         dm.enqueue(req)
         Toast.makeText(this, getString(R.string.iptv_download_started_toast, title), Toast.LENGTH_LONG).show()
     } catch (_: Exception) {
-        // Fallback direct background stream download to Movies/PureVideoPlayer
+        // Fallback direct background stream download to Movies/IPTV_and_Video_player
         Toast.makeText(this, getString(R.string.iptv_download_started_toast, title), Toast.LENGTH_LONG).show()
         lifecycleScope.launch {
             val savedFile = withContext(Dispatchers.IO) {
@@ -1169,7 +1273,7 @@ internal fun MainActivity.downloadIptvMediaLocally(
                     val moviesRoot = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
                         ?: getExternalFilesDir(Environment.DIRECTORY_MOVIES)
                         ?: filesDir
-                    val targetDir = File(moviesRoot, "PureVideoPlayer").apply { mkdirs() }
+                    val targetDir = File(moviesRoot, "IPTV_and_Video_player").apply { mkdirs() }
                     val outFile = File(targetDir, fileName)
                     val conn = (URL(cleanUrl).openConnection() as HttpURLConnection).apply {
                         instanceFollowRedirects = true
@@ -1313,16 +1417,25 @@ internal fun MainActivity.openIptvSeriesSeasons(seriesItem: IptvStreamItem) {
     val hostActivity = this
     val src = activeIptvSource ?: return
     if (src.type == IptvSourceType.XTREAM && seriesItem.seriesId.isNotBlank()) {
-        binding.iptvLoadingOverlay.visibility = View.VISIBLE
-        binding.tvIptvLoadingStatus.text = getString(R.string.iptv_loading_series_episodes)
+        val cachedInfo = IptvRepository.getCachedSeriesInfo(src.id, seriesItem.seriesId)
+        if (cachedInfo != null && cachedInfo.seasons.isNotEmpty()) {
+            activeIptvSeriesInfo = cachedInfo
+            iptvNavLevel = 4
+            iptvSessionSyncGuard.onInternalSectionNavigation(iptvNavLevel, activeIptvContentType, activeIptvCategoryId, iptvSectionSubTab)
+            renderIptvCurrentLevel()
+            return
+        }
+        setSubtleIptvSyncIndicatorVisible(true)
         lifecycleScope.launch {
             val res = withContext(Dispatchers.IO) {
                 runCatching { XtreamCodesClient.fetchSeriesSeasonsAndEpisodes(src, seriesItem) }.getOrNull()
             }
-            binding.iptvLoadingOverlay.visibility = View.GONE
+            setSubtleIptvSyncIndicatorVisible(false)
             if (res != null && res.seasons.isNotEmpty()) {
+                IptvRepository.putCachedSeriesInfo(src.id, seriesItem.seriesId, res)
                 activeIptvSeriesInfo = res
                 iptvNavLevel = 4
+                iptvSessionSyncGuard.onInternalSectionNavigation(iptvNavLevel, activeIptvContentType, activeIptvCategoryId, iptvSectionSubTab)
                 renderIptvCurrentLevel()
             } else {
                 Toast.makeText(hostActivity, getString(R.string.iptv_err_no_episodes), Toast.LENGTH_SHORT).show()
@@ -1413,7 +1526,7 @@ internal fun MainActivity.addBuiltInDemoIptvSource() {
         }
         syncIptvSourceWithProgress(
             existingSourceId = "demo_builtin_source",
-            name = "Pure IPTV Demo (قنوات وأفلام ومسلسلات تجريبية)",
+            name = "VEXO Player Demo",
             type = IptvSourceType.M3U_FILE,
             serverOrM3uUrl = Uri.fromFile(demoFile).toString()
         )

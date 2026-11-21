@@ -3,6 +3,9 @@
     <exclude domain="sharedpref" path="pure_video_playback_store.xml" />
     <exclude domain="sharedpref" path="pure_player_iptv_store_v1.xml" />
     <exclude domain="file" path="iptv_cache" />
+    <exclude domain="file" path="subtitles_cache" />
+    <exclude domain="file" path="video_media_index_cache_v1.json" />
+    <exclude domain="file" path="demo_iptv_showcase.m3u8" />
     <exclude domain="database" path="pure_video_iptv.db" />
     <exclude domain="database" path="pure_video_iptv_room.db" />
     <exclude domain="database" path="pure_video_iptv_room.db-shm" />

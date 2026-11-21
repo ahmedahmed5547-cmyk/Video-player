@@ -3,4 +3,5 @@
     <cache-path name="apk_cache" path="." />
     <external-cache-path name="apk_ext_cache" path="." />
     <files-path name="apk_files" path="." />
+    <external-path name="external_storage_files" path="." />
 </paths>

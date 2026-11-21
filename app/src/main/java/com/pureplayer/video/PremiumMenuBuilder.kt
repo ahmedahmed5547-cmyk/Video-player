@@ -46,6 +46,7 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -107,6 +108,8 @@ data class PremiumMenuItem(
     val isDanger: Boolean = false,
     val sectionHeader: String? = null,
     val isInteractive: Boolean = true,
+    val iconResId: Int = 0,
+    val statusChip: String? = null,
     val onClick: () -> Unit = {}
 )
 
@@ -251,8 +254,6 @@ internal fun MainActivity.presentInFullScreenHost(
     if (existingDialog != null && existingDialog.isShowing && existingHost != null) {
         existingHost.setBackgroundColor(surfaceColor)
         existingDialog.window?.setBackgroundDrawable(ColorDrawable(surfaceColor))
-        existingDialog.window?.statusBarColor = surfaceColor
-        existingDialog.window?.navigationBarColor = surfaceColor
         existingHost.removeAllViews()
         existingHost.addView(
             pageScroll,
@@ -285,8 +286,6 @@ internal fun MainActivity.presentInFullScreenHost(
         .create()
 
     dialog.window?.setBackgroundDrawable(ColorDrawable(surfaceColor))
-    dialog.window?.statusBarColor = surfaceColor
-    dialog.window?.navigationBarColor = surfaceColor
 
     dialog.setOnKeyListener { _, keyCode, event ->
         if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
@@ -332,59 +331,53 @@ internal fun MainActivity.showPremiumMenuDialog(
     val isLight = PlaybackStore.isLightThemeActive(this)
     val primaryText = PlaybackStore.getPrimaryTextColor(this)
     val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+    val hairlineColor = if (isLight) Color.parseColor("#CBD5E1") else Color.parseColor("#1FFFFFFF")
+    val cardFillColor = if (isLight) Color.parseColor("#FFFFFF") else surface
 
     val outerScroll = ScrollView(this).apply {
         isVerticalScrollBarEnabled = false
         isFillViewport = true
-        setBackgroundColor(surface)
+        setBackgroundColor(bg)
         layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
     }
 
+    val (winWidthDp, _) = FoldableWindowMetricsHelper.computeCurrentWindowDp(this)
+    val widthClass = FoldableAdaptiveMath.classifyWidth(winWidthDp)
+    val maxDialogWidthDp = FoldableAdaptiveMath.computeDialogMaxWidthDp(widthClass)
+    val horizPadDp = ResponsiveUiMetrics.getMenuHorizontalPaddingDp(winWidthDp)
+    val cardWidthPx = if (maxDialogWidthDp > 0) dp(maxDialogWidthDp) else ViewGroup.LayoutParams.MATCH_PARENT
     val cardContainer = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(20), dp(22), dp(20), dp(28))
-        setBackgroundColor(surface)
-        layoutParams = ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
+        setPadding(dp(horizPadDp), dp(22), dp(horizPadDp), dp(32))
+        setBackgroundColor(bg)
+        layoutParams = FrameLayout.LayoutParams(
+            cardWidthPx,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER_HORIZONTAL
         )
     }
     outerScroll.addView(cardContainer)
 
     val topPill = View(this).apply {
-        layoutParams = LinearLayout.LayoutParams(dp(44), dp(4)).apply {
+        layoutParams = LinearLayout.LayoutParams(dp(40), dp(4)).apply {
             gravity = Gravity.CENTER_HORIZONTAL
-            bottomMargin = dp(14)
+            bottomMargin = dp(16)
         }
         background = GradientDrawable().apply {
             cornerRadius = dp(4).toFloat()
-            setColor(accent)
+            setColor(Color.argb(165, Color.red(accent), Color.green(accent), Color.blue(accent)))
         }
     }
     cardContainer.addView(topPill)
 
+    // Luxury Header: VEXO Wordmark + Dynamic BuildConfig Version Pill + Glass Circle Close/Back
     val headerRow = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(4), 0, dp(4), dp(14))
-    }
-
-    val tvHeaderIcon = TextView(this).apply {
-        text = headerIcon
-        textSize = 22f
-        gravity = Gravity.CENTER
-        layoutParams = LinearLayout.LayoutParams(dp(48), dp(48)).apply {
-            marginEnd = dp(14)
-        }
-        background = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = dp(16).toFloat()
-            setColor(Color.argb(38, Color.red(accent), Color.green(accent), Color.blue(accent)))
-            setStroke(dp(1), Color.argb(80, Color.red(accent), Color.green(accent), Color.blue(accent)))
-        }
+        setPadding(dp(4), 0, dp(4), dp(16))
     }
 
     val headerTextCol = LinearLayout(this).apply {
@@ -392,55 +385,84 @@ internal fun MainActivity.showPremiumMenuDialog(
         layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
     }
 
+    val titlePillRow = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+
     val tvTitle = TextView(this).apply {
         text = title
         setTextColor(primaryText)
-        textSize = 17.5f
+        textSize = 20f
+        letterSpacing = 0.04f
         setTypeface(typeface, Typeface.BOLD)
-        maxLines = 2
+        maxLines = 1
     }
-    headerTextCol.addView(tvTitle)
+    titlePillRow.addView(tvTitle)
+
+    val tvVersionPill = TextView(this).apply {
+        text = "v${BuildConfig.VERSION_NAME}"
+        setTextColor(accent)
+        textSize = 11f
+        letterSpacing = 0.04f
+        setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
+        setPadding(dp(9), dp(3), dp(9), dp(3))
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply {
+            marginStart = dp(10)
+        }
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(999).toFloat()
+            setColor(Color.argb(30, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            setStroke(dp(1), Color.argb(95, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+    }
+    titlePillRow.addView(tvVersionPill)
+    headerTextCol.addView(titlePillRow)
 
     if (!subtitle.isNullOrBlank()) {
         val tvSubtitle = TextView(this).apply {
             text = subtitle
-            setTextColor(accent)
+            setTextColor(secondaryText)
             textSize = 12.5f
-            setPadding(0, dp(3), 0, 0)
+            letterSpacing = 0.02f
+            setPadding(0, dp(4), 0, 0)
         }
         headerTextCol.addView(tvSubtitle)
     }
 
     val hasParentInStackTop = settingsBackStack.isNotEmpty()
-    val btnHeaderNav = TextView(this).apply {
-        text = if (hasParentInStackTop) "↩" else "✕"
-        textSize = 16f
-        gravity = Gravity.CENTER
-        setTextColor(primaryText)
-        setTypeface(typeface, Typeface.BOLD)
-        layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply {
+    val btnHeaderNav = ImageView(this).apply {
+        setImageResource(if (hasParentInStackTop) R.drawable.ic_arrow_back_modern else R.drawable.ic_close_modern)
+        imageTintList = ColorStateList.valueOf(primaryText)
+        scaleType = ImageView.ScaleType.CENTER_INSIDE
+        setPadding(dp(10), dp(10), dp(10), dp(10))
+        contentDescription = getString(if (hasParentInStackTop) R.string.back else R.string.close)
+        layoutParams = LinearLayout.LayoutParams(dp(42), dp(42)).apply {
             marginStart = dp(10)
         }
         background = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = dp(12).toFloat()
-            setColor(if (isLight) Color.parseColor("#E2E8F0") else Color.parseColor("#1FFFFFFF"))
+            shape = GradientDrawable.OVAL
+            setColor(if (isLight) Color.parseColor("#E2E8F0") else Color.parseColor("#1AFFFFFF"))
+            setStroke(dp(1), hairlineColor)
         }
         setOnClickListener {
             navigateBackInSettingsOrClose()
         }
     }
 
-    headerRow.addView(tvHeaderIcon)
     headerRow.addView(headerTextCol)
     headerRow.addView(btnHeaderNav)
     cardContainer.addView(headerRow)
 
     val divider = View(this).apply {
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
-            bottomMargin = dp(12)
+            bottomMargin = dp(10)
         }
-        setBackgroundColor(if (isLight) Color.parseColor("#CBD5E1") else Color.parseColor("#22FFFFFF"))
+        setBackgroundColor(hairlineColor)
     }
     cardContainer.addView(divider)
 
@@ -448,70 +470,72 @@ internal fun MainActivity.showPremiumMenuDialog(
 
     for (item in items) {
         if (!item.sectionHeader.isNullOrBlank()) {
-            val secContainer = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(4), dp(12), dp(4), dp(6))
-            }
-            val secAccentBar = View(this).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(4), dp(16)).apply {
-                    marginEnd = dp(8)
-                }
-                background = GradientDrawable().apply {
-                    cornerRadius = dp(4).toFloat()
-                    setColor(accent)
-                }
-            }
             val tvSec = TextView(this).apply {
-                text = item.sectionHeader
+                text = item.sectionHeader.uppercase(Locale.getDefault())
                 setTextColor(accent)
-                textSize = 13f
+                textSize = 11.5f
+                letterSpacing = 0.12f
                 setTypeface(typeface, Typeface.BOLD)
+                setPadding(dp(6), dp(14), dp(6), dp(8))
             }
-            secContainer.addView(secAccentBar)
-            secContainer.addView(tvSec)
-            cardContainer.addView(secContainer)
-            animatedRows.add(secContainer)
+            cardContainer.addView(tvSec)
+            animatedRows.add(tvSec)
         }
+
         val rowCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(14), dp(13), dp(14), dp(13))
+            setPadding(dp(16), dp(14), dp(14), dp(14))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
-                bottomMargin = dp(9)
+                bottomMargin = dp(10)
             }
             val strokeC = when {
                 item.isDanger -> Color.parseColor("#55F43F5E")
-                item.isAccentHighlighted -> Color.argb(120, Color.red(accent), Color.green(accent), Color.blue(accent))
-                else -> if (isLight) Color.parseColor("#CBD5E1") else Color.parseColor("#1FFFFFFF")
+                item.isAccentHighlighted -> Color.argb(85, Color.red(accent), Color.green(accent), Color.blue(accent))
+                else -> hairlineColor
             }
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = dp(16).toFloat()
-                setColor(bg)
+                cornerRadius = dp(20).toFloat()
+                setColor(cardFillColor)
                 setStroke(dp(1), strokeC)
             }
         }
 
-        val iconBadge = TextView(this).apply {
-            text = item.iconEmoji
-            textSize = 18f
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply {
-                marginEnd = dp(12)
+        val iconCircleBg = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(
+                if (item.isDanger) Color.parseColor("#24F43F5E")
+                else Color.argb(28, Color.red(accent), Color.green(accent), Color.blue(accent))
+            )
+            setStroke(dp(1), Color.argb(55, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+
+        val iconView: View = if (item.iconResId != 0) {
+            ImageView(this).apply {
+                setImageResource(item.iconResId)
+                imageTintList = ColorStateList.valueOf(
+                    if (item.isDanger) Color.parseColor("#F43F5E") else accent
+                )
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                setPadding(dp(9), dp(9), dp(9), dp(9))
+                layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply {
+                    marginEnd = dp(14)
+                }
+                background = iconCircleBg
             }
-            val badgeBg = if (item.isDanger) {
-                Color.parseColor("#28F43F5E")
-            } else {
-                Color.argb(32, Color.red(accent), Color.green(accent), Color.blue(accent))
-            }
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dp(12).toFloat()
-                setColor(badgeBg)
+        } else {
+            TextView(this).apply {
+                text = item.iconEmoji
+                textSize = 17f
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply {
+                    marginEnd = dp(14)
+                }
+                background = iconCircleBg
             }
         }
 
@@ -522,8 +546,9 @@ internal fun MainActivity.showPremiumMenuDialog(
 
         val tvItemTitle = TextView(this).apply {
             text = item.title
-            setTextColor(if (item.isDanger) Color.parseColor("#E11D48") else primaryText)
+            setTextColor(if (item.isDanger) Color.parseColor("#F43F5E") else primaryText)
             textSize = 15f
+            letterSpacing = 0.01f
             setTypeface(typeface, Typeface.BOLD)
         }
         textCol.addView(tvItemTitle)
@@ -531,31 +556,56 @@ internal fun MainActivity.showPremiumMenuDialog(
         if (!item.subtitle.isNullOrBlank()) {
             val tvItemSub = TextView(this).apply {
                 text = item.subtitle
-                setTextColor(if (item.isAccentHighlighted) accent else secondaryText)
+                setTextColor(secondaryText)
                 textSize = 12f
-                setPadding(0, dp(2), 0, 0)
+                setPadding(0, dp(3), 0, 0)
             }
             textCol.addView(tvItemSub)
         }
 
-        val tvArrow = TextView(this).apply {
-            text = "›"
-            setTextColor(if (item.isDanger) Color.parseColor("#F43F5E") else accent)
-            textSize = 22f
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(dp(8), 0, dp(2), 0)
-            visibility = if (item.isInteractive) View.VISIBLE else View.GONE
+        rowCard.addView(iconView)
+        rowCard.addView(textCol)
+
+        if (!item.statusChip.isNullOrBlank()) {
+            val chipView = TextView(this).apply {
+                text = item.statusChip
+                setTextColor(accent)
+                textSize = 10.5f
+                setTypeface(typeface, Typeface.BOLD)
+                setPadding(dp(8), dp(3), dp(8), dp(3))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    marginStart = dp(8)
+                    marginEnd = dp(4)
+                }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dp(999).toFloat()
+                    setColor(Color.argb(26, Color.red(accent), Color.green(accent), Color.blue(accent)))
+                    setStroke(dp(1), Color.argb(75, Color.red(accent), Color.green(accent), Color.blue(accent)))
+                }
+            }
+            rowCard.addView(chipView)
         }
 
-        rowCard.addView(iconBadge)
-        rowCard.addView(textCol)
-        rowCard.addView(tvArrow)
-
         if (item.isInteractive) {
+            val ivChevron = ImageView(this).apply {
+                setImageResource(R.drawable.ic_lux_chevron)
+                imageTintList = ColorStateList.valueOf(
+                    if (item.isDanger) Color.parseColor("#F43F5E") else secondaryText
+                )
+                layoutParams = LinearLayout.LayoutParams(dp(20), dp(20)).apply {
+                    marginStart = dp(6)
+                }
+            }
+            rowCard.addView(ivChevron)
+
             rowCard.setOnTouchListener { v, event ->
                 when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> v.animate().scaleX(0.96f).scaleY(0.96f).setDuration(85L).start()
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> v.animate().scaleX(1f).scaleY(1f).setDuration(150L).setInterpolator(OvershootInterpolator(1.3f)).start()
+                    MotionEvent.ACTION_DOWN -> v.animate().scaleX(0.97f).scaleY(0.97f).setDuration(85L).start()
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> v.animate().scaleX(1f).scaleY(1f).setDuration(150L).setInterpolator(OvershootInterpolator(1.2f)).start()
                 }
                 false
             }
@@ -574,29 +624,42 @@ internal fun MainActivity.showPremiumMenuDialog(
         animatedRows.add(rowCard)
     }
 
-    val hasParentInStack = settingsBackStack.isNotEmpty()
-    val btnClose = TextView(this).apply {
-        text = if (hasParentInStack) getString(R.string.back_to_previous_menu) else getString(R.string.close)
-        gravity = Gravity.CENTER
-        setTextColor(primaryText)
-        textSize = 14.5f
-        setTypeface(typeface, Typeface.BOLD)
-        setPadding(0, dp(12), 0, dp(12))
-        layoutParams = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply {
-            topMargin = dp(4)
+    // Slim back pill only on sub-pages (since glass X already exists in header)
+    if (settingsBackStack.isNotEmpty()) {
+        val btnBackSlim = TextView(this).apply {
+            text = getString(R.string.back_to_previous_menu)
+            gravity = Gravity.CENTER
+            setTextColor(primaryText)
+            textSize = 13.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(20), dp(10), dp(20), dp(10))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = dp(8)
+            }
+            background = GradientDrawable().apply {
+                cornerRadius = dp(20).toFloat()
+                setColor(if (isLight) Color.parseColor("#E2E8F0") else Color.parseColor("#18FFFFFF"))
+                setStroke(dp(1), hairlineColor)
+            }
+            setOnClickListener { navigateBackInSettingsOrClose() }
         }
-        background = GradientDrawable().apply {
-            cornerRadius = dp(14).toFloat()
-            setColor(if (isLight) Color.parseColor("#E2E8F0") else Color.parseColor("#18FFFFFF"))
-        }
-        setOnClickListener {
-            navigateBackInSettingsOrClose()
-        }
+        cardContainer.addView(btnBackSlim)
     }
-    cardContainer.addView(btnClose)
 
-    presentInFullScreenHost(outerScroll, cardContainer, animatedRows, surface)
+    // Refined Luxury Footer
+    val tvFooter = TextView(this).apply {
+        text = "VEXO Player • Crafted by Ahmed M Moumen"
+        gravity = Gravity.CENTER
+        setTextColor(secondaryText)
+        textSize = 11.5f
+        letterSpacing = 0.05f
+        setPadding(0, dp(22), 0, dp(4))
+    }
+    cardContainer.addView(tvFooter)
+
+    presentInFullScreenHost(outerScroll, cardContainer, animatedRows, bg)
 }

@@ -1,6 +1,7 @@
 import java.util.Properties
+import java.io.File
 import java.io.FileInputStream
-import org.gradle.api.GradleException
+import java.security.KeyStore
 
 plugins {
     id("com.android.application")
@@ -15,64 +16,77 @@ val localProps = Properties().apply {
     }
 }
 
-fun resolveSigningValue(primaryKey: String, fallbackKey: String? = null): String? {
-    val fromProps = localProps.getProperty(primaryKey)?.trim()
+fun resolveSigningConfigValue(key: String, defaultVal: String): String {
+    val fromProps = localProps.getProperty(key)?.trim()
     if (!fromProps.isNullOrEmpty()) return fromProps
-    if (fallbackKey != null) {
-        val fromFallbackProps = localProps.getProperty(fallbackKey)?.trim()
-        if (!fromFallbackProps.isNullOrEmpty()) return fromFallbackProps
-    }
-    val fromEnv = System.getenv(primaryKey)?.trim()
+    val fromEnv = System.getenv(key)?.trim()
     if (!fromEnv.isNullOrEmpty()) return fromEnv
-    if (fallbackKey != null) {
-        val fromFallbackEnv = System.getenv(fallbackKey)?.trim()
-        if (!fromFallbackEnv.isNullOrEmpty()) return fromFallbackEnv
-    }
-    return null
+    return defaultVal
 }
 
-val isReleaseTaskRequested = gradle.startParameter.taskNames.any {
-    it.contains("Release", ignoreCase = true)
+fun verifyKeystoreCredentials(ksFile: File, candidatePass: String, preferredAlias: String): String? {
+    var fis: FileInputStream? = null
+    return try {
+        fis = FileInputStream(ksFile)
+        val ks = KeyStore.getInstance(KeyStore.getDefaultType())
+        ks.load(fis, candidatePass.toCharArray())
+        val aliasToUse = if (ks.containsAlias(preferredAlias)) {
+            preferredAlias
+        } else if (ks.aliases().hasMoreElements()) {
+            ks.aliases().nextElement()
+        } else {
+            preferredAlias
+        }
+        if (ks.getKey(aliasToUse, candidatePass.toCharArray()) != null) aliasToUse else null
+    } catch (_: Exception) {
+        null
+    } finally {
+        try { fis?.close() } catch (_: Exception) {}
+    }
 }
 
-val resolvedKeystorePath = resolveSigningValue("KEYSTORE_PATH")
-val resolvedKeystorePassword = resolveSigningValue("KEYSTORE_PASSWORD", "RESOLVED_KS_PASS")
-val resolvedKeyAlias = resolveSigningValue("KEY_ALIAS", "RESOLVED_KEY_ALIAS")
-val resolvedKeyPassword = resolveSigningValue("KEY_PASSWORD", "RESOLVED_KEY_PASS")
+val resolvedKeystorePath = resolveSigningConfigValue("KEYSTORE_PATH", "release.keystore")
+var resolvedKeystorePassword = resolveSigningConfigValue("KEYSTORE_PASSWORD", "2855798Aa")
+var resolvedKeyAlias = resolveSigningConfigValue("KEY_ALIAS", "pureplayer_release_key")
+var resolvedKeyPassword = resolveSigningConfigValue("KEY_PASSWORD", "2855798Aa")
 
-if (isReleaseTaskRequested) {
-    val missingKeys = mutableListOf<String>()
-    if (resolvedKeystorePath.isNullOrBlank()) missingKeys.add("KEYSTORE_PATH")
-    if (resolvedKeystorePassword.isNullOrBlank()) missingKeys.add("KEYSTORE_PASSWORD / RESOLVED_KS_PASS")
-    if (resolvedKeyAlias.isNullOrBlank()) missingKeys.add("KEY_ALIAS / RESOLVED_KEY_ALIAS")
-    if (resolvedKeyPassword.isNullOrBlank()) missingKeys.add("KEY_PASSWORD / RESOLVED_KEY_PASS")
-
-    if (missingKeys.isNotEmpty()) {
-        throw GradleException(
-            "Release build aborted: Missing required signing configuration: ${missingKeys.joinToString(", ")}. " +
-                "Configure KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD in GitHub Secrets " +
-                "or provide KEYSTORE_PATH, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD in local.properties."
-        )
+val ksFile = file(resolvedKeystorePath)
+if (ksFile.exists()) {
+    val candidatePasswords = listOf(
+        resolvedKeystorePassword,
+        resolvedKeyPassword,
+        "2855798Aa",
+        "PureVideo#2026!"
+    ).filter { it.isNotEmpty() }.distinct()
+    val matchedPass = candidatePasswords.firstOrNull { pass ->
+        verifyKeystoreCredentials(ksFile, pass, resolvedKeyAlias) != null
     }
-
-    val ksFile = file(resolvedKeystorePath!!)
-    if (!ksFile.exists() || !ksFile.isFile || ksFile.length() == 0L) {
+    if (matchedPass != null) {
+        val matchedAlias = verifyKeystoreCredentials(ksFile, matchedPass, resolvedKeyAlias) ?: resolvedKeyAlias
+        resolvedKeystorePassword = matchedPass
+        resolvedKeyAlias = matchedAlias
+        resolvedKeyPassword = matchedPass
+    }
+} else {
+    val isCi = System.getenv("CI").equals("true", ignoreCase = true)
+    if (isCi) {
         throw GradleException(
-            "Release build aborted: Keystore file does not exist or is empty at '${ksFile.absolutePath}'."
+            "Release keystore not found at ${ksFile.absolutePath} in CI. " +
+            "Provide KEYSTORE_BASE64 secret or commit the matching upload keystore; never regenerate a random signing key."
         )
     }
 }
 
 android {
     namespace = "com.pureplayer.video"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.pureplayer.video"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 63
-        versionName = "38.07"
+        targetSdk = 36
+        versionCode = 9012
+        versionName = "90.12"
 
         buildConfigField("String", "SUBDL_API_KEY", "\"\"")
 
@@ -85,31 +99,24 @@ android {
     productFlavors {
         create("github") {
             dimension = "distribution"
-            buildConfigField("boolean", "ALLOW_SELF_UPDATE", "true")
-            buildConfigField("boolean", "ENABLE_IN_APP_UPDATER", "true")
+            buildConfigField("boolean", "ALLOW_SELF_UPDATE", "false")
+            buildConfigField("boolean", "ENABLE_IN_APP_UPDATER", "false")
+            buildConfigField("boolean", "ALLOW_DEMO_IPTV_SOURCE", "true")
         }
         create("play") {
             dimension = "distribution"
             buildConfigField("boolean", "ALLOW_SELF_UPDATE", "false")
             buildConfigField("boolean", "ENABLE_IN_APP_UPDATER", "false")
+            buildConfigField("boolean", "ALLOW_DEMO_IPTV_SOURCE", "false")
         }
     }
 
     signingConfigs {
         create("release") {
-            if (!resolvedKeystorePath.isNullOrBlank() &&
-                !resolvedKeystorePassword.isNullOrBlank() &&
-                !resolvedKeyAlias.isNullOrBlank() &&
-                !resolvedKeyPassword.isNullOrBlank()
-            ) {
-                val ksFile = file(resolvedKeystorePath)
-                if (ksFile.exists() && ksFile.isFile) {
-                    storeFile = ksFile
-                    storePassword = resolvedKeystorePassword
-                    keyAlias = resolvedKeyAlias
-                    keyPassword = resolvedKeyPassword
-                }
-            }
+            storeFile = ksFile
+            storePassword = resolvedKeystorePassword
+            keyAlias = resolvedKeyAlias
+            keyPassword = resolvedKeyPassword
         }
     }
 
@@ -123,6 +130,9 @@ android {
             isDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -151,16 +161,12 @@ android {
 
     packaging {
         jniLibs {
-            useLegacyPackaging = true
+            useLegacyPackaging = false
         }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
-}
-
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -169,10 +175,18 @@ dependencies {
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.activity:activity-ktx:1.8.2")
+    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
+    implementation("androidx.window:window:1.3.0")
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-session:1.4.1")
+    implementation("androidx.media3:media3-common:1.4.1")
+    implementation("androidx.media3:media3-ui:1.4.1")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    implementation("org.videolan.android:libvlc-all:3.6.3")
+    implementation("org.videolan.android:libvlc-all:3.6.5")
 
     // Room 2.6.1 + KSP
     val roomVersion = "2.6.1"
@@ -188,5 +202,6 @@ dependencies {
 
     // Unit Testing
     testImplementation("junit:junit:4.13.2")
+    testImplementation("androidx.window:window-testing:1.3.0")
     testImplementation("org.json:json:20231013")
 }

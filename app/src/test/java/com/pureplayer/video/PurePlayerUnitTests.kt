@@ -188,7 +188,7 @@ class PurePlayerUnitTests {
 
         val m3u = """
             #EXTM3U
-            #EXTINF:-1 group-title="Sports HD",Sports Channel 1 HD
+            #EXTINF:-1 group-title="Sports HD",beIN Sports 1
             #EXTVLCOPT:http-user-agent=CustomAgent/2.0
             #EXTVLCOPT:http-referrer=https://example.com/
             http://iptv.example.com/live/101.ts
@@ -209,5 +209,211 @@ class PurePlayerUnitTests {
         assertEquals(1, items[2].seasonNumber)
         assertEquals(5, items[2].episodeNumber)
         assertEquals(IptvContentType.RADIO, items[3].contentType)
+    }
+
+    @Test
+    fun testSectionRestrictedIptvSearchIsolation() {
+        val mixedPool = listOf(
+            IptvStreamItem(
+                id = "live_1",
+                sourceId = "s1",
+                contentType = IptvContentType.LIVE_TV,
+                categoryId = "c_live",
+                categoryName = "Sports Live",
+                title = "Action Sports HD",
+                streamUrl = "http://example.com/live/1.ts"
+            ),
+            IptvStreamItem(
+                id = "movie_1",
+                sourceId = "s1",
+                contentType = IptvContentType.MOVIES,
+                categoryId = "c_mov",
+                categoryName = "Action Movies",
+                title = "Action Hero 2026",
+                streamUrl = "http://example.com/movie/1.mp4"
+            ),
+            IptvStreamItem(
+                id = "series_1",
+                sourceId = "s1",
+                contentType = IptvContentType.SERIES,
+                categoryId = "c_ser",
+                categoryName = "Action Series",
+                title = "Action Chronicles S01",
+                seriesName = "Action Chronicles",
+                streamUrl = "http://example.com/series/1.mkv"
+            )
+        )
+
+        // 1. Inside Movies -> must return ONLY Movies
+        val moviesSection = SectionScopedSearchHelper.resolveActiveSearchSection(2, 2, IptvContentType.MOVIES)
+        assertEquals(IptvContentType.MOVIES, moviesSection)
+        val movieResults = SectionScopedSearchHelper.filterStreamsForSectionSearch(mixedPool, "Action", moviesSection)
+        assertEquals(1, movieResults.size)
+        assertEquals(IptvContentType.MOVIES, movieResults.first().contentType)
+        assertEquals("Action Hero 2026", movieResults.first().title)
+
+        // 2. Inside TV Series -> must return ONLY TV Series
+        val seriesSection = SectionScopedSearchHelper.resolveActiveSearchSection(2, 3, IptvContentType.SERIES)
+        assertEquals(IptvContentType.SERIES, seriesSection)
+        val seriesResults = SectionScopedSearchHelper.filterStreamsForSectionSearch(mixedPool, "Action", seriesSection)
+        assertEquals(1, seriesResults.size)
+        assertEquals(IptvContentType.SERIES, seriesResults.first().contentType)
+        assertEquals("Action Chronicles S01", seriesResults.first().title)
+
+        // 3. Inside Live TV -> must return ONLY Live TV
+        val liveSection = SectionScopedSearchHelper.resolveActiveSearchSection(2, 2, IptvContentType.LIVE_TV)
+        assertEquals(IptvContentType.LIVE_TV, liveSection)
+        val liveResults = SectionScopedSearchHelper.filterStreamsForSectionSearch(mixedPool, "Action", liveSection)
+        assertEquals(1, liveResults.size)
+        assertEquals(IptvContentType.LIVE_TV, liveResults.first().contentType)
+        assertEquals("Action Sports HD", liveResults.first().title)
+    }
+
+    @Test
+    fun testChangelogDisplaysStrictlyLatestFourVersions() {
+        assertEquals(4, ChangelogVersionManager.MAX_CHANGELOG_VERSIONS)
+
+        val fullHistory = listOf(
+            ChangelogReleaseEntry("90.10", "2026-11-18", "📦", "v90.10", "Play Console release 9010", isLatest = true),
+            ChangelogReleaseEntry("90.09", "2026-11-18", "🛡️", "v90.09", "API 36 compliance", isLatest = false),
+            ChangelogReleaseEntry("90.08", "2026-11-18", "🚀", "v90.08", "VEXO Player brand identity", isLatest = false),
+            ChangelogReleaseEntry("90.07", "2026-11-18", "✅", "v90.07", "Store readiness", isLatest = false),
+            ChangelogReleaseEntry("90.06", "2026-11-18", "🔍", "v90.06", "Section search", isLatest = false)
+        )
+
+        val updated = ChangelogVersionManager.pushNewRelease(
+            existingEntries = fullHistory,
+            newRelease = ChangelogReleaseEntry("90.11", "2026-11-20", "🛠️", "v90.11", "Luxury Dark UI & Foldable support")
+        )
+
+        assertEquals("Changelog must display strictly the latest 4 versions", 4, updated.size)
+        assertEquals("90.11", updated[0].version)
+        assertTrue(updated[0].isLatest)
+        assertEquals("90.10", updated[1].version)
+        assertEquals("90.09", updated[2].version)
+        assertEquals("90.08", updated[3].version)
+        assertFalse("Older version 90.07 must not be displayed in latest 4", updated.any { it.version == "90.07" })
+    }
+
+    @Test
+    fun testFoldablePosturesAndHingeSplits() {
+        // 1. Folded cover screen (Z Fold / Z Flip outer display)
+        val cover = FoldableAdaptiveMath.resolvePosture(
+            widthDp = 340, heightDp = 720,
+            isHalfOpened = false, isHorizontalHinge = false,
+            isSeparating = false, hasOcclusion = false, hingeBounds = null
+        )
+        assertEquals(WindowWidthSizeClass.COMPACT, cover.widthClass)
+        assertEquals(FoldPosture.FLAT_COMPACT, cover.posture)
+        assertEquals(0, FoldableAdaptiveMath.computeDialogMaxWidthDp(cover.widthClass))
+
+        // 2. Unfolded inner screen (Expanded)
+        val unfolded = FoldableAdaptiveMath.resolvePosture(
+            widthDp = 880, heightDp = 740,
+            isHalfOpened = false, isHorizontalHinge = false,
+            isSeparating = false, hasOcclusion = false, hingeBounds = null
+        )
+        assertEquals(WindowWidthSizeClass.EXPANDED, unfolded.widthClass)
+        assertEquals(FoldPosture.FLAT_EXPANDED, unfolded.posture)
+        assertEquals(620, FoldableAdaptiveMath.computeDialogMaxWidthDp(unfolded.widthClass))
+
+        // 3. Tabletop posture (Half-opened horizontal hinge)
+        val tabletopHinge = HingeBounds(0, 1060, 2208, 1100)
+        val tabletop = FoldableAdaptiveMath.resolvePosture(
+            widthDp = 740, heightDp = 740,
+            isHalfOpened = true, isHorizontalHinge = true,
+            isSeparating = true, hasOcclusion = true, hingeBounds = tabletopHinge
+        )
+        assertEquals(FoldPosture.TABLETOP, tabletop.posture)
+        val (upperH, lowerH) = FoldableAdaptiveMath.computeTabletopSplit(2208, 1060, 1100)
+        assertEquals(1060, upperH)
+        assertEquals(1108, lowerH)
+
+        // 4. Book posture (Half-opened vertical hinge)
+        val bookHinge = HingeBounds(1080, 0, 1120, 1840)
+        val book = FoldableAdaptiveMath.resolvePosture(
+            widthDp = 740, heightDp = 620,
+            isHalfOpened = true, isHorizontalHinge = false,
+            isSeparating = true, hasOcclusion = true, hingeBounds = bookHinge
+        )
+        assertEquals(FoldPosture.BOOK, book.posture)
+        val (startW, endW) = FoldableAdaptiveMath.computeBookSplit(2200, 1080, 1120)
+        assertEquals(1080, startW)
+        assertEquals(1080, endW)
+    }
+
+    @Test
+    fun testIptvSessionSyncGuardAutoRefreshAndNoRepeatOnScrollOrSubSections() {
+        val guard = IptvSessionSyncGuard()
+
+        assertTrue("First entry into main IPTV section must trigger refresh", guard.onEnterMainIptvSection())
+        assertTrue(guard.isInsideIptvSection)
+        assertTrue(guard.hasSyncedInCurrentVisit)
+
+        assertFalse("Must not re-trigger refresh while already in IPTV section", guard.onEnterMainIptvSection())
+        assertFalse(guard.onInternalSectionNavigation(2, IptvContentType.MOVIES, null, 0))
+        assertFalse(guard.onInternalSectionNavigation(3, IptvContentType.SERIES, "SERIES_1", 0))
+        assertFalse(guard.onInternalSectionNavigation(2, IptvContentType.LIVE_TV, null, 0))
+        assertFalse(guard.onScrollInsideIptv())
+        assertFalse(guard.shouldEnableSwipeRefreshGesture(currentMainTab = 2, iptvNavLevel = 3))
+
+        guard.onLeaveMainIptvSection()
+        assertFalse(guard.isInsideIptvSection)
+        assertTrue("Reopening main IPTV section after leaving must trigger fresh sync", guard.onEnterMainIptvSection())
+    }
+
+    @Test
+    fun testResponsiveUiMetricsAcrossPhonesTabletsAndLargeScreens() {
+        assertEquals("VEXO Player", ResponsiveUiMetrics.APP_DISPLAY_NAME)
+        assertEquals("IPTV and Video player", ResponsiveUiMetrics.APP_SUBTITLE_NAME)
+        assertEquals(DeviceFormFactor.COMPACT_PHONE, ResponsiveUiMetrics.classifyDevice(320, 320))
+        assertEquals(DeviceFormFactor.STANDARD_PHONE, ResponsiveUiMetrics.classifyDevice(390, 390))
+        assertEquals(DeviceFormFactor.TABLET, ResponsiveUiMetrics.classifyDevice(600, 600))
+        assertEquals(DeviceFormFactor.LARGE_SCREEN, ResponsiveUiMetrics.classifyDevice(1024, 720))
+    }
+
+    @Test
+    fun testVlcSurfaceLayoutFitThenStretchNeverCrops() {
+        val fitResult = VlcSurfaceLayoutMath.computeLayout(
+            sw = 2400, sh = 1080,
+            videoWidth = 1920, videoHeight = 1080,
+            visibleWidth = 1920, visibleHeight = 1080,
+            sarNum = 1, sarDen = 1,
+            mode = VlcAspectMode.SURFACE_FIT_SCREEN
+        )
+        assertEquals(0f, fitResult.scale)
+        assertTrue(fitResult.surfaceWidth >= 2400)
+
+        val stretchResult = VlcSurfaceLayoutMath.computeLayout(
+            sw = 2400, sh = 1080,
+            videoWidth = 1920, videoHeight = 1080,
+            visibleWidth = 1920, visibleHeight = 1080,
+            sarNum = 1, sarDen = 1,
+            mode = VlcAspectMode.SURFACE_FILL
+        )
+        assertEquals(2400, stretchResult.surfaceWidth)
+        assertEquals(1080, stretchResult.surfaceHeight)
+        assertEquals("2400:1080", stretchResult.aspectRatio)
+        assertEquals(0f, stretchResult.scale)
+    }
+
+    @Test
+    fun testVexoAudioEffectsVlcPresetsAndBandResampling() {
+        assertEquals(16, VexoAudioEffectsManager.vlcPresets.size)
+        val rock = VexoAudioEffectsManager.vlcPresets.first { it.name == "Rock" }
+        val fiveBand = VexoAudioEffectsManager.resampleBands(rock.bandsDb, 5)
+        assertEquals(5, fiveBand.size)
+        assertEquals(rock.bandsDb.first(), fiveBand.first(), 0.01f)
+        assertEquals(rock.bandsDb.last(), fiveBand.last(), 0.01f)
+    }
+
+    @Test
+    fun testSleepTimerFormattingAndEndOfMediaMode() {
+        assertEquals("15:00", SleepTimerManager.formatRemaining(15 * 60_000L))
+        assertEquals("1:05:30", SleepTimerManager.formatRemaining((65 * 60 + 30) * 1000L))
+        SleepTimerManager.startEndOfCurrentMedia()
+        assertEquals(SleepTimerMode.END_OF_MEDIA, SleepTimerManager.state.value.mode)
+        assertTrue(SleepTimerManager.onMediaTrackEnded())
+        assertEquals(SleepTimerMode.OFF, SleepTimerManager.state.value.mode)
     }
 }

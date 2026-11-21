@@ -56,6 +56,7 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -70,7 +71,10 @@ import org.json.JSONObject
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.pureplayer.video.databinding.ActivityMainBinding
@@ -132,6 +136,8 @@ class MainActivity : AppCompatActivity() {
     private var pendingDeleteVideo: VideoItem? = null
     private var loadMediaJob: Job? = null
     internal var iptvSyncJob: Job? = null
+    private var activeSearchJob: Job? = null
+    internal val iptvSessionSyncGuard = IptvSessionSyncGuard()
 
     // Settings & Sub-Settings Back-Stack + Persistent Full-Screen Host (eliminates window close/open flicker)
     internal val settingsBackStack = ArrayDeque<() -> Unit>()
@@ -163,13 +169,27 @@ class MainActivity : AppCompatActivity() {
     internal var currentAnimatedAccentColor = Color.parseColor("#38BDF8")
 
     // Supports Android 14+ "Allow Limited Access" (READ_MEDIA_VISUAL_USER_SELECTED) as well as Full Access!
+    private val audioLibraryViewModel: AudioLibraryViewModel by lazy {
+        ViewModelProvider(this)[AudioLibraryViewModel::class.java]
+    }
+    private val audioPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ ->
+        audioLibraryViewModel.refreshAudioLibrary()
+    }
+    private var activeAudioSection = AudioTabSection.TRACKS
+
+    private val videoLibraryViewModel: VideoLibraryViewModel by lazy {
+        ViewModelProvider(this)[VideoLibraryViewModel::class.java]
+    }
+
     private val multiPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { _ ->
         if (hasVideoAccessPermission()) {
-            loadVideoFoldersOnly()
+            videoLibraryViewModel.onPermissionGranted()
         } else {
-            showEmptyState(getString(R.string.permission_needed), showButton = true)
+            videoLibraryViewModel.onPermissionDenied()
         }
     }
 
@@ -223,6 +243,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         if (savedInstanceState != null) {
             val savedTab = savedInstanceState.getInt("STATE_MAIN_TAB", 0)
@@ -244,10 +265,15 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         ViewCompat.setOnApplyWindowInsetsListener(binding.mainRoot) { view, windowInsets ->
-            val bars = windowInsets.getInsets(
+            val sysBars = windowInsets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
-            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            val imeInsets = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+            val imeVisible = windowInsets.isVisible(WindowInsetsCompat.Type.ime()) && imeInsets.bottom > sysBars.bottom
+            val bottomInset = maxOf(sysBars.bottom, imeInsets.bottom)
+            view.setPadding(sysBars.left, sysBars.top, sysBars.right, bottomInset)
+            val horizPad = dp(ResponsiveUiMetrics.getListHorizontalPaddingDp(resources.configuration.screenWidthDp))
+            binding.recyclerView.setPadding(horizPad, dp(8), horizPad, if (imeVisible) dp(12) else dp(88))
             windowInsets
         }
 
@@ -255,6 +281,8 @@ class MainActivity : AppCompatActivity() {
         setupListeners()
         setupInstantDebouncedSearchFlow()
         applyUserTheme()
+        observeVideoLibraryState()
+        observeBackgroundAudioMiniPlayer()
         checkPermissionAndLoad()
         if (savedInstanceState?.getBoolean("STATE_SETTINGS_OPEN", false) == true) {
             binding.root.post {
@@ -301,10 +329,9 @@ class MainActivity : AppCompatActivity() {
         if (currentMainTab == 2) {
             // In IPTV tab: refresh visible items without full list reset
             if (adapter.itemCount > 0) adapter.notifyItemRangeChanged(0, adapter.itemCount)
-        } else if (hasVideoAccessPermission()) {
-            if (allDiscoveredVideos.isEmpty()) {
-                loadVideoFoldersOnly()
-            } else {
+        } else {
+            videoLibraryViewModel.onActivityResumed()
+            if (hasVideoAccessPermission() && allDiscoveredVideos.isNotEmpty()) {
                 // Refresh only the active folder or last-played video row when returning from PlayerActivity
                 val lastUri = PlaybackStore.getLastPlayedUri(this)
                 val lastFolder = PlaybackStore.getLastActiveFolderName(this)
@@ -374,8 +401,6 @@ class MainActivity : AppCompatActivity() {
                     binding.topBar.setBackgroundColor(curSurf)
                     binding.bottomNavBar.setBackgroundColor(curSurf)
                     binding.searchBarContainer.setBackgroundColor(curSurf)
-                    window.statusBarColor = curSurf
-                    window.navigationBarColor = curSurf
                     binding.btnTopMenu.imageTintList = ColorStateList.valueOf(curAcc)
                     binding.btnToggleSearch.imageTintList = ColorStateList.valueOf(curAcc)
                     binding.fabResumeLast.backgroundTintList = ColorStateList.valueOf(curAcc)
@@ -387,8 +412,6 @@ class MainActivity : AppCompatActivity() {
             binding.topBar.setBackgroundColor(surface)
             binding.bottomNavBar.setBackgroundColor(surface)
             binding.searchBarContainer.setBackgroundColor(surface)
-            window.statusBarColor = surface
-            window.navigationBarColor = surface
             binding.btnTopMenu.imageTintList = ColorStateList.valueOf(accent)
             binding.btnToggleSearch.imageTintList = ColorStateList.valueOf(accent)
             binding.fabResumeLast.backgroundTintList = ColorStateList.valueOf(accent)
@@ -402,6 +425,7 @@ class MainActivity : AppCompatActivity() {
         val primaryText = PlaybackStore.getPrimaryTextColor(this)
         val secondaryText = PlaybackStore.getSecondaryTextColor(this)
         binding.tvToolbarTitle.setTextColor(primaryText)
+        binding.tvToolbarSubtitle.setTextColor(secondaryText)
         binding.tvEmptyMessage.setTextColor(secondaryText)
         binding.etSearchVideos.setTextColor(primaryText)
         binding.etSearchVideos.setHintTextColor(secondaryText)
@@ -420,6 +444,8 @@ class MainActivity : AppCompatActivity() {
         binding.btnBackFolder.imageTintList = ColorStateList.valueOf(accent)
         binding.ivAddIptvPlus.imageTintList = ColorStateList.valueOf(accent)
         binding.iptvProgressBar.indeterminateTintList = ColorStateList.valueOf(accent)
+        binding.iptvSubtleSyncBar.indeterminateTintList = ColorStateList.valueOf(accent)
+        binding.iptvInlineSyncSpinner.indeterminateTintList = ColorStateList.valueOf(accent)
         binding.fabResumeLast.imageTintList = ColorStateList.valueOf(Color.parseColor("#090D16"))
 
         val topActionButtons = listOf(
@@ -542,21 +568,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     internal fun calculateAdaptiveGridSpanCount(): Int {
-        val widthDp = resources.configuration.screenWidthDp
-        return when {
-            widthDp >= 1200 -> 5
-            widthDp >= 840 -> 4
-            widthDp >= 600 -> 3
-            else -> 2
-        }
+        val cfg = resources.configuration
+        val isPosterSection = (currentMainTab == 2 && iptvNavLevel == 3 &&
+            (activeIptvContentType == IptvContentType.MOVIES || activeIptvContentType == IptvContentType.SERIES))
+        return ResponsiveUiMetrics.calculateAdaptiveSpanCount(
+            screenWidthDp = cfg.screenWidthDp,
+            smallestScreenWidthDp = cfg.smallestScreenWidthDp,
+            isGridMode = true,
+            isPosterSection = isPosterSection
+        )
     }
 
     internal fun updateRecyclerLayoutManager() {
+        val cfg = resources.configuration
         val gridEnabled = PlaybackStore.isGridLayoutEnabled(this)
         adapter.isGridMode = gridEnabled
+        val isPosterSection = (currentMainTab == 2 && iptvNavLevel == 3 &&
+            (activeIptvContentType == IptvContentType.MOVIES || activeIptvContentType == IptvContentType.SERIES))
+        val targetSpan = ResponsiveUiMetrics.calculateAdaptiveSpanCount(
+            screenWidthDp = cfg.screenWidthDp,
+            smallestScreenWidthDp = cfg.smallestScreenWidthDp,
+            isGridMode = gridEnabled,
+            isPosterSection = isPosterSection
+        )
+        val horizPad = dp(ResponsiveUiMetrics.getListHorizontalPaddingDp(cfg.screenWidthDp))
+        if (binding.recyclerView.paddingLeft != horizPad || binding.recyclerView.paddingRight != horizPad) {
+            binding.recyclerView.setPadding(horizPad, binding.recyclerView.paddingTop, horizPad, binding.recyclerView.paddingBottom)
+        }
         val currentLm = binding.recyclerView.layoutManager
-        if (gridEnabled) {
-            val targetSpan = calculateAdaptiveGridSpanCount()
+        if (targetSpan > 1) {
             if (currentLm is GridLayoutManager) {
                 if (currentLm.spanCount != targetSpan) {
                     currentLm.spanCount = targetSpan
@@ -648,6 +688,10 @@ class MainActivity : AppCompatActivity() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 super.onScrolled(recyclerView, dx, dy)
                 if (dy <= 0) return
+                if (currentMainTab == 2) {
+                    // Never trigger a server refresh when scrolling inside Movies, TV Series, or Live TV
+                    iptvSessionSyncGuard.onScrollInsideIptv()
+                }
                 if (currentMainTab == 2 && iptvNavLevel == 3 && iptvSectionSubTab == 0 && !isSearchActive && hasMoreIptvCategoryPages && !isLoadingNextIptvPage) {
                     val lm = recyclerView.layoutManager as? LinearLayoutManager ?: return
                     val total = lm.itemCount
@@ -665,7 +709,7 @@ class MainActivity : AppCompatActivity() {
         currentOpenedFolder = folder
         currentOpenedFolderName = folder.name
         binding.tvToolbarTitle.text = "${folder.name} (${folder.videos.size})"
-        binding.btnBackFolder.visibility = View.GONE
+        binding.btnBackFolder.visibility = View.VISIBLE
         adapter.submitVideos(folder.videos)
     }
 
@@ -1130,6 +1174,9 @@ class MainActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val q = s?.toString() ?: ""
                 searchQueryFlow.value = q
+                if (isSearchActive) {
+                    performInstantLiveSearch(q)
+                }
             }
             override fun afterTextChanged(s: Editable?) {}
         })
@@ -1149,9 +1196,14 @@ class MainActivity : AppCompatActivity() {
 
         binding.tabVideos.setOnClickListener {
             if (currentMainTab != 0) {
+                if (currentMainTab == 2) {
+                    iptvSessionSyncGuard.onLeaveMainIptvSection()
+                    setSubtleIptvSyncIndicatorVisible(false)
+                }
                 currentMainTab = 0
                 isInVaultTab = false
                 isInIptvTab = false
+                binding.swipeRefresh.isEnabled = true
                 if (isSearchActive) closeSearchBar()
                 updateBottomTabsVisualState()
                 applyFolderVisibilityAndRefreshUI()
@@ -1171,10 +1223,15 @@ class MainActivity : AppCompatActivity() {
             if (!PlaybackStore.hasPrivacyPin(this)) {
                 settingsBackStack.clear()
                 showFirstTimeSetupPinDialog {
+                    if (currentMainTab == 2) {
+                        iptvSessionSyncGuard.onLeaveMainIptvSection()
+                        setSubtleIptvSyncIndicatorVisible(false)
+                    }
                     isVaultSessionUnlocked = true
                     currentMainTab = 1
                     isInVaultTab = true
                     isInIptvTab = false
+                    binding.swipeRefresh.isEnabled = true
                     isShowingFolderVideos = false
                     currentOpenedFolder = null
                     if (isSearchActive) closeSearchBar()
@@ -1183,9 +1240,14 @@ class MainActivity : AppCompatActivity() {
                     updateResumeLastFab()
                 }
             } else if (isVaultSessionUnlocked) {
+                if (currentMainTab == 2) {
+                    iptvSessionSyncGuard.onLeaveMainIptvSection()
+                    setSubtleIptvSyncIndicatorVisible(false)
+                }
                 currentMainTab = 1
                 isInVaultTab = true
                 isInIptvTab = false
+                binding.swipeRefresh.isEnabled = true
                 if (isSearchActive) closeSearchBar()
                 updateBottomTabsVisualState()
                 applyFolderVisibilityAndRefreshUI()
@@ -1193,10 +1255,15 @@ class MainActivity : AppCompatActivity() {
             } else {
                 settingsBackStack.clear()
                 authenticatePrivacyAccess(getString(R.string.vault_auth_subtitle)) {
+                    if (currentMainTab == 2) {
+                        iptvSessionSyncGuard.onLeaveMainIptvSection()
+                        setSubtleIptvSyncIndicatorVisible(false)
+                    }
                     isVaultSessionUnlocked = true
                     currentMainTab = 1
                     isInVaultTab = true
                     isInIptvTab = false
+                    binding.swipeRefresh.isEnabled = true
                     isShowingFolderVideos = false
                     currentOpenedFolder = null
                     if (isSearchActive) closeSearchBar()
@@ -1215,9 +1282,12 @@ class MainActivity : AppCompatActivity() {
                 if (isSearchActive) closeSearchBar()
                 updateBottomTabsVisualState()
                 renderIptvCurrentLevel()
+                triggerAutoRefreshOnEnteringIptvSection()
                 updateResumeLastFab()
             } else if (iptvNavLevel > 0) {
                 iptvNavLevel = 0
+                activeIptvContentType = null
+                iptvSessionSyncGuard.onInternalSectionNavigation(iptvNavLevel, activeIptvContentType, activeIptvCategoryId, iptvSectionSubTab)
                 renderIptvCurrentLevel()
             }
         }
@@ -1233,15 +1303,41 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.tabAudio.setOnClickListener {
+            openVlcStyleAudioLibraryDialog()
+        }
+
+        binding.btnMiniPlayPause.setOnClickListener {
+            VexoPlaybackService.sendAction(this, VexoPlaybackService.ACTION_TOGGLE_PLAY_PAUSE)
+        }
+        binding.btnMiniNext.setOnClickListener {
+            VexoPlaybackService.sendAction(this, VexoPlaybackService.ACTION_NEXT_TRACK)
+        }
+        binding.btnMiniClose.setOnClickListener {
+            VexoPlaybackService.sendAction(this, VexoPlaybackService.ACTION_STOP_AND_CLOSE)
+        }
+        binding.btnMiniReturnVideo.setOnClickListener {
+            val st = VexoPlaybackService.playbackState.value
+            if (st.currentUri.isNotBlank()) {
+                val uri = Uri.parse(st.currentUri)
+                val pos = st.positionMs
+                val title = st.title
+                VexoPlaybackService.sendAction(this, VexoPlaybackService.ACTION_STOP_AND_CLOSE)
+                launchPlayer(uri, title, pos)
+            }
+        }
+
+        binding.btnRefreshEmpty.setOnClickListener {
+            if (hasVideoAccessPermission()) {
+                videoLibraryViewModel.refreshLibrary(force = true, showLoadingIfEmpty = true)
+            } else {
+                requestStoragePermission()
+            }
+        }
+
         binding.swipeRefresh.setOnRefreshListener {
             if (currentMainTab == 2) {
                 binding.swipeRefresh.isRefreshing = false
-                val src = activeIptvSource ?: IptvRepository.getSources(this).firstOrNull()
-                if (src != null) {
-                    refreshExistingIptvSource(src)
-                } else {
-                    renderIptvCurrentLevel()
-                }
             } else {
                 checkPermissionAndLoad()
             }
@@ -1293,9 +1389,12 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
             currentMainTab == 2 -> {
+                iptvSessionSyncGuard.onLeaveMainIptvSection()
+                setSubtleIptvSyncIndicatorVisible(false)
                 currentMainTab = 0
                 isInVaultTab = false
                 isInIptvTab = false
+                binding.swipeRefresh.isEnabled = true
                 updateBottomTabsVisualState()
                 applyFolderVisibilityAndRefreshUI()
                 updateResumeLastFab()
@@ -1337,69 +1436,102 @@ class MainActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
-    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     private fun setupInstantDebouncedSearchFlow() {
-        lifecycleScope.launch {
-            searchQueryFlow
-                .debounce(280L)
-                .distinctUntilChanged()
-                .flatMapLatest { rawQuery ->
-                    flow {
-                        if (!isSearchActive) {
-                            emit(Pair(rawQuery, emptyList<Any>()))
-                            return@flow
-                        }
-                        val normQuery = IptvSearchNormalizer.normalize(rawQuery)
-                        if (currentMainTab == 2) {
-                            val src = activeIptvSource ?: IptvRepository.getSources(this@MainActivity).firstOrNull()
-                            if (src == null) {
-                                emit(Pair(rawQuery, emptyList<Any>()))
-                            } else {
-                                val matched = IptvRepository.searchStreamsSql(
-                                    this@MainActivity,
-                                    src.id,
-                                    normQuery,
-                                    limit = if (normQuery.isEmpty()) 300 else 400
-                                ).sortedBy { it.contentType.ordinal }
-                                emit(Pair(rawQuery, matched))
-                            }
-                        } else {
-                            val sourcePool = when {
-                                isShowingFolderVideos && currentOpenedFolder != null -> currentOpenedFolder!!.videos
-                                currentMainTab == 1 && isVaultSessionUnlocked -> vaultVideosFlat
-                                else -> publicVideosFlat
-                            }
-                            val matched = if (normQuery.isEmpty()) {
-                                sourcePool
-                            } else {
-                                sourcePool.filter { v ->
-                                    IptvSearchNormalizer.matches(v.title, v.folderName, normQuery)
-                                }
-                            }
-                            emit(Pair(rawQuery, matched))
-                        }
-                    }.flowOn(Dispatchers.Default)
-                }
-                .collectLatest { (rawQuery, results) ->
-                    if (!isSearchActive) return@collectLatest
-                    if (results.isEmpty() && rawQuery.isNotBlank()) {
-                        binding.recyclerView.visibility = View.GONE
-                        binding.emptyLayout.visibility = View.VISIBLE
-                        binding.tvEmptyMessage.text = getString(R.string.search_no_results)
-                        binding.btnGrantPermission.visibility = View.GONE
+        // Live instant search is now executed directly per character via performInstantLiveSearch()
+        // without any 280ms debounce delay or distinctUntilChanged suppression.
+    }
+
+    /**
+     * Restored original search logic with:
+     * 1. Zero artificial delay — executes immediately on the first character and updates with every keystroke.
+     * 2. Strict section restriction — when inside Movies, searches ONLY Movies; when inside TV Series,
+     *    searches ONLY TV Series; when inside Live TV, searches ONLY Live TV. Never returns items from other sections.
+     */
+    private fun performInstantLiveSearch(rawQuery: String) {
+        if (!isSearchActive) return
+        activeSearchJob?.cancel()
+        val normQuery = IptvSearchNormalizer.normalize(rawQuery)
+        val tabSnapshot = currentMainTab
+        val navLevelSnapshot = iptvNavLevel
+        val sectionTypeSnapshot = SectionScopedSearchHelper.resolveActiveSearchSection(
+            currentMainTab = tabSnapshot,
+            iptvNavLevel = navLevelSnapshot,
+            activeContentType = activeIptvContentType
+        )
+        val categoryIdSnapshot = activeIptvCategoryId
+        val subTabSnapshot = iptvSectionSubTab
+
+        activeSearchJob = lifecycleScope.launch {
+            val results: List<Any> = withContext(Dispatchers.Default) {
+                if (tabSnapshot == 2) {
+                    val src = activeIptvSource ?: IptvRepository.getSources(this@MainActivity).firstOrNull()
+                    if (src == null) {
+                        emptyList()
+                    } else if (sectionTypeSnapshot != null && subTabSnapshot == 1) {
+                        // Inside Favorites sub-tab of the current section (Movies / Series / Live TV)
+                        val favPool = IptvRepository.getFavoriteItems(this@MainActivity, src.id, sectionTypeSnapshot)
+                        SectionScopedSearchHelper.filterStreamsForSectionSearch(favPool, normQuery, sectionTypeSnapshot)
+                    } else if (sectionTypeSnapshot != null && subTabSnapshot == 2) {
+                        // Inside Continue Watching sub-tab of the current section (Movies / Series / Live TV)
+                        val recentPool = IptvRepository.getRecentWatchedItems(this@MainActivity, src.id, sectionTypeSnapshot)
+                        SectionScopedSearchHelper.filterStreamsForSectionSearch(recentPool, normQuery, sectionTypeSnapshot)
                     } else {
-                        binding.emptyLayout.visibility = View.GONE
-                        binding.recyclerView.visibility = View.VISIBLE
-                        adapter.submitIptvList(results)
+                        val groupSeries = (sectionTypeSnapshot == IptvContentType.SERIES && src.type != IptvSourceType.XTREAM)
+                        val matched = IptvRepository.searchStreamsSql(
+                            context = this@MainActivity,
+                            sourceId = src.id,
+                            normQuery = normQuery,
+                            limit = if (normQuery.isEmpty()) 300 else 500,
+                            contentType = sectionTypeSnapshot,
+                            groupM3uSeries = groupSeries
+                        )
+                        // If inside a specific category (Level 3) and query is empty, show current category streams
+                        if (normQuery.isEmpty() && navLevelSnapshot == 3 && !categoryIdSnapshot.isNullOrEmpty() && categoryIdSnapshot != "__ALL__") {
+                            matched.filter { it.categoryId == categoryIdSnapshot || it.categoryName == activeIptvCategoryName }
+                                .ifEmpty { matched }
+                        } else {
+                            matched
+                        }
+                    }
+                } else {
+                    val sourcePool = when {
+                        isShowingFolderVideos && currentOpenedFolder != null -> currentOpenedFolder!!.videos
+                        tabSnapshot == 1 && isVaultSessionUnlocked -> vaultVideosFlat
+                        else -> publicVideosFlat
+                    }
+                    if (normQuery.isEmpty()) {
+                        sourcePool
+                    } else {
+                        sourcePool.filter { v ->
+                            IptvSearchNormalizer.matches(v.title, v.folderName, normQuery)
+                        }
                     }
                 }
+            }
+
+            if (!isSearchActive) return@launch
+            if (results.isEmpty() && rawQuery.isNotBlank()) {
+                binding.recyclerView.visibility = View.GONE
+                binding.emptyLayout.visibility = View.VISIBLE
+                binding.tvEmptyMessage.text = getString(R.string.search_no_results)
+                binding.btnGrantPermission.visibility = View.GONE
+            } else {
+                binding.emptyLayout.visibility = View.GONE
+                binding.recyclerView.visibility = View.VISIBLE
+                adapter.submitIptvList(results, resetAnimation = false)
+            }
         }
     }
 
     internal fun openSearchBar() {
         isSearchActive = true
         binding.etSearchVideos.hint = if (currentMainTab == 2) {
-            getString(R.string.iptv_search_hint)
+            val secType = SectionScopedSearchHelper.resolveActiveSearchSection(currentMainTab, iptvNavLevel, activeIptvContentType)
+            if (secType != null) {
+                "${getSectionDisplayName(secType)} — ${getString(R.string.iptv_search_hint)}"
+            } else {
+                getString(R.string.iptv_search_hint)
+            }
         } else {
             getString(R.string.search_videos_hint)
         }
@@ -1409,11 +1541,12 @@ class MainActivity : AppCompatActivity() {
         binding.etSearchVideos.requestFocus()
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         imm?.showSoftInput(binding.etSearchVideos, InputMethodManager.SHOW_IMPLICIT)
-        filterVideosByQuery(binding.etSearchVideos.text.toString())
+        performInstantLiveSearch(binding.etSearchVideos.text.toString())
     }
 
     internal fun closeSearchBar() {
         isSearchActive = false
+        activeSearchJob?.cancel()
         binding.etSearchVideos.setText("")
         searchQueryFlow.value = ""
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
@@ -1423,7 +1556,7 @@ class MainActivity : AppCompatActivity() {
             renderIptvCurrentLevel()
         } else if (isShowingFolderVideos && currentOpenedFolder != null) {
             binding.tvToolbarTitle.text = "${currentOpenedFolder!!.name} (${currentOpenedFolder!!.videos.size})"
-            binding.btnBackFolder.visibility = View.GONE
+            binding.btnBackFolder.visibility = View.VISIBLE
             adapter.submitVideos(currentOpenedFolder!!.videos)
         } else {
             showFoldersList()
@@ -1433,6 +1566,7 @@ class MainActivity : AppCompatActivity() {
     internal fun filterVideosByQuery(rawQuery: String) {
         if (!isSearchActive) return
         searchQueryFlow.value = rawQuery
+        performInstantLiveSearch(rawQuery)
     }
 
     /**
@@ -1454,12 +1588,12 @@ class MainActivity : AppCompatActivity() {
 
         val filterMode = PlaybackStore.getFolderFilterMode(this)
         if (filterMode == 2) {
-            binding.tvToolbarTitle.text = "${getString(R.string.folders_title)} (${publicVideosFlat.size})"
+            binding.tvToolbarTitle.text = "${getString(R.string.app_name)} (${publicVideosFlat.size})"
             binding.btnBackFolder.visibility = View.GONE
             adapter.submitVideos(publicVideosFlat)
         } else {
             val suffix = if (isUsingLimitedAccessMode()) " • Limited" else ""
-            binding.tvToolbarTitle.text = "${getString(R.string.folders_title)}$suffix"
+            binding.tvToolbarTitle.text = "${getString(R.string.app_name)}$suffix"
             binding.btnBackFolder.visibility = View.GONE
             adapter.submitFolders(publicFoldersOnly)
         }
@@ -1473,6 +1607,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         binding.iptvHeaderBar.visibility = View.GONE
+        binding.swipeRefresh.isEnabled = true
         val mode = PlaybackStore.getFolderFilterMode(this)
         val allowedSet = PlaybackStore.getAllowedFolders(this)
         val lockedSet = PlaybackStore.getLockedFolders(this)
@@ -1544,27 +1679,67 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    internal fun checkPermissionAndLoad() {
-        if (hasVideoAccessPermission()) {
-            // Step 1: 0ms Instant Render from Local Cache if available!
-            if (allDiscoveredVideos.isEmpty()) {
-                val cached = VideoIndexCache.getInstantCachedVideos(this)
-                if (cached.isNotEmpty()) {
-                    allDiscoveredVideos = cached
-                    allDiscoveredFolders = cached
-                        .groupBy { it.folderName }
-                        .filter { (_, videos) -> videos.isNotEmpty() }
-                        .map { (folderName, videos) -> VideoFolder(folderName, videos) }
-                        .sortedByDescending { it.videos.size }
-                    binding.swipeRefresh.isRefreshing = false
-                    applyFolderVisibilityAndRefreshUI()
-                    updateResumeLastFab()
+    private fun observeVideoLibraryState() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                videoLibraryViewModel.uiState.collect { state ->
+                    if (currentMainTab == 2) return@collect
+                    when (state) {
+                        is VideoLibraryUiState.Loading -> {
+                            binding.swipeRefresh.isRefreshing = true
+                            binding.libraryLoadingBar.visibility = View.VISIBLE
+                            binding.btnGrantPermission.visibility = View.GONE
+                            binding.btnRefreshEmpty.visibility = View.GONE
+                            binding.recyclerView.visibility = View.GONE
+                            binding.emptyLayout.visibility = View.VISIBLE
+                            binding.tvEmptyMessage.text = getString(R.string.loading_videos_msg)
+                        }
+                        is VideoLibraryUiState.PermissionDenied -> {
+                            binding.swipeRefresh.isRefreshing = false
+                            binding.libraryLoadingBar.visibility = View.GONE
+                            binding.btnRefreshEmpty.visibility = View.GONE
+                            binding.btnGrantPermission.text = getString(R.string.grant_permission)
+                            showEmptyState(getString(R.string.permission_needed), showButton = true)
+                        }
+                        is VideoLibraryUiState.Empty -> {
+                            binding.swipeRefresh.isRefreshing = false
+                            binding.libraryLoadingBar.visibility = View.GONE
+                            allDiscoveredVideos = emptyList()
+                            allDiscoveredFolders = emptyList()
+                            val msg = if (isUsingLimitedAccessMode()) {
+                                getString(R.string.limited_access_empty_msg)
+                            } else {
+                                getString(R.string.no_videos_found)
+                            }
+                            showEmptyState(msg, showButton = isUsingLimitedAccessMode())
+                            binding.btnRefreshEmpty.visibility = View.VISIBLE
+                            updateResumeLastFab()
+                        }
+                        is VideoLibraryUiState.Success -> {
+                            binding.swipeRefresh.isRefreshing = state.isRefreshing
+                            binding.libraryLoadingBar.visibility = View.GONE
+                            binding.btnRefreshEmpty.visibility = View.GONE
+                            PlaybackStore.syncDiscoveredVideosForNewBadge(
+                                this@MainActivity,
+                                state.videos.map { it.id }.toSet()
+                            )
+                            allDiscoveredVideos = state.videos
+                            allDiscoveredFolders = state.folders
+                            applyFolderVisibilityAndRefreshUI()
+                            updateResumeLastFab()
+                        }
+                    }
                 }
             }
-            // Step 2: Silent background scan updates any new/changed files without blocking UI!
-            loadVideoFoldersOnly(showSpinner = allDiscoveredVideos.isEmpty())
+        }
+    }
+
+    internal fun checkPermissionAndLoad() {
+        if (hasVideoAccessPermission()) {
+            videoLibraryViewModel.refreshLibrary(force = true, showLoadingIfEmpty = true)
         } else {
             binding.swipeRefresh.isRefreshing = false
+            videoLibraryViewModel.onPermissionDenied()
             requestStoragePermission()
         }
     }
@@ -1607,283 +1782,155 @@ class MainActivity : AppCompatActivity() {
     }
 
     internal fun loadVideoFoldersOnly(showSpinner: Boolean = false) {
-        loadMediaJob?.cancel()
-        if (showSpinner && allDiscoveredVideos.isEmpty()) {
-            binding.swipeRefresh.isRefreshing = true
+        videoLibraryViewModel.refreshLibrary(force = true, showLoadingIfEmpty = showSpinner)
+    }
+
+
+    private fun observeBackgroundAudioMiniPlayer() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                VexoPlaybackService.playbackState.collect { st ->
+                    if (!st.isActive) {
+                        binding.miniAudioPlayerBar.visibility = View.GONE
+                    } else {
+                        binding.miniAudioPlayerBar.visibility = View.VISIBLE
+                        binding.tvMiniAudioTitle.text = st.title
+                        binding.tvMiniAudioSubtitle.text = st.subtitle.ifBlank { "VEXO Player" }
+                        binding.btnMiniPlayPause.setImageResource(
+                            if (st.isPlaying) R.drawable.ic_pause_modern else R.drawable.ic_play_modern
+                        )
+                        binding.btnMiniReturnVideo.visibility =
+                            if (st.isFromVideoAudioOnly) View.VISIBLE else View.GONE
+                    }
+                }
+            }
         }
+    }
 
-        loadMediaJob = lifecycleScope.launch {
-            val (videoList, groupedFolders) = withContext(Dispatchers.IO) {
-                val list = mutableListOf<VideoItem>()
-                val seenIds = HashSet<Long>()
-                val seenPaths = HashSet<String>()
+    private fun openVlcStyleAudioLibraryDialog() {
+        if (!audioLibraryViewModel.hasAudioPermission()) {
+            val perms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                arrayOf(Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+            audioPermissionLauncher.launch(perms)
+            return
+        }
+        audioLibraryViewModel.refreshAudioLibrary()
+        lifecycleScope.launch {
+            audioLibraryViewModel.uiState.collect { state ->
+                when (state) {
+                    is AudioLibraryUiState.Success -> {
+                        showAudioLibraryHubMenu(state)
+                        return@collect
+                    }
+                    is AudioLibraryUiState.Empty -> {
+                        Toast.makeText(this@MainActivity, getString(R.string.audio_empty_msg), Toast.LENGTH_SHORT).show()
+                        return@collect
+                    }
+                    is AudioLibraryUiState.PermissionDenied -> {
+                        Toast.makeText(this@MainActivity, getString(R.string.permission_needed), Toast.LENGTH_SHORT).show()
+                        return@collect
+                    }
+                    else -> {}
+                }
+            }
+        }
+    }
 
-                val projection = arrayOf(
-                    MediaStore.Video.Media._ID,
-                    MediaStore.Video.Media.DISPLAY_NAME,
-                    MediaStore.Video.Media.DURATION,
-                    MediaStore.Video.Media.SIZE,
-                    MediaStore.Video.Media.DATA,
-                    MediaStore.Video.Media.BUCKET_DISPLAY_NAME,
-                    MediaStore.Video.Media.WIDTH,
-                    MediaStore.Video.Media.HEIGHT,
-                    MediaStore.Video.Media.DATE_ADDED
+    private fun showAudioLibraryHubMenu(data: AudioLibraryUiState.Success) {
+        val items = mutableListOf<PremiumMenuItem>()
+        items.add(
+            PremiumMenuItem("🎵", "${getString(R.string.audio_sec_tracks)} (${data.tracks.size})", getString(R.string.audio_sec_tracks_sub), isAccentHighlighted = true, iconResId = R.drawable.ic_music_note) {
+                pushSettingsBackStack { showAudioLibraryHubMenu(data) }
+                showAudioTracksListDialog(getString(R.string.audio_sec_tracks), data.tracks)
+            }
+        )
+        items.add(
+            PremiumMenuItem("🎤", "${getString(R.string.audio_sec_artists)} (${data.artists.size})", null, iconResId = R.drawable.ic_lux_audio) {
+                pushSettingsBackStack { showAudioLibraryHubMenu(data) }
+                val artistItems = data.artists.map { artist ->
+                    PremiumMenuItem("🎤", artist.name, "${artist.albumCount} albums • ${artist.tracks.size} tracks", iconResId = R.drawable.ic_lux_audio) {
+                        pushSettingsBackStack { showAudioLibraryHubMenu(data) }
+                        showAudioTracksListDialog(artist.name, artist.tracks)
+                    }
+                }
+                showPremiumMenuDialog("🎤", getString(R.string.audio_sec_artists), "${data.artists.size} Artists", artistItems)
+            }
+        )
+        items.add(
+            PremiumMenuItem("💿", "${getString(R.string.audio_sec_albums)} (${data.albums.size})", null, iconResId = R.drawable.ic_lux_play_engine) {
+                pushSettingsBackStack { showAudioLibraryHubMenu(data) }
+                val albumItems = data.albums.map { album ->
+                    PremiumMenuItem("💿", album.title, "${album.artist} • ${album.tracks.size} tracks", iconResId = R.drawable.ic_lux_play_engine) {
+                        pushSettingsBackStack { showAudioLibraryHubMenu(data) }
+                        showAudioTracksListDialog(album.title, album.tracks)
+                    }
+                }
+                showPremiumMenuDialog("💿", getString(R.string.audio_sec_albums), "${data.albums.size} Albums", albumItems)
+            }
+        )
+        items.add(
+            PremiumMenuItem("🎼", "${getString(R.string.audio_sec_genres)} (${data.genres.size})", null, iconResId = R.drawable.ic_music_note) {
+                pushSettingsBackStack { showAudioLibraryHubMenu(data) }
+                val genreItems = data.genres.map { g ->
+                    PremiumMenuItem("🎼", g.name, "${g.tracks.size} tracks", iconResId = R.drawable.ic_music_note) {
+                        pushSettingsBackStack { showAudioLibraryHubMenu(data) }
+                        showAudioTracksListDialog(g.name, g.tracks)
+                    }
+                }
+                showPremiumMenuDialog("🎼", getString(R.string.audio_sec_genres), "${data.genres.size} Genres", genreItems)
+            }
+        )
+        items.add(
+            PremiumMenuItem("📋", "${getString(R.string.audio_sec_playlists)} (${data.playlists.size})", getString(R.string.audio_create_playlist), isAccentHighlighted = true, iconResId = R.drawable.ic_lux_subtitles) {
+                pushSettingsBackStack { showAudioLibraryHubMenu(data) }
+                val plItems = mutableListOf<PremiumMenuItem>()
+                plItems.add(
+                    PremiumMenuItem("➕", getString(R.string.audio_create_playlist), null, isAccentHighlighted = true) {
+                        val input = EditText(this).apply { hint = getString(R.string.audio_playlist_name_hint) }
+                        AlertDialog.Builder(this)
+                            .setTitle(getString(R.string.audio_create_playlist))
+                            .setView(input)
+                            .setPositiveButton(getString(R.string.save)) { _, _ ->
+                                audioLibraryViewModel.createPlaylist(input.text.toString())
+                                Toast.makeText(this, getString(R.string.save), Toast.LENGTH_SHORT).show()
+                            }
+                            .setNegativeButton(getString(R.string.cancel), null)
+                            .show()
+                    }
                 )
-                val selection = "${MediaStore.Video.Media.SIZE} > 0"
-                val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} DESC"
-
-                // Stage 1: Standard MediaStore.Video table
-                try {
-                    contentResolver.query(
-                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                        projection,
-                        selection,
-                        null,
-                        sortOrder
-                    )?.use { cursor ->
-                        val idCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
-                        val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
-                        val durCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
-                        val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
-                        val dataCol = cursor.getColumnIndex(MediaStore.Video.Media.DATA)
-                        val bucketCol = cursor.getColumnIndex(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)
-                        val widthCol = cursor.getColumnIndex(MediaStore.Video.Media.WIDTH)
-                        val heightCol = cursor.getColumnIndex(MediaStore.Video.Media.HEIGHT)
-                        val dateAddedCol = cursor.getColumnIndex(MediaStore.Video.Media.DATE_ADDED)
-
-                        while (cursor.moveToNext()) {
-                            val id = cursor.getLong(idCol)
-                            val title = cursor.getString(nameCol) ?: continue
-                            val duration = cursor.getLong(durCol)
-                            val size = cursor.getLong(sizeCol)
-                            val path = if (dataCol != -1) (cursor.getString(dataCol) ?: "") else ""
-                            val width = if (widthCol != -1) cursor.getInt(widthCol) else 0
-                            val height = if (heightCol != -1) cursor.getInt(heightCol) else 0
-                            val dateAddedSec = if (dateAddedCol != -1) cursor.getLong(dateAddedCol) else 0L
-
-                            val bucketName = if (bucketCol != -1) cursor.getString(bucketCol) else null
-                            val folderName = when {
-                                !bucketName.isNullOrBlank() -> bucketName
-                                path.isNotEmpty() -> File(path).parentFile?.name ?: "Videos"
-                                else -> "Videos"
+                for (pl in data.playlists) {
+                    plItems.add(
+                        PremiumMenuItem("📋", pl.name, "${pl.tracks.size} tracks") {
+                            if (pl.tracks.isNotEmpty()) {
+                                VexoPlaybackService.playAudioQueue(this, pl.tracks, 0)
+                                closeActiveFullScreenDialogSmoothly()
                             }
-
-                            val contentUri = ContentUris.withAppendedId(
-                                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                                id
-                            )
-                            seenIds.add(id)
-                            if (path.isNotEmpty()) seenPaths.add(path.lowercase(Locale.ROOT))
-                            list.add(
-                                VideoItem(
-                                    id = id,
-                                    title = title,
-                                    uri = contentUri,
-                                    duration = duration,
-                                    size = size,
-                                    folderName = folderName,
-                                    width = width,
-                                    height = height,
-                                    path = path,
-                                    dateAddedSec = dateAddedSec
-                                )
-                            )
                         }
-                    }
-                } catch (e: Exception) { Log.w("MainActivity", "Handled non-fatal exception: ${e.javaClass.simpleName}") }
-
-                // Stage 2: Deep MediaStore.Files query for MKV & unindexed container files (e.g. application/x-matroska, octet-stream, or release episodes)
-                try {
-                    val filesUri = MediaStore.Files.getContentUri("external")
-                    val filesProj = arrayOf(
-                        MediaStore.Files.FileColumns._ID,
-                        MediaStore.Files.FileColumns.DISPLAY_NAME,
-                        MediaStore.Files.FileColumns.SIZE,
-                        MediaStore.Files.FileColumns.DATA,
-                        MediaStore.Files.FileColumns.MIME_TYPE,
-                        MediaStore.Files.FileColumns.DATE_ADDED,
-                        MediaStore.Video.Media.DURATION,
-                        MediaStore.Video.Media.BUCKET_DISPLAY_NAME,
-                        MediaStore.Video.Media.WIDTH,
-                        MediaStore.Video.Media.HEIGHT
                     )
-                    val filesSelection = "${MediaStore.Files.FileColumns.SIZE} > 0 AND (" +
-                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.mkv' OR " +
-                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.mp4' OR " +
-                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.avi' OR " +
-                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.mov' OR " +
-                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.webm' OR " +
-                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.ts' OR " +
-                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.m2ts' OR " +
-                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.m4v' OR " +
-                        "LOWER(${MediaStore.Files.FileColumns.DISPLAY_NAME}) LIKE '%.flv' OR " +
-                        "${MediaStore.Files.FileColumns.MIME_TYPE} LIKE 'video/%' OR " +
-                        "${MediaStore.Files.FileColumns.MIME_TYPE} LIKE '%matroska%' OR " +
-                        "${MediaStore.Files.FileColumns.SIZE} > 5242880)"
-
-                    contentResolver.query(
-                        filesUri,
-                        filesProj,
-                        filesSelection,
-                        null,
-                        "${MediaStore.Files.FileColumns.DATE_ADDED} DESC"
-                    )?.use { cursor ->
-                        val idCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
-                        val nameCol = cursor.getColumnIndex(MediaStore.Files.FileColumns.DISPLAY_NAME)
-                        val sizeCol = cursor.getColumnIndex(MediaStore.Files.FileColumns.SIZE)
-                        val dataCol = cursor.getColumnIndex(MediaStore.Files.FileColumns.DATA)
-                        val mimeCol = cursor.getColumnIndex(MediaStore.Files.FileColumns.MIME_TYPE)
-                        val dateCol = cursor.getColumnIndex(MediaStore.Files.FileColumns.DATE_ADDED)
-                        val durCol = cursor.getColumnIndex(MediaStore.Video.Media.DURATION)
-                        val bucketCol = cursor.getColumnIndex(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)
-                        val widthCol = cursor.getColumnIndex(MediaStore.Video.Media.WIDTH)
-                        val heightCol = cursor.getColumnIndex(MediaStore.Video.Media.HEIGHT)
-
-                        while (cursor.moveToNext()) {
-                            val id = cursor.getLong(idCol)
-                            if (id in seenIds) continue
-                            val path = if (dataCol != -1) (cursor.getString(dataCol) ?: "") else ""
-                            if (path.isNotEmpty() && path.lowercase(Locale.ROOT) in seenPaths) continue
-
-                            val rawTitle = (if (nameCol != -1) cursor.getString(nameCol) else null)
-                                ?: (if (path.isNotEmpty()) File(path).name else null)
-                                ?: continue
-                            val size = if (sizeCol != -1) cursor.getLong(sizeCol) else 0L
-                            val mime = if (mimeCol != -1) cursor.getString(mimeCol) else null
-
-                            if (!isRecognizedVideoFile(rawTitle, mime, size)) continue
-
-                            val duration = if (durCol != -1) cursor.getLong(durCol) else 0L
-                            val width = if (widthCol != -1) cursor.getInt(widthCol) else 0
-                            val height = if (heightCol != -1) cursor.getInt(heightCol) else 0
-                            val dateAddedSec = if (dateCol != -1) cursor.getLong(dateCol) else 0L
-                            val bucketName = if (bucketCol != -1) cursor.getString(bucketCol) else null
-                            val folderName = when {
-                                !bucketName.isNullOrBlank() -> bucketName
-                                path.isNotEmpty() -> File(path).parentFile?.name ?: "Downloads"
-                                else -> "Downloads"
-                            }
-
-                            val contentUri = ContentUris.withAppendedId(filesUri, id)
-                            seenIds.add(id)
-                            if (path.isNotEmpty()) seenPaths.add(path.lowercase(Locale.ROOT))
-                            list.add(
-                                VideoItem(
-                                    id = id,
-                                    title = rawTitle,
-                                    uri = contentUri,
-                                    duration = duration,
-                                    size = size,
-                                    folderName = folderName,
-                                    width = width,
-                                    height = height,
-                                    path = path,
-                                    dateAddedSec = dateAddedSec
-                                )
-                            )
-                        }
-                    }
-                } catch (e: Exception) { Log.w("MainActivity", "Handled non-fatal exception: ${e.javaClass.simpleName}") }
-
-                // Stage 3: Direct Filesystem Walk for unindexed MKV & release files in Download, Movies, Video, Telegram
-                val unindexedPathsToScan = mutableListOf<String>()
-                try {
-                    val candidateRoots = linkedSetOf<File>()
-                    runCatching { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)?.let { candidateRoots.add(it) } }
-                    runCatching { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)?.let { candidateRoots.add(it) } }
-                    runCatching { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)?.let { candidateRoots.add(it) } }
-                    runCatching {
-                        val extRoot = Environment.getExternalStorageDirectory()
-                        if (extRoot != null) {
-                            candidateRoots.add(File(extRoot, "Download"))
-                            candidateRoots.add(File(extRoot, "Movies"))
-                            candidateRoots.add(File(extRoot, "Video"))
-                            candidateRoots.add(File(extRoot, "Videos"))
-                            candidateRoots.add(File(extRoot, "Telegram"))
-                            candidateRoots.add(File(extRoot, "Android/media"))
-                        }
-                    }
-
-                    fun scanFolderRecursive(dir: File, depth: Int) {
-                        if (depth > 4 || !dir.exists() || !dir.isDirectory || !dir.canRead()) return
-                        val children = dir.listFiles() ?: return
-                        for (child in children) {
-                            if (child.name.startsWith(".")) continue
-                            if (child.isDirectory) {
-                                scanFolderRecursive(child, depth + 1)
-                            } else if (child.isFile && child.length() > 0L) {
-                                val absPath = child.absolutePath
-                                val normPath = absPath.lowercase(Locale.ROOT)
-                                if (normPath in seenPaths) continue
-                                if (isRecognizedVideoFile(child.name, null, child.length())) {
-                                    seenPaths.add(normPath)
-                                    unindexedPathsToScan.add(absPath)
-                                    val syntheticId = (absPath.hashCode().toLong() and 0x7FFFFFFFL) + 900_000_000L
-                                    val folderName = child.parentFile?.name ?: "Download"
-                                    list.add(
-                                        VideoItem(
-                                            id = syntheticId,
-                                            title = child.name,
-                                            uri = Uri.fromFile(child),
-                                            duration = 0L,
-                                            size = child.length(),
-                                            folderName = folderName,
-                                            width = 0,
-                                            height = 0,
-                                            path = absPath,
-                                            dateAddedSec = child.lastModified() / 1000L
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    for (rootDir in candidateRoots) {
-                        scanFolderRecursive(rootDir, 0)
-                    }
-                    if (unindexedPathsToScan.isNotEmpty()) {
-                        runCatching {
-                            MediaScannerConnection.scanFile(
-                                applicationContext,
-                                unindexedPathsToScan.toTypedArray(),
-                                null,
-                                null
-                            )
-                        }
-                    }
-                } catch (e: Exception) { Log.w("MainActivity", "Handled non-fatal exception: ${e.javaClass.simpleName}") }
-
-                val folders = list
-                    .groupBy { it.folderName }
-                    .filter { (_, videos) -> videos.isNotEmpty() }
-                    .map { (folderName, videos) -> VideoFolder(folderName, videos) }
-                    .sortedByDescending { it.videos.size }
-
-                Pair(list, folders)
+                }
+                showPremiumMenuDialog("📋", getString(R.string.audio_sec_playlists), "${data.playlists.size} Playlists", plItems)
             }
-
-            if (isFinishing || isDestroyed) return@launch
-            binding.swipeRefresh.isRefreshing = false
-            PlaybackStore.syncDiscoveredVideosForNewBadge(
-                this@MainActivity,
-                videoList.map { it.id }.toSet()
-            )
-            val prevSignature = allDiscoveredVideos.map { Triple(it.id, it.size, it.folderName) }
-            val newSignature = videoList.map { Triple(it.id, it.size, it.folderName) }
-            val hasChanged = (prevSignature != newSignature) || allDiscoveredFolders.isEmpty()
-
-            allDiscoveredVideos = videoList
-            allDiscoveredFolders = groupedFolders
-            withContext(Dispatchers.IO) {
-                VideoIndexCache.saveCachedVideos(this@MainActivity, videoList)
+        )
+        items.add(
+            PremiumMenuItem("🎚️", getString(R.string.audio_fx_studio_title), getString(R.string.audio_fx_studio_sub), iconResId = R.drawable.ic_lux_audio) {
+                pushSettingsBackStack { showAudioLibraryHubMenu(data) }
+                showVexoAudioEffectsStudioDialog()
             }
+        )
+        showPremiumMenuDialog("🎵", getString(R.string.tab_audio), "VEXO Audio Library • Android Auto Ready", items)
+    }
 
-            if (hasChanged) {
-                applyFolderVisibilityAndRefreshUI()
+    private fun showAudioTracksListDialog(header: String, tracks: List<AudioTrackItem>) {
+        val items = tracks.mapIndexed { idx, tr ->
+            PremiumMenuItem("🎵", tr.title, "${tr.artist} • ${PlaybackStore.formatTime(tr.durationMs)}", iconResId = R.drawable.ic_music_note) {
+                VexoPlaybackService.playAudioQueue(this, tracks, idx)
+                closeActiveFullScreenDialogSmoothly()
             }
-            updateResumeLastFab()
         }
+        showPremiumMenuDialog("🎵", header, "${tracks.size} tracks", items)
     }
 
     internal fun showEmptyState(message: String, showButton: Boolean) {

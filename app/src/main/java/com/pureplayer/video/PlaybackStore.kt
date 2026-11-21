@@ -1,8 +1,6 @@
 package com.pureplayer.video
 
-import android.content.ComponentName
 import android.content.Context
-import android.content.pm.PackageManager
 import java.util.concurrent.TimeUnit
 import androidx.core.content.ContextCompat
 import android.graphics.Typeface
@@ -263,12 +261,13 @@ object PlaybackStore {
     const val APPEARANCE_DARK = 0
     const val APPEARANCE_LIGHT = 1
     const val APPEARANCE_SYSTEM = 2
+    const val APPEARANCE_LUXURY_DARK = 3
 
-    // 0 = Dark Mode (Default), 1 = Light Mode, 2 = System Default
-    fun getAppearanceMode(context: Context): Int = prefs(context).getInt(KEY_APPEARANCE_MODE, 0).coerceIn(0, 2)
+    // 0 = Dark, 1 = Light, 2 = System (Material You), 3 = Luxury Dark
+    fun getAppearanceMode(context: Context): Int = prefs(context).getInt(KEY_APPEARANCE_MODE, 0).coerceIn(0, 3)
 
     fun setAppearanceMode(context: Context, mode: Int) {
-        prefs(context).edit().putInt(KEY_APPEARANCE_MODE, mode.coerceIn(0, 2)).apply()
+        prefs(context).edit().putInt(KEY_APPEARANCE_MODE, mode.coerceIn(0, 3)).apply()
     }
 
     fun isLightThemeActive(context: Context): Boolean {
@@ -282,50 +281,9 @@ object PlaybackStore {
         }
     }
 
-
-    private const val KEY_APP_ICON_INDEX = "app_launcher_icon_index_v1"
-
-    val LAUNCHER_ICON_ALIASES = arrayOf(
-        "com.pureplayer.video.LauncherIconMaterialYou",
-        "com.pureplayer.video.LauncherIconCyberBlue",
-        "com.pureplayer.video.LauncherIconAmoledGold",
-        "com.pureplayer.video.LauncherIconEmerald",
-        "com.pureplayer.video.LauncherIconCrimson",
-        "com.pureplayer.video.LauncherIconViolet"
-    )
-
-    fun getAppIconIndex(context: Context): Int =
-        prefs(context).getInt(KEY_APP_ICON_INDEX, 0).coerceIn(0, LAUNCHER_ICON_ALIASES.size - 1)
-
-    fun setAppIconIndex(context: Context, index: Int) {
-        val safeIdx = index.coerceIn(0, LAUNCHER_ICON_ALIASES.size - 1)
-        prefs(context).edit().putInt(KEY_APP_ICON_INDEX, safeIdx).apply()
-        applyLauncherIcon(context, safeIdx)
-    }
-
-    fun applyLauncherIcon(context: Context, selectedIndex: Int) {
-        try {
-            val pm = context.packageManager
-            val pkg = context.packageName
-            LAUNCHER_ICON_ALIASES.forEachIndexed { idx, aliasName ->
-                val state = if (idx == selectedIndex) {
-                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-                } else {
-                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-                }
-                val comp = ComponentName(pkg, aliasName)
-                if (pm.getComponentEnabledSetting(comp) != state) {
-                    pm.setComponentEnabledSetting(comp, state, PackageManager.DONT_KILL_APP)
-                }
-            }
-        } catch (e: Exception) {
-            Log.w("PlaybackStore", "Failed to switch launcher icon alias: ${e.javaClass.simpleName}")
-        }
-    }
-
-    fun getThemeIndex(context: Context): Int = prefs(context).getInt(KEY_THEME_INDEX, 0).coerceIn(0, 7)
+    fun getThemeIndex(context: Context): Int = prefs(context).getInt(KEY_THEME_INDEX, 0).coerceIn(0, 8)
     fun setThemeIndex(context: Context, index: Int) {
-        prefs(context).edit().putInt(KEY_THEME_INDEX, index.coerceIn(0, 7)).apply()
+        prefs(context).edit().putInt(KEY_THEME_INDEX, index.coerceIn(0, 8)).apply()
     }
 
     fun getDynamicSystemAccentHex(context: Context): String {
@@ -344,6 +302,13 @@ object PlaybackStore {
     }
 
     fun getAccentColor(context: Context): Int {
+        val mode = getAppearanceMode(context)
+        if (mode == APPEARANCE_LUXURY_DARK) {
+            return Color.parseColor("#D4AF37")
+        }
+        if (mode == APPEARANCE_SYSTEM && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            return Color.parseColor(getDynamicSystemAccentHex(context))
+        }
         val isLight = isLightThemeActive(context)
         return when (getThemeIndex(context)) {
             1 -> Color.parseColor(if (isLight) "#D97706" else "#F59E0B")
@@ -353,6 +318,7 @@ object PlaybackStore {
             5 -> Color.parseColor(getDynamicSystemAccentHex(context))
             6 -> Color.parseColor(if (isLight) "#EA580C" else "#FB923C")
             7 -> Color.parseColor(if (isLight) "#0D9488" else "#14B8A6")
+            8 -> Color.parseColor(if (isLight) "#B4861C" else "#D4AF37")
             else -> Color.parseColor(if (isLight) "#0284C7" else "#38BDF8")
         }
     }
@@ -363,7 +329,8 @@ object PlaybackStore {
         }
         return when (getThemeIndex(context)) {
             1 -> Color.parseColor("#000000")
-            else -> Color.parseColor("#090D16")
+            8 -> Color.parseColor("#0A0A0F")
+            else -> Color.parseColor("#0A0A0F")
         }
     }
 
@@ -373,7 +340,8 @@ object PlaybackStore {
         }
         return when (getThemeIndex(context)) {
             1 -> Color.parseColor("#111111")
-            else -> Color.parseColor("#131C2E")
+            8 -> Color.parseColor("#12121A")
+            else -> Color.parseColor("#12121A")
         }
     }
 
@@ -719,7 +687,7 @@ object PlaybackStore {
     }
 
     fun getGitHubRepo(context: Context): String =
-        prefs(context).getString(KEY_GITHUB_REPO, "") ?: ""
+        prefs(context).getString(KEY_GITHUB_REPO, "ahmedahmed5547-cmyk/Video-player") ?: "ahmedahmed5547-cmyk/Video-player"
 
     fun setGitHubRepo(context: Context, repoSlug: String) {
         prefs(context).edit().putString(KEY_GITHUB_REPO, repoSlug.trim()).apply()

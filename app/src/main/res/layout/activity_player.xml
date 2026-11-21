@@ -1,15 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/playerRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#000000"
     android:keepScreenOn="true">
 
-    <org.videolan.libvlc.util.VLCVideoLayout
-        android:id="@+id/vlcVideoLayout"
+    <!-- Dedicated VLC Video & Subtitle Surface Container (Official VLC-for-Android architecture) -->
+    <FrameLayout
+        android:id="@+id/videoSurfaceFrame"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:foregroundGravity="clip_horizontal|clip_vertical">
+
+        <SurfaceView
+            android:id="@+id/videoSurface"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center" />
+
+        <SurfaceView
+            android:id="@+id/subtitlesSurface"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center" />
+    </FrameLayout>
 
     <!-- Direct-Touch Draggable & Pinch-Zoomable Subtitle Overlay -->
     <TextView
@@ -140,12 +157,12 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="top"
-            android:background="#D9090D16"
+            android:background="@drawable/bg_player_top_scrim"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingStart="14dp"
+            android:paddingStart="@dimen/player_top_bar_padding_horizontal"
             android:paddingTop="12dp"
-            android:paddingEnd="14dp"
+            android:paddingEnd="@dimen/player_top_bar_padding_horizontal"
             android:paddingBottom="12dp">
 
             <ImageButton
@@ -164,84 +181,103 @@
                 android:layout_marginStart="10dp"
                 android:layout_marginEnd="8dp"
                 android:layout_weight="1"
-                android:ellipsize="end"
-                android:maxLines="1"
+                android:ellipsize="marquee"
+                android:marqueeRepeatLimit="marquee_forever"
+                android:singleLine="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
                 android:text="Video"
                 android:textColor="#FFFFFF"
                 android:textSize="15.5sp"
                 android:textStyle="bold" />
 
-            <Button
-                android:id="@+id/btnSubSyncMinus"
-                style="?android:attr/borderlessButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:layout_marginEnd="5dp"
-                android:minWidth="46dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:text="-0.1s"
-                android:textAllCaps="false"
-                android:textColor="#E2E8F0"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-
-            <Button
-                android:id="@+id/btnSubSyncPlus"
-                style="?android:attr/borderlessButtonStyle"
+            <!-- Single Compact Luxury Glass Pill Group for Subtitle Controls -->
+            <LinearLayout
+                android:id="@+id/subtitleToolsPill"
                 android:layout_width="wrap_content"
                 android:layout_height="34dp"
                 android:layout_marginEnd="6dp"
-                android:minWidth="46dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:text="+0.1s"
-                android:textAllCaps="false"
-                android:textColor="#E2E8F0"
-                android:textSize="12sp"
-                android:textStyle="bold" />
+                android:background="@drawable/bg_luxury_glass_pill"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp">
 
-            <Button
-                android:id="@+id/btnSubFontDown"
-                style="?android:attr/borderlessButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:layout_marginEnd="5dp"
-                android:minWidth="38dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:text="A-"
-                android:textAllCaps="false"
-                android:textColor="#FFFFFF"
-                android:textSize="12.5sp"
-                android:textStyle="bold" />
+                <Button
+                    android:id="@+id/btnSubSyncMinus"
+                    style="?android:attr/borderlessButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minWidth="42dp"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:text="-0.1s"
+                    android:textAllCaps="false"
+                    android:textColor="#E2E8F0"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold" />
 
-            <Button
-                android:id="@+id/btnSubFontUp"
-                style="?android:attr/borderlessButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:layout_marginEnd="5dp"
-                android:minWidth="38dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:text="A+"
-                android:textAllCaps="false"
-                android:textColor="#38BDF8"
-                android:textSize="12.5sp"
-                android:textStyle="bold" />
+                <Button
+                    android:id="@+id/btnSubSyncPlus"
+                    style="?android:attr/borderlessButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minWidth="42dp"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:text="+0.1s"
+                    android:textAllCaps="false"
+                    android:textColor="#E2E8F0"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold" />
 
-            <Button
-                android:id="@+id/btnResetSubPos"
-                style="?android:attr/borderlessButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:layout_marginEnd="6dp"
-                android:minWidth="38dp"
-                android:paddingStart="6dp"
-                android:paddingEnd="6dp"
-                android:text="🎯"
-                android:textSize="13sp" />
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="16dp"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="2dp"
+                    android:background="#26FFFFFF" />
+
+                <Button
+                    android:id="@+id/btnSubFontDown"
+                    style="?android:attr/borderlessButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minWidth="34dp"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:text="A-"
+                    android:textAllCaps="false"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btnSubFontUp"
+                    style="?android:attr/borderlessButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minWidth="34dp"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:text="A+"
+                    android:textAllCaps="false"
+                    android:textColor="#D4AF37"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btnResetSubPos"
+                    style="?android:attr/borderlessButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minWidth="34dp"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:text="◎"
+                    android:textColor="#E2E8F0"
+                    android:textSize="14sp" />
+            </LinearLayout>
 
             <Button
                 android:id="@+id/btnDecoder"
@@ -273,6 +309,42 @@
                 android:textSize="12sp"
                 android:textStyle="bold" />
 
+            <TextView
+                android:id="@+id/tvSleepTimerBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="30dp"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/bg_luxury_glass_pill"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:text="15:00"
+                android:textColor="#D4AF37"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <ImageButton
+                android:id="@+id/btnSleepTimer"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:layout_marginEnd="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/sleep_timer_title"
+                android:src="@drawable/ic_sleep_timer"
+                android:tint="#FFFFFF" />
+
+            <ImageButton
+                android:id="@+id/btnAudioOnly"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:layout_marginEnd="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/audio_only_mode_title"
+                android:src="@drawable/ic_headphones"
+                android:tint="#FFFFFF" />
+
             <ImageButton
                 android:id="@+id/btnCastScreen"
                 android:layout_width="38dp"
@@ -303,34 +375,39 @@
                 android:tint="#FFFFFF" />
         </LinearLayout>
 
-        <!-- Bottom Bar (Forced LTR so timeline & transport controls never flip in Arabic) -->
-        <LinearLayout
+        <!-- Bottom Bar: ConstraintLayout with centered transport group + tidy start/end tool groups -->
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/playerBottomBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom"
-            android:background="#D9090D16"
+            android:background="@drawable/bg_player_bottom_scrim"
             android:layoutDirection="ltr"
-            android:orientation="vertical"
-            android:paddingStart="16dp"
+            android:paddingStart="@dimen/player_bottom_bar_padding_horizontal"
             android:paddingTop="10dp"
-            android:paddingEnd="16dp"
+            android:paddingEnd="@dimen/player_bottom_bar_padding_horizontal"
             android:paddingBottom="14dp">
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:id="@+id/seekBarRow"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:layoutDirection="ltr"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
 
                 <TextView
                     android:id="@+id/tvCurrentTime"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:fontFeatureSettings="tnum"
                     android:text="00:00"
                     android:textColor="#FFFFFF"
-                    android:textSize="13sp"
+                    android:textSize="12.5sp"
                     android:textStyle="bold" />
 
                 <SeekBar
@@ -339,29 +416,41 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:layoutDirection="ltr"
-                    android:max="1000" />
+                    android:max="1000"
+                    android:maxHeight="4dp"
+                    android:minHeight="4dp"
+                    android:progressDrawable="@drawable/bg_luxury_seekbar_progress"
+                    android:splitTrack="false"
+                    android:thumb="@drawable/bg_luxury_seekbar_thumb" />
 
                 <TextView
                     android:id="@+id/tvTotalTime"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:fontFeatureSettings="tnum"
                     android:text="00:00"
                     android:textColor="#CBD5E1"
-                    android:textSize="13sp" />
+                    android:textSize="12.5sp" />
             </LinearLayout>
 
+            <!-- Start Secondary Tools Group: Lock, Subtitles, Audio Track -->
             <LinearLayout
-                android:layout_width="match_parent"
+                android:id="@+id/leftToolsGroup"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:gravity="center"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
                 android:layoutDirection="ltr"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                app:layout_constraintBottom_toBottomOf="@id/transportGroup"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="@id/transportGroup">
 
                 <ImageButton
                     android:id="@+id/btnLock"
-                    android:layout_width="42dp"
-                    android:layout_height="42dp"
+                    android:layout_width="@dimen/player_action_btn_size"
+                    android:layout_height="@dimen/player_action_btn_size"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/lock"
                     android:src="@drawable/ic_lock_modern"
@@ -369,9 +458,9 @@
 
                 <ImageButton
                     android:id="@+id/btnSubtitles"
-                    android:layout_width="42dp"
-                    android:layout_height="42dp"
-                    android:layout_marginStart="10dp"
+                    android:layout_width="@dimen/player_action_btn_size"
+                    android:layout_height="@dimen/player_action_btn_size"
+                    android:layout_marginStart="8dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/subtitles"
                     android:src="@drawable/ic_subtitles_cc"
@@ -379,19 +468,32 @@
 
                 <ImageButton
                     android:id="@+id/btnAudioTrack"
-                    android:layout_width="42dp"
-                    android:layout_height="42dp"
-                    android:layout_marginStart="10dp"
+                    android:layout_width="@dimen/player_action_btn_size"
+                    android:layout_height="@dimen/player_action_btn_size"
+                    android:layout_marginStart="8dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/audio_tracks"
                     android:src="@drawable/ic_audio_track_modern"
                     android:tint="#FFFFFF" />
+            </LinearLayout>
+
+            <!-- Centered Main Transport Group: Rewind / Play-Pause / Forward -->
+            <LinearLayout
+                android:id="@+id/transportGroup"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:layoutDirection="ltr"
+                android:orientation="horizontal"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/seekBarRow">
 
                 <ImageButton
                     android:id="@+id/btnRewind"
-                    android:layout_width="46dp"
-                    android:layout_height="46dp"
-                    android:layout_marginStart="16dp"
+                    android:layout_width="@dimen/player_transport_btn_size"
+                    android:layout_height="@dimen/player_transport_btn_size"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/rewind_15"
                     android:src="@drawable/ic_rewind_10_modern"
@@ -399,8 +501,8 @@
 
                 <ImageButton
                     android:id="@+id/btnPlayPause"
-                    android:layout_width="60dp"
-                    android:layout_height="60dp"
+                    android:layout_width="@dimen/player_play_btn_size"
+                    android:layout_height="@dimen/player_play_btn_size"
                     android:layout_marginStart="16dp"
                     android:layout_marginEnd="16dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
@@ -412,20 +514,33 @@
 
                 <ImageButton
                     android:id="@+id/btnForward"
-                    android:layout_width="46dp"
-                    android:layout_height="46dp"
-                    android:layout_marginEnd="16dp"
+                    android:layout_width="@dimen/player_transport_btn_size"
+                    android:layout_height="@dimen/player_transport_btn_size"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/forward_15"
                     android:src="@drawable/ic_forward_10_modern"
                     android:tint="#FFFFFF" />
+            </LinearLayout>
+
+            <!-- End Secondary Tools Group: Speed, Aspect Ratio -->
+            <LinearLayout
+                android:id="@+id/rightToolsGroup"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:layoutDirection="ltr"
+                android:orientation="horizontal"
+                app:layout_constraintBottom_toBottomOf="@id/transportGroup"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="@id/transportGroup">
 
                 <Button
                     android:id="@+id/btnSpeed"
                     style="?android:attr/borderlessButtonStyle"
                     android:layout_width="wrap_content"
                     android:layout_height="36dp"
-                    android:minWidth="54dp"
+                    android:minWidth="52dp"
                     android:paddingStart="10dp"
                     android:paddingEnd="10dp"
                     android:text="1.0x"
@@ -436,14 +551,15 @@
 
                 <ImageButton
                     android:id="@+id/btnAspectRatio"
-                    android:layout_width="42dp"
-                    android:layout_height="42dp"
-                    android:layout_marginStart="10dp"
+                    android:layout_width="@dimen/player_action_btn_size"
+                    android:layout_height="@dimen/player_action_btn_size"
+                    android:layout_marginStart="8dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/aspect_ratio"
                     android:src="@drawable/ic_aspect_ratio_modern"
                     android:tint="#FFFFFF" />
             </LinearLayout>
-        </LinearLayout>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
     </FrameLayout>
 </FrameLayout>

@@ -51,8 +51,10 @@ object VideoIndexCache {
     fun saveCachedVideos(context: Context, videos: List<VideoItem>) {
         memoryVideos = videos
         try {
+            val lockedFolders = PlaybackStore.getLockedFolders(context)
             val arr = JSONArray()
             for (v in videos) {
+                if (v.folderName in lockedFolders) continue
                 val obj = JSONObject().apply {
                     put("i", v.id)
                     put("t", v.title)

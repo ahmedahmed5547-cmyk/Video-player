@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="top_bar_height">64dp</dimen>
+    <dimen name="top_bar_padding_horizontal">22dp</dimen>
+    <dimen name="toolbar_title_text_size">20sp</dimen>
+    <dimen name="top_action_btn_size">44dp</dimen>
+    <dimen name="bottom_nav_height">66dp</dimen>
+    <dimen name="bottom_nav_text_size">14sp</dimen>
+    <dimen name="bottom_nav_icon_size">20dp</dimen>
+    <dimen name="iptv_subtab_height">44dp</dimen>
+    <dimen name="iptv_subtab_text_size">13.5sp</dimen>
+    <dimen name="recycler_horizontal_padding">14dp</dimen>
+    <dimen name="media_card_margin_horizontal">10dp</dimen>
+    <dimen name="media_card_margin_vertical">8dp</dimen>
+    <dimen name="media_card_padding">14dp</dimen>
+    <dimen name="media_title_text_size">16sp</dimen>
+    <dimen name="media_subtitle_text_size">13sp</dimen>
+    <dimen name="player_top_bar_padding_horizontal">24dp</dimen>
+    <dimen name="player_bottom_bar_padding_horizontal">28dp</dimen>
+    <dimen name="player_play_btn_size">68dp</dimen>
+    <dimen name="player_transport_btn_size">52dp</dimen>
+    <dimen name="player_action_btn_size">46dp</dimen>
+</resources>

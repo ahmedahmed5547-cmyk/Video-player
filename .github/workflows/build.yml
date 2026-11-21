@@ -56,12 +56,16 @@ jobs:
 
       - name: Build Debug & Signed Release APKs + Google Play AAB
         env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > app/release.keystore
+          fi
           VER=$(grep 'versionName =' app/build.gradle.kts | head -n 1 | cut -d'"' -f2)
-          if [ -z "$VER" ]; then VER="38.07"; fi
+          if [ -z "$VER" ]; then VER="90.12"; fi
           echo "APP_VERSION=$VER" >> $GITHUB_ENV
           gradle assembleGithubDebug assemblePlayDebug assembleGithubRelease assemblePlayRelease bundlePlayRelease --no-daemon --stacktrace
           mkdir -p dist_outputs
@@ -70,6 +74,8 @@ jobs:
           find app/build/outputs/apk/github/release -name "*.apk" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-github-release.apk" \;
           find app/build/outputs/apk/play/release -name "*.apk" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-play-release.apk" \;
           find app/build/outputs/bundle/playRelease -name "*.aab" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-play-release.aab" \;
+          find app/build/outputs/native-debug-symbols/playRelease -name "*.zip" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-native-debug-symbols.zip" \; || true
+          find app/build/outputs/mapping/playRelease -name "mapping.txt" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-mapping.txt" \; || true
 
       - name: Upload Signed Release APKs & Google Play Bundle (AAB)
         uses: actions/upload-artifact@v4
@@ -78,4 +84,6 @@ jobs:
           path: |
             dist_outputs/*.apk
             dist_outputs/*.aab
+            dist_outputs/*.zip
+            dist_outputs/*.txt
           if-no-files-found: error

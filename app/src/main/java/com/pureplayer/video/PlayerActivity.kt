@@ -9,6 +9,7 @@ import android.content.pm.ActivityInfo
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
@@ -47,14 +48,19 @@ import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.constraintlayout.widget.ConstraintSet
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.window.layout.WindowInfoTracker
 import com.pureplayer.video.databinding.ActivityPlayerBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -62,12 +68,13 @@ import kotlinx.coroutines.withContext
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.interfaces.IVLCVout
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
-class PlayerActivity : AppCompatActivity() {
+class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
     private lateinit var binding: ActivityPlayerBinding
     private lateinit var libVLC: LibVLC
@@ -149,14 +156,28 @@ class PlayerActivity : AppCompatActivity() {
     )
     private var currentOrientationIndex = 1
 
-    private val scaleTypes = arrayOf(
-        MediaPlayer.ScaleType.SURFACE_BEST_FIT,
-        MediaPlayer.ScaleType.SURFACE_FIT_SCREEN,
-        MediaPlayer.ScaleType.SURFACE_FILL,
-        MediaPlayer.ScaleType.SURFACE_16_9,
-        MediaPlayer.ScaleType.SURFACE_4_3
+    private val aspectModes = arrayOf(
+        VlcAspectMode.SURFACE_BEST_FIT,
+        VlcAspectMode.SURFACE_FIT_SCREEN,
+        VlcAspectMode.SURFACE_FILL,
+        VlcAspectMode.SURFACE_16_9,
+        VlcAspectMode.SURFACE_4_3,
+        VlcAspectMode.SURFACE_ORIGINAL
     )
     private var currentScaleIndex = 0
+
+    // Video geometry reported by LibVLC IVLCVout.OnNewVideoLayoutListener
+    private var mVideoWidth = 0
+    private var mVideoHeight = 0
+    private var mVideoVisibleWidth = 0
+    private var mVideoVisibleHeight = 0
+    private var mVideoSarNum = 1
+    private var mVideoSarDen = 1
+    private var lastInsetLeft = 0
+    private var lastInsetTop = 0
+    private var lastInsetRight = 0
+    private var lastInsetBottom = 0
+    private var currentAdaptiveState: AdaptiveWindowState? = null
 
     private fun dp(value: Int): Int {
         return TypedValue.applyDimension(
@@ -217,11 +238,18 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
         hideSystemBars()
+        setupPlayerWindowInsets()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             window.colorMode = ActivityInfo.COLOR_MODE_HDR
         }
@@ -256,7 +284,8 @@ class PlayerActivity : AppCompatActivity() {
             val w = right - left
             val h = bottom - top
             if (w > 0 && h > 0 && (w != (oldRight - oldLeft) || h != (oldBottom - oldTop))) {
-                binding.tvDraggableSubtitle.post {
+                binding.videoSurfaceFrame.post {
+                    changeSurfaceLayout()
                     restoreSubtitlePositionFromPercentage()
                 }
             }
@@ -282,11 +311,12 @@ class PlayerActivity : AppCompatActivity() {
         )
         libVLC = LibVLC(this, options)
         mediaPlayer = MediaPlayer(libVLC)
-        mediaPlayer.attachViews(binding.vlcVideoLayout, null, true, false)
+        attachVlcViewsSafely()
 
         mediaPlayer.setEventListener { event ->
             when (event.type) {
                 MediaPlayer.Event.Playing -> {
+                    binding.videoSurfaceFrame.post { changeSurfaceLayout() }
                     binding.playerLoadingBar.visibility = View.GONE
                     binding.btnPlayPause.setImageResource(R.drawable.ic_pause_modern)
                     updateMediaSessionPlaybackState(isPlaying = true)
@@ -312,6 +342,7 @@ class PlayerActivity : AppCompatActivity() {
                     updateAutoPipParams(isPlaying = false)
                 }
                 MediaPlayer.Event.EndReached -> {
+                    SleepTimerManager.onMediaTrackEnded()
                     binding.playerLoadingBar.visibility = View.GONE
                     binding.btnPlayPause.setImageResource(R.drawable.ic_play_modern)
                     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -343,16 +374,339 @@ class PlayerActivity : AppCompatActivity() {
                 }
             }
             startVideoPlaybackSafely(targetUri)
-            binding.vlcVideoLayout.post {
+            binding.videoSurfaceFrame.post {
                 restoreSubtitlePositionFromPercentage()
             }
         } else {
             finish()
         }
 
+        binding.tvVideoTitle.isSelected = true
         setupControls()
+        applyResponsivePlayerControlsLayout()
+        observeFoldablePostures()
+        observeSleepTimerState()
         setupTouchGestures()
         setupMediaSessionAndAudioFocus()
+    }
+
+    private fun setupPlayerWindowInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(binding.playerRoot) { _, windowInsets ->
+            val cutoutAndBars = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            lastInsetLeft = cutoutAndBars.left
+            lastInsetTop = cutoutAndBars.top
+            lastInsetRight = cutoutAndBars.right
+            lastInsetBottom = cutoutAndBars.bottom
+            applyPlayerBarInsets()
+            windowInsets
+        }
+        ViewCompat.requestApplyInsets(binding.playerRoot)
+    }
+
+    private fun applyPlayerBarInsets() {
+        val baseTopPadH = resources.getDimensionPixelSize(R.dimen.player_top_bar_padding_horizontal)
+        val baseBotPadH = resources.getDimensionPixelSize(R.dimen.player_bottom_bar_padding_horizontal)
+        binding.playerTopBar.setPadding(
+            baseTopPadH + lastInsetLeft,
+            dp(12) + lastInsetTop,
+            baseTopPadH + lastInsetRight,
+            dp(12)
+        )
+        binding.playerBottomBar.setPadding(
+            baseBotPadH + lastInsetLeft,
+            dp(10),
+            baseBotPadH + lastInsetRight,
+            dp(14) + lastInsetBottom
+        )
+        val unlockLp = binding.btnUnlock.layoutParams as? FrameLayout.LayoutParams
+        if (unlockLp != null) {
+            unlockLp.marginStart = dp(24) + lastInsetLeft
+            unlockLp.topMargin = dp(24) + lastInsetTop
+            binding.btnUnlock.layoutParams = unlockLp
+        }
+    }
+
+    private fun attachVlcViewsSafely() {
+        if (!::mediaPlayer.isInitialized) return
+        val vlcVout = mediaPlayer.vlcVout
+        if (!vlcVout.areViewsAttached()) {
+            binding.subtitlesSurface.setZOrderMediaOverlay(true)
+            binding.subtitlesSurface.holder.setFormat(PixelFormat.TRANSLUCENT)
+            vlcVout.setVideoView(binding.videoSurface)
+            vlcVout.setSubtitlesView(binding.subtitlesSurface)
+            vlcVout.attachViews(this)
+        }
+        viewsAttached = true
+        binding.videoSurfaceFrame.post { changeSurfaceLayout() }
+    }
+
+    private fun detachVlcViewsSafely() {
+        if (!::mediaPlayer.isInitialized) return
+        val vlcVout = mediaPlayer.vlcVout
+        if (vlcVout.areViewsAttached()) {
+            vlcVout.detachViews()
+        }
+        viewsAttached = false
+    }
+
+    override fun onNewVideoLayout(
+        vlcVout: IVLCVout?,
+        width: Int,
+        height: Int,
+        visibleWidth: Int,
+        visibleHeight: Int,
+        sarNum: Int,
+        sarDen: Int
+    ) {
+        mVideoWidth = width
+        mVideoHeight = height
+        mVideoVisibleWidth = visibleWidth
+        mVideoVisibleHeight = visibleHeight
+        mVideoSarNum = sarNum
+        mVideoSarDen = sarDen
+        changeSurfaceLayout()
+    }
+
+    /**
+     * Applies the selected VLC aspect/scale mode cleanly:
+     * 1) Resets mediaPlayer.scale = 0f and mediaPlayer.aspectRatio = null FIRST so modes never accumulate.
+     * 2) Updates IVLCVout.setWindowSize(sw, sh) with real container dimensions.
+     * 3) Applies SAR-aware surface dimensions via VlcSurfaceLayoutMath.
+     */
+    private fun changeSurfaceLayout() {
+        if (!::mediaPlayer.isInitialized) return
+        val rootW = binding.playerRoot.width
+        val rootH = binding.playerRoot.height
+        if (rootW <= 0 || rootH <= 0) return
+        val postureState = currentAdaptiveState
+        val hinge = postureState?.hingeBounds
+        val sw: Int
+        val sh: Int
+        when {
+            postureState?.posture == FoldPosture.TABLETOP && hinge != null && hinge.top > 0 -> {
+                val (upperH, _) = FoldableAdaptiveMath.computeTabletopSplit(rootH, hinge.top, hinge.bottom)
+                sw = rootW
+                sh = upperH
+            }
+            postureState?.posture == FoldPosture.BOOK && hinge != null && hinge.left > 0 -> {
+                val (startW, _) = FoldableAdaptiveMath.computeBookSplit(rootW, hinge.left, hinge.right)
+                sw = startW
+                sh = rootH
+            }
+            else -> {
+                sw = rootW
+                sh = rootH
+            }
+        }
+
+        val vlcVout = mediaPlayer.vlcVout
+        // Step 1: Always reset previous state before applying any new mode
+        mediaPlayer.scale = 0f
+        mediaPlayer.aspectRatio = null
+
+        // Step 2: Always notify LibVLC of the real window size
+        vlcVout.setWindowSize(sw, sh)
+
+        val mode = aspectModes[currentScaleIndex.coerceIn(0, aspectModes.lastIndex)]
+        val result = VlcSurfaceLayoutMath.computeLayout(
+            sw = sw,
+            sh = sh,
+            videoWidth = mVideoWidth,
+            videoHeight = mVideoHeight,
+            visibleWidth = mVideoVisibleWidth,
+            visibleHeight = mVideoVisibleHeight,
+            sarNum = mVideoSarNum,
+            sarDen = mVideoSarDen,
+            mode = mode
+        )
+
+        // Step 3: Apply computed surface layout params to both video and subtitle surfaces
+        val videoLp = binding.videoSurface.layoutParams
+        if (videoLp.width != result.surfaceWidth || videoLp.height != result.surfaceHeight) {
+            videoLp.width = result.surfaceWidth
+            videoLp.height = result.surfaceHeight
+            binding.videoSurface.layoutParams = videoLp
+        }
+        val subLp = binding.subtitlesSurface.layoutParams
+        if (subLp.width != result.surfaceWidth || subLp.height != result.surfaceHeight) {
+            subLp.width = result.surfaceWidth
+            subLp.height = result.surfaceHeight
+            binding.subtitlesSurface.layoutParams = subLp
+        }
+
+        val frameLp = binding.videoSurfaceFrame.layoutParams
+        if (frameLp.width != sw || frameLp.height != sh) {
+            frameLp.width = sw
+            frameLp.height = sh
+            binding.videoSurfaceFrame.layoutParams = frameLp
+        }
+
+        // Step 4: Apply mode-specific aspectRatio / scale after clean reset
+        mediaPlayer.aspectRatio = result.aspectRatio
+        mediaPlayer.scale = result.scale
+
+        binding.videoSurface.requestLayout()
+        binding.videoSurface.invalidate()
+        binding.subtitlesSurface.requestLayout()
+    }
+
+    private fun observeFoldablePostures() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                WindowInfoTracker.getOrCreate(this@PlayerActivity)
+                    .windowLayoutInfo(this@PlayerActivity)
+                    .collect { layoutInfo ->
+                        val state = FoldableWindowMetricsHelper.fromWindowLayoutInfo(this@PlayerActivity, layoutInfo)
+                        applyFoldablePosture(state)
+                    }
+            }
+        }
+    }
+
+    private fun applyFoldablePosture(state: AdaptiveWindowState) {
+        currentAdaptiveState = state
+        val rootW = binding.playerRoot.width
+        val rootH = binding.playerRoot.height
+        val frameLp = binding.videoSurfaceFrame.layoutParams as? FrameLayout.LayoutParams
+        val subLp = binding.tvDraggableSubtitle.layoutParams as? FrameLayout.LayoutParams
+
+        if (frameLp != null && rootW > 0 && rootH > 0) {
+            val hinge = state.hingeBounds
+            when {
+                state.posture == FoldPosture.TABLETOP && hinge != null && hinge.top > 0 -> {
+                    // Tabletop posture: video cleanly on the upper half above the hinge; controls on lower half
+                    val (upperH, lowerH) = FoldableAdaptiveMath.computeTabletopSplit(rootH, hinge.top, hinge.bottom)
+                    frameLp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                    frameLp.width = rootW
+                    frameLp.height = upperH
+                    frameLp.marginStart = 0
+                    frameLp.topMargin = 0
+                    binding.videoSurfaceFrame.layoutParams = frameLp
+                    if (subLp != null) {
+                        // Keep subtitles safely above the horizontal hinge
+                        subLp.bottomMargin = lowerH + hinge.height + dp(18)
+                        binding.tvDraggableSubtitle.layoutParams = subLp
+                    }
+                }
+                state.posture == FoldPosture.BOOK && hinge != null && hinge.left > 0 -> {
+                    // Book posture: video on the start side avoiding vertical hinge occlusion
+                    val (startW, _) = FoldableAdaptiveMath.computeBookSplit(rootW, hinge.left, hinge.right)
+                    frameLp.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                    frameLp.width = startW
+                    frameLp.height = rootH
+                    frameLp.marginStart = 0
+                    frameLp.topMargin = 0
+                    binding.videoSurfaceFrame.layoutParams = frameLp
+                    if (subLp != null) {
+                        subLp.bottomMargin = dp(46)
+                        binding.tvDraggableSubtitle.layoutParams = subLp
+                    }
+                }
+                else -> {
+                    // Flat (folded cover screen or unfolded inner screen / tablet)
+                    frameLp.gravity = Gravity.CENTER
+                    frameLp.width = ViewGroup.LayoutParams.MATCH_PARENT
+                    frameLp.height = ViewGroup.LayoutParams.MATCH_PARENT
+                    frameLp.marginStart = 0
+                    frameLp.topMargin = 0
+                    binding.videoSurfaceFrame.layoutParams = frameLp
+                    if (subLp != null) {
+                        subLp.bottomMargin = dp(46)
+                        binding.tvDraggableSubtitle.layoutParams = subLp
+                    }
+                }
+            }
+        }
+        applyResponsivePlayerControlsLayout()
+        binding.videoSurfaceFrame.post {
+            changeSurfaceLayout()
+            restoreSubtitlePositionFromPercentage()
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val wasVisible = isControlsVisible
+        hideSystemBars()
+        applyResponsivePlayerControlsLayout()
+        ViewCompat.requestApplyInsets(binding.playerRoot)
+        // Preserve exact controls visibility state across orientation changes
+        if (isLocked) {
+            binding.controlsContainer.visibility = View.GONE
+            binding.btnUnlock.visibility = View.VISIBLE
+        } else if (wasVisible) {
+            binding.controlsContainer.visibility = View.VISIBLE
+            binding.controlsContainer.alpha = 1f
+            binding.playerTopBar.translationY = 0f
+            binding.playerBottomBar.translationY = 0f
+            scheduleHideControls()
+        } else {
+            binding.controlsContainer.visibility = View.GONE
+        }
+        binding.videoSurfaceFrame.post {
+            changeSurfaceLayout()
+            restoreSubtitlePositionFromPercentage()
+        }
+    }
+
+    private fun applyResponsivePlayerControlsLayout() {
+        val config = resources.configuration
+        val (winW, _) = FoldableWindowMetricsHelper.computeCurrentWindowDp(this)
+        val screenWidthDp = if (winW > 0) winW else config.screenWidthDp
+        val widthClass = FoldableAdaptiveMath.classifyWidth(screenWidthDp)
+        val isLandscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE || widthClass != WindowWidthSizeClass.COMPACT
+
+        val compactTopBar = ResponsiveUiMetrics.shouldUseCompactPlayerTopBar(screenWidthDp)
+        val quickSubVisibility = if (compactTopBar) View.GONE else View.VISIBLE
+        binding.subtitleToolsPill.visibility = quickSubVisibility
+
+        // Dynamically re-constrain playerBottomBar using ConstraintSet so buttons NEVER scatter on rotation
+        val cs = ConstraintSet()
+        cs.clone(binding.playerBottomBar)
+
+        cs.clear(R.id.transportGroup)
+        cs.clear(R.id.leftToolsGroup)
+        cs.clear(R.id.rightToolsGroup)
+
+        cs.constrainWidth(R.id.transportGroup, ConstraintSet.WRAP_CONTENT)
+        cs.constrainHeight(R.id.transportGroup, ConstraintSet.WRAP_CONTENT)
+        cs.constrainWidth(R.id.leftToolsGroup, ConstraintSet.WRAP_CONTENT)
+        cs.constrainHeight(R.id.leftToolsGroup, ConstraintSet.WRAP_CONTENT)
+        cs.constrainWidth(R.id.rightToolsGroup, ConstraintSet.WRAP_CONTENT)
+        cs.constrainHeight(R.id.rightToolsGroup, ConstraintSet.WRAP_CONTENT)
+
+        // Centered primary transport group in BOTH orientations
+        cs.connect(R.id.transportGroup, ConstraintSet.TOP, R.id.seekBarRow, ConstraintSet.BOTTOM, dp(8))
+        cs.connect(R.id.transportGroup, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
+        cs.connect(R.id.transportGroup, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+
+        if (isLandscape) {
+            // Landscape: Single organized row — leftTools at START, transport CENTERED, rightTools at END
+            cs.connect(R.id.leftToolsGroup, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
+            cs.connect(R.id.leftToolsGroup, ConstraintSet.TOP, R.id.transportGroup, ConstraintSet.TOP)
+            cs.connect(R.id.leftToolsGroup, ConstraintSet.BOTTOM, R.id.transportGroup, ConstraintSet.BOTTOM)
+
+            cs.connect(R.id.rightToolsGroup, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+            cs.connect(R.id.rightToolsGroup, ConstraintSet.TOP, R.id.transportGroup, ConstraintSet.TOP)
+            cs.connect(R.id.rightToolsGroup, ConstraintSet.BOTTOM, R.id.transportGroup, ConstraintSet.BOTTOM)
+        } else {
+            // Portrait: Two tidy rows — centered transport on Row 1, evenly chained secondary tools on Row 2
+            cs.connect(R.id.leftToolsGroup, ConstraintSet.TOP, R.id.transportGroup, ConstraintSet.BOTTOM, dp(8))
+            cs.connect(R.id.leftToolsGroup, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
+            cs.connect(R.id.leftToolsGroup, ConstraintSet.END, R.id.rightToolsGroup, ConstraintSet.START, dp(12))
+
+            cs.connect(R.id.rightToolsGroup, ConstraintSet.TOP, R.id.leftToolsGroup, ConstraintSet.TOP)
+            cs.connect(R.id.rightToolsGroup, ConstraintSet.BOTTOM, R.id.leftToolsGroup, ConstraintSet.BOTTOM)
+            cs.connect(R.id.rightToolsGroup, ConstraintSet.START, R.id.leftToolsGroup, ConstraintSet.END)
+            cs.connect(R.id.rightToolsGroup, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+
+            cs.setHorizontalChainStyle(R.id.leftToolsGroup, ConstraintSet.CHAIN_PACKED)
+        }
+
+        cs.applyTo(binding.playerBottomBar)
+        applyPlayerBarInsets()
     }
 
     /**
@@ -856,7 +1210,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun setupMediaSessionAndAudioFocus() {
         requestPlayerAudioFocus()
         try {
-            val session = MediaSession(this, "PureVideoPlayerMediaSession")
+            val session = MediaSession(this, "IPTVAndVideoPlayerMediaSession")
             session.setCallback(object : MediaSession.Callback() {
                 override fun onPlay() {
                     togglePlayPauseFromHeadset(true)
@@ -1023,12 +1377,13 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun getScaleLabel(index: Int): String {
-        return when (index) {
-            0 -> getString(R.string.scale_best_fit)
-            1 -> getString(R.string.scale_fit_screen)
-            2 -> getString(R.string.scale_fill)
-            3 -> getString(R.string.scale_16_9)
-            else -> getString(R.string.scale_4_3)
+        return when (aspectModes[index.coerceIn(0, aspectModes.lastIndex)]) {
+            VlcAspectMode.SURFACE_BEST_FIT -> getString(R.string.scale_best_fit)
+            VlcAspectMode.SURFACE_FIT_SCREEN -> getString(R.string.scale_fit_screen)
+            VlcAspectMode.SURFACE_FILL -> getString(R.string.scale_fill)
+            VlcAspectMode.SURFACE_16_9 -> getString(R.string.scale_16_9)
+            VlcAspectMode.SURFACE_4_3 -> getString(R.string.scale_4_3)
+            VlcAspectMode.SURFACE_ORIGINAL -> getString(R.string.scale_original)
         }
     }
 
@@ -1100,11 +1455,11 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         if (!viewsAttached) {
-            mediaPlayer.attachViews(binding.vlcVideoLayout, null, true, false)
+            attachVlcViewsSafely()
             viewsAttached = true
         }
         mediaPlayer.play()
-        mediaPlayer.videoScale = scaleTypes[currentScaleIndex]
+        changeSurfaceLayout()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         handler.removeCallbacks(updateProgressRunnable)
         handler.post(updateProgressRunnable)
@@ -1330,11 +1685,6 @@ class PlayerActivity : AppCompatActivity() {
 
         // Style Top & Bottom Quick Pills as sleek glass capsules
         val pillViews = listOf(
-            binding.btnSubSyncMinus,
-            binding.btnSubSyncPlus,
-            binding.btnSubFontDown,
-            binding.btnSubFontUp,
-            binding.btnResetSubPos,
             binding.btnDecoder,
             binding.btnOrientation,
             binding.btnSpeed
@@ -1544,6 +1894,18 @@ class PlayerActivity : AppCompatActivity() {
             scheduleHideControls()
         }
 
+        binding.btnSleepTimer.setOnClickListener {
+            showEnhancedSleepTimerDialog()
+        }
+
+        binding.tvSleepTimerBadge.setOnClickListener {
+            showEnhancedSleepTimerDialog()
+        }
+
+        binding.btnAudioOnly.setOnClickListener {
+            switchToBackgroundAudioOnlyMode()
+        }
+
         binding.btnCastScreen.setOnClickListener {
             playerMenuBackStack.clear()
             showCastScreenDialog()
@@ -1554,8 +1916,8 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         binding.btnAspectRatio.setOnClickListener {
-            currentScaleIndex = (currentScaleIndex + 1) % scaleTypes.size
-            mediaPlayer.videoScale = scaleTypes[currentScaleIndex]
+            currentScaleIndex = (currentScaleIndex + 1) % aspectModes.size
+            changeSurfaceLayout()
             showToastIndicator(getScaleLabel(currentScaleIndex))
             scheduleHideControls()
         }
@@ -2433,10 +2795,19 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun beamVideoToExternalCastApp() {
-        val uri = currentVideoUri ?: return
+        val rawUri = currentVideoUri ?: return
         try {
+            val safeShareUri = if (rawUri.scheme == "file" && !rawUri.path.isNullOrEmpty()) {
+                androidx.core.content.FileProvider.getUriForFile(
+                    this,
+                    "${packageName}.fileprovider",
+                    File(rawUri.path!!)
+                )
+            } else {
+                rawUri
+            }
             val sendIntent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "video/*")
+                setDataAndType(safeShareUri, "video/*")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 putExtra("title", currentVideoTitle)
             }
@@ -2607,6 +2978,7 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        binding.videoSurfaceFrame.post { changeSurfaceLayout() }
         if (isInPictureInPictureMode) {
             wasInPipMode = true
             isEnteringPipTransition = false
@@ -2701,6 +3073,15 @@ class PlayerActivity : AppCompatActivity() {
                 onClick = {
                     playerMenuBackStack.addLast { showAudioTracksDialog() }
                     showPlayerSoundModesDialog()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🎚️",
+                title = getString(R.string.audio_fx_studio_title),
+                subtitle = getString(R.string.audio_fx_studio_sub),
+                isAccentHighlighted = false,
+                onClick = {
+                    showVexoAudioEffectsStudioDialog()
                 }
             )
         )
@@ -2835,9 +3216,9 @@ class PlayerActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         if (!viewsAttached) {
-            mediaPlayer.attachViews(binding.vlcVideoLayout, null, true, false)
+            attachVlcViewsSafely()
             viewsAttached = true
-            mediaPlayer.videoScale = scaleTypes[currentScaleIndex]
+            changeSurfaceLayout()
         }
     }
 
@@ -2845,13 +3226,13 @@ class PlayerActivity : AppCompatActivity() {
         super.onResume()
         hideSystemBars()
         applyThemeAndSubtitleStyle()
-        binding.vlcVideoLayout.post {
+        binding.videoSurfaceFrame.post {
             if (!viewsAttached) {
-                mediaPlayer.attachViews(binding.vlcVideoLayout, null, true, false)
+                attachVlcViewsSafely()
                 viewsAttached = true
             }
             mediaPlayer.updateViewpoint(0f, 0f, 0f, 0f, false)
-            mediaPlayer.videoScale = scaleTypes[currentScaleIndex]
+            changeSurfaceLayout()
         }
     }
 
@@ -2879,13 +3260,127 @@ class PlayerActivity : AppCompatActivity() {
             abandonPlayerAudioFocus()
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             if (viewsAttached && ::mediaPlayer.isInitialized) {
-                mediaPlayer.detachViews()
+                detachVlcViewsSafely()
                 viewsAttached = false
             }
             if (wasInPipMode) {
                 stopPlaybackImmediatelyAndClosePip(finishActivity = true)
             }
         }
+    }
+
+
+    private fun observeSleepTimerState() {
+        SleepTimerManager.attachCallbacks(
+            volumeScaleCallback = { scale ->
+                if (::mediaPlayer.isInitialized) {
+                    runCatching { mediaPlayer.volume = (scale * 100f).toInt().coerceIn(5, 100) }
+                }
+            },
+            expireCallback = {
+                if (::mediaPlayer.isInitialized && mediaPlayer.isPlaying) {
+                    saveCurrentPositionNow()
+                    mediaPlayer.pause()
+                    binding.btnPlayPause.setImageResource(R.drawable.ic_play_modern)
+                    Toast.makeText(this@PlayerActivity, getString(R.string.sleep_timer_triggered_toast), Toast.LENGTH_LONG).show()
+                }
+            }
+        )
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                SleepTimerManager.state.collect { st ->
+                    if (!st.isActive) {
+                        binding.tvSleepTimerBadge.visibility = View.GONE
+                    } else {
+                        binding.tvSleepTimerBadge.visibility = View.VISIBLE
+                        binding.tvSleepTimerBadge.text = if (st.mode == SleepTimerMode.END_OF_MEDIA) {
+                            getString(R.string.sleep_timer_end_short)
+                        } else {
+                            SleepTimerManager.formatRemaining(st.remainingMs)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showEnhancedSleepTimerDialog() {
+        val current = SleepTimerManager.state.value
+        val items = mutableListOf<PremiumMenuItem>()
+        if (current.isActive) {
+            val rem = if (current.mode == SleepTimerMode.END_OF_MEDIA) {
+                getString(R.string.sleep_timer_end_of_media)
+            } else {
+                SleepTimerManager.formatRemaining(current.remainingMs)
+            }
+            items.add(
+                PremiumMenuItem("➕", getString(R.string.sleep_timer_extend_5m), rem, isAccentHighlighted = true) {
+                    SleepTimerManager.extendByMinutes(5)
+                    showToastIndicator(getString(R.string.sleep_timer_extend_5m))
+                }
+            )
+            items.add(
+                PremiumMenuItem("✕", getString(R.string.sleep_timer_cancel), null, isDanger = true) {
+                    SleepTimerManager.cancel()
+                    showToastIndicator(getString(R.string.sleep_timer_cancelled_toast))
+                }
+            )
+        }
+        val presets = listOf(15, 30, 45, 60, 90)
+        for (min in presets) {
+            items.add(
+                PremiumMenuItem("🌙", "$min ${getString(R.string.sleep_timer_minutes)}", null) {
+                    SleepTimerManager.startMinutes(min)
+                    showToastIndicator("$min ${getString(R.string.sleep_timer_minutes)}")
+                }
+            )
+        }
+        items.add(
+            PremiumMenuItem("🎬", getString(R.string.sleep_timer_end_of_media), null) {
+                SleepTimerManager.startEndOfCurrentMedia()
+                showToastIndicator(getString(R.string.sleep_timer_end_of_media))
+            }
+        )
+        items.add(
+            PremiumMenuItem("⏱️", getString(R.string.sleep_timer_custom), null) {
+                val input = EditText(this).apply {
+                    inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                    hint = "25"
+                }
+                AlertDialog.Builder(this)
+                    .setTitle(getString(R.string.sleep_timer_custom))
+                    .setView(input)
+                    .setPositiveButton(getString(R.string.save)) { _, _ ->
+                        val mins = input.text.toString().toIntOrNull() ?: 0
+                        if (mins > 0) {
+                            SleepTimerManager.startMinutes(mins)
+                            showToastIndicator("$mins ${getString(R.string.sleep_timer_minutes)}")
+                        }
+                    }
+                    .setNegativeButton(getString(R.string.cancel), null)
+                    .show()
+            }
+        )
+        showPlayerPremiumMenu("🌙", getString(R.string.sleep_timer_title), null, items)
+    }
+
+    private fun switchToBackgroundAudioOnlyMode() {
+        val uri = currentVideoUri ?: return
+        val pos = if (::mediaPlayer.isInitialized) mediaPlayer.time.coerceAtLeast(0L) else 0L
+        saveCurrentPositionNow()
+        if (::mediaPlayer.isInitialized && mediaPlayer.isPlaying) {
+            mediaPlayer.pause()
+        }
+        detachVlcViewsSafely()
+        VexoPlaybackService.startAudioOnlyFromVideo(
+            context = this,
+            uri = uri,
+            title = currentVideoTitle,
+            positionMs = pos,
+            speed = currentSpeed
+        )
+        Toast.makeText(this, getString(R.string.audio_only_started_toast), Toast.LENGTH_SHORT).show()
+        finish()
     }
 
     override fun onDestroy() {
@@ -2899,7 +3394,7 @@ class PlayerActivity : AppCompatActivity() {
         } catch (e: Exception) { Log.w("PlayerActivity", "Handled non-fatal exception: ${e.javaClass.simpleName}") }
         abandonPlayerAudioFocus()
         if (viewsAttached) {
-            mediaPlayer.detachViews()
+            detachVlcViewsSafely()
             viewsAttached = false
         }
         mediaPlayer.release()

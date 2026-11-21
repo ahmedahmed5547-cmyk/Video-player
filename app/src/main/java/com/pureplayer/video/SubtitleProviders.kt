@@ -272,55 +272,9 @@ object PodnapisiProvider : SubtitleProvider {
     }
 }
 
-object YifySubtitlesProvider : SubtitleProvider {
-    override val name: String = "YIFY-Subs"
-
-    override suspend fun search(request: SubtitleSearchRequest): List<SubtitleResultItem> {
-        val out = mutableListOf<SubtitleResultItem>()
-        try {
-            val resolved = CinemetaImdbResolver.resolveImdbId(request.cleanQuery, false) ?: return emptyList()
-            val imdb = resolved.first
-            val domains = listOf("https://yts-subs.com", "https://yifysubtitles.ch")
-            for (domain in domains) {
-                val html = httpGetString("$domain/movie-imdb/$imdb") ?: continue
-                val rowRegex = Regex("<tr[^>]*>(.*?)</tr>", RegexOption.DOT_MATCHES_ALL)
-                val hrefRegex = Regex("href=\"(/subtitles/[^\"]+)\"")
-                for (m in rowRegex.findAll(html)) {
-                    val rowHtml = m.groupValues[1]
-                    val hrefMatch = hrefRegex.find(rowHtml) ?: continue
-                    val subPagePath = hrefMatch.groupValues[1]
-                    val lowerRow = rowHtml.lowercase(Locale.ROOT)
-                    val matchedLang = when {
-                        lowerRow.contains("arabic") -> "ar"
-                        lowerRow.contains("english") -> "en"
-                        lowerRow.contains("french") -> "fr"
-                        lowerRow.contains("spanish") -> "es"
-                        lowerRow.contains("turkish") -> "tr"
-                        else -> null
-                    }
-                    if (matchedLang != null && matchedLang in request.preferredLanguages) {
-                        val zipPath = subPagePath.replace("/subtitles/", "/subtitle/") + ".zip"
-                        val fullDl = "$domain$zipPath"
-                        out.add(
-                            SubtitleResultItem(
-                                id = "yify_${out.size}",
-                                title = "${request.cleanQuery} (${matchedLang.uppercase()})",
-                                providerName = name,
-                                languageCode = matchedLang,
-                                downloadUrl = fullDl,
-                                formatExt = "zip",
-                                matchQuality = MatchQuality.EXACT_TITLE,
-                                rating = 8.6,
-                                downloadCount = 300 - out.size
-                            )
-                        )
-                    }
-                }
-                if (out.isNotEmpty()) break
-            }
-        } catch (e: Exception) { Log.w("SubtitleProviders", "Handled non-fatal exception: ${e.javaClass.simpleName}") }
-        return out
-    }
+object LegacyArchiveSubtitlesProvider : SubtitleProvider {
+    override val name: String = "Archive-Subs"
+    override suspend fun search(request: SubtitleSearchRequest): List<SubtitleResultItem> = emptyList()
 }
 
 object SubdlProvider : SubtitleProvider {

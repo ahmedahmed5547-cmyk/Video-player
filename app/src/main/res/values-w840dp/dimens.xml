@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="player_top_bar_padding_horizontal">28dp</dimen>
+    <dimen name="player_bottom_bar_padding_horizontal">32dp</dimen>
+    <dimen name="player_play_btn_size">72dp</dimen>
+    <dimen name="player_transport_btn_size">54dp</dimen>
+    <dimen name="player_action_btn_size">48dp</dimen>
+    <dimen name="recycler_horizontal_padding">20dp</dimen>
+</resources>

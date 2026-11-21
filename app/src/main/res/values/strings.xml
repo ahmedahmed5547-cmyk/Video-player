@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Pure Video Player</string>
+    <string name="app_name">VEXO Player</string>
+    <string name="app_subtitle">IPTV and Video player</string>
     <string name="folders_title">Video Folders</string>
     <string name="back">Back</string>
     <string name="close">Close</string>
@@ -169,7 +170,7 @@
     <string name="folder_mode_flat_sub">Display all videos in a single list without folders</string>
     <string name="limited_access_manage_title">Manage Limited Access Videos (System Picker)</string>
     <string name="limited_access_active_sub">Allow Limited Access active • Tap to add/edit videos</string>
-    <string name="limited_access_manage_sub">Select or modify videos shared with Pure Video Player</string>
+    <string name="limited_access_manage_sub">Select or modify videos shared with IPTV and Video player</string>
     <string name="limited_access_add_more_btn">➕ Add System Videos</string>
     <string name="limited_access_empty_msg">No videos selected in Limited Access mode. Tap below to select videos.</string>
     <string name="privacy_remove_pin_option">🗑️ Delete Password &amp; Unlock All Folders</string>
@@ -213,8 +214,8 @@ Long-press any folder in Video Folders to lock &amp; move it here, or tap below 
     <string name="section_media_layout">📐 Media Layout (List or Grid)</string>
     <string name="layout_mode_list">📋 Detailed List View</string>
     <string name="layout_mode_list_sub">Classic horizontal cards with full metadata</string>
-    <string name="layout_mode_grid">🔲 Compact Grid View (2 Columns)</string>
-    <string name="layout_mode_grid_sub">Cinema poster grid for folders &amp; videos</string>
+    <string name="layout_mode_grid">🔲 Adaptive Cinema Grid View</string>
+    <string name="layout_mode_grid_sub">Responsive multi-column poster grid for phones, tablets &amp; large screens</string>
     <string name="section_sort_by">🔃 Sort Content By</string>
     <string name="sort_date_newest">📅 Date (Newest First)</string>
     <string name="sort_date_oldest">🕰️ Date (Oldest First)</string>
@@ -233,7 +234,7 @@ Long-press any folder in Video Folders to lock &amp; move it here, or tap below 
     <string name="tab_iptv_compact">IPTV</string>
     <string name="search_no_results">لا توجد نتائج (No results found)</string>
     <string name="iptv_search_hint">Instant search in Live TV, Movies &amp; Series...</string>
-    <string name="iptv_toolbar_title">📺 IPTV Smarters Hub</string>
+    <string name="iptv_toolbar_title">📺 IPTV Hub (Xtream &amp; M3U)</string>
     <string name="iptv_sources_subtitle">Xtream Codes &amp; M3U Playlists</string>
     <string name="iptv_sources_manage_hint">Tap a source to browse • Long-press to Edit, Refresh or Delete</string>
     <string name="iptv_add_source_short">Add Source</string>
@@ -253,7 +254,7 @@ Long-press any folder in Video Folders to lock &amp; move it here, or tap below 
     <string name="iptv_hint_server_url">Server Domain or URL (e.g. example.com or example.com:8080)</string>
     <string name="iptv_hint_username">Username</string>
     <string name="iptv_hint_password">Password</string>
-    <string name="iptv_loading_data">Connecting to server &amp; loading IPTV content...</string>
+    <string name="iptv_loading_data">Synchronizing IPTV library...</string>
     <string name="iptv_loading_series_episodes">Loading seasons &amp; episodes...</string>
     <string name="iptv_sync_success_toast">✅ Added "%1$s" (%2$d items loaded)</string>
     <string name="iptv_items_unit">items</string>
@@ -296,7 +297,7 @@ Long-press any folder in Video Folders to lock &amp; move it here, or tap below 
     <string name="resume_mode_always_resume">Always Resume automatically from where I stopped</string>
     <string name="resume_mode_always_restart">Always Start from Beginning (00:00) automatically</string>
     <string name="settings_cat_developer">👨‍💻 DEVELOPER &amp; CREDITS</string>
-    <string name="developer_credit_subtitle">Developer • Pure Video Player Final Edition (v%1$s)</string>
+    <string name="developer_credit_subtitle">Developer • VEXO Player — IPTV and Video player (v%1$s)</string>
     <string name="iptv_show_password_toggle">Show Password to verify characters</string>
     <string name="press_back_again_to_exit">Swipe back again to exit app</string>
     <string name="iptv_subtab_all">📂 Categories</string>
@@ -325,12 +326,12 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="about_changelog_sub">View full release notes &amp; new features in v%1$s</string>
     <string name="changelog_v36_2_desc">• Upgraded Settings &amp; sub-menus to Full-Screen layout with fluid staggered animations.
 • Added dedicated About section with Developer credit (Ahmed M Moumen), Version info, and bilingual Changelog.
-• Standardized project branding to Pure Video Player.</string>
+• Standardized project branding to IPTV and Video player.</string>
     <string name="changelog_v36_1_desc">• Reorganized Settings into clean 2-level categories.
 • Added interactive Visual Theme Studio with live color swatches and 360ms smooth color morphing.</string>
     <string name="changelog_v34_0_desc">• Added Favorites (❤️) and Continue Watching (⏱️) sub-tabs inside IPTV Series, Movies &amp; Live TV.
 • Improved phone edge Back-Swipe navigation across all folders and IPTV screens.</string>
-    <string name="changelog_v30_0_desc">• Added complete IPTV Smarters Hub supporting Xtream Codes API and M3U/M3U8 playlists.
+    <string name="changelog_v30_0_desc">• Added complete IPTV Hub supporting Xtream Codes API and M3U/M3U8 playlists.
 • Added 280ms debounced instant search in Arabic &amp; English.</string>
     <string name="changelog_v28_0_desc">• Added bottom Private Vault tab with AndroidKeyStore Biometric &amp; PIN lock.
 • Added 2-Column Grid / List layout toggle, 7 Sort modes, and NEW video badges.</string>
@@ -346,9 +347,9 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="cast_opening_settings_toast">Select your TV from the Wireless Display list</string>
     <string name="toast_rewind_hold">Rewind</string>
     <string name="iptv_download_btn">Download for Offline Watch</string>
-    <string name="iptv_download_sub">Save video locally to Movies/PureVideoPlayer folder</string>
+    <string name="iptv_download_sub">Save video locally to Movies/IPTV_and_Video_player folder</string>
     <string name="iptv_download_started_toast">⬇️ Downloading: %1$s (Check notification bar)</string>
-    <string name="iptv_download_completed_toast">✅ Download saved to Movies/PureVideoPlayer: %1$s</string>
+    <string name="iptv_download_completed_toast">✅ Download saved to Movies/IPTV_and_Video_player: %1$s</string>
     <string name="iptv_download_failed_toast">⚠️ Could not start download for this stream</string>
     <string name="iptv_episode_play_option">Play Episode Now</string>
     <string name="appearance_mode_section">Appearance Mode (Dark / Light / System)</string>
@@ -415,7 +416,7 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="lang_japanese">Japanese (日本語)</string>
     <string name="lang_korean">Korean (한국어)</string>
     <string name="settings_sec_media_engine">🎬 Player, Audio &amp; Subtitles</string>
-    <string name="settings_sec_interface_theme">🎨 Appearance, Language &amp; Layout</string>
+    <string name="settings_sec_interface_theme">🎨 Appearance &amp; Language</string>
     <string name="settings_sec_privacy_folders">🛡️ Privacy Vault &amp; Folders</string>
     <string name="settings_sec_system_updates">🚀 System &amp; App Updates</string>
     <string name="settings_hub_playback_engine_title">Video Player &amp; Decoder</string>
@@ -441,13 +442,98 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="iptv_err_reenter_password">🔑 Please re-enter the password to refresh this source.</string>
     <string name="about_disclaimer_title">Content &amp; Legal Disclaimer</string>
     <string name="about_disclaimer_sub">This app is a media player only and does not provide any content. The user is solely responsible for the content they add.</string>
-    <string name="app_icon_section_title">Material UI App Icons</string>
-    <string name="app_icon_Sub">Choose a Material You / Material UI home screen icon</string>
-    <string name="icon_mat_you">Material You</string>
-    <string name="icon_mat_blue">Cyber Blue</string>
-    <string name="icon_mat_gold">AMOLED Gold</string>
-    <string name="icon_mat_emerald">Emerald</string>
-    <string name="icon_mat_crimson">Crimson</string>
-    <string name="icon_mat_violet">Royal Violet</string>
-    <string name="toast_app_icon_updated">App icon updated (%1$s)</string>
+    <string name="about_privacy_policy_title">Privacy &amp; Data Security Policy</string>
+    <string name="about_privacy_policy_sub">100% local processing. Vault PINs (PBKDF2 100,000+ iterations) &amp; IPTV credentials (AES-256-GCM) are encrypted on-device via AndroidKeyStore and excluded from cloud backups. No personal data is collected or shared.</string>
+    <string name="privacy_policy_sec1_title">1. Zero Data Collection &amp; Sharing</string>
+    <string name="privacy_policy_sec1_desc">VEXO Player (IPTV and Video player) does not collect, transmit, sell, or share any personal data, device identifiers, or media history with external servers.</string>
+    <string name="privacy_policy_sec2_title">2. Permissions &amp; Local Storage Access</string>
+    <string name="privacy_policy_sec2_desc">Video permission (READ_MEDIA_VIDEO) is used strictly on-device to display and play your local video folders. Biometric permission is used locally for Private Vault unlock.</string>
+    <string name="privacy_policy_sec3_title">3. Hardware KeyStore Encryption &amp; Backup Exclusion</string>
+    <string name="privacy_policy_sec3_desc">Vault PINs are hashed with PBKDF2-HMAC-SHA256 (100,000+ iterations) and playlist credentials are encrypted with AES-256-GCM via AndroidKeyStore, excluded from cloud backups. Contact: AHMEDAHMED5547@GMAIL.COM</string>
+    <string name="iptv_bg_syncing_subtle">Syncing library in background...</string>
+    <string name="changelog_v90_04_title">v90.04 (2026-11-18) — IPTV Auto-Sync, Responsive UI &amp; Rebranding</string>
+    <string name="changelog_v90_04_desc">• Application Name: Renamed application everywhere to IPTV and Video player across launcher, main navigation, About, and internal branding.
+• Automatic IPTV Background Sync: Automatically refreshes and synchronizes your IPTV library in the background whenever you open the main IPTV section using a subtle top progress bar (removed intrusive server-connection popups).
+• Uninterrupted Browsing: Navigating between Movies, TV Series, and Live TV or scrolling through channels/streams reuses cached data without triggering repeated refreshes; library re-syncs only when leaving and reopening the main IPTV section.
+• Unified Sort &amp; Layout Menu: Removed duplicate Sort &amp; Layout controls from Settings, keeping a single clean access point in the top three-line (hamburger) menu.
+• Responsive Multi-Device Design: Added adaptive layouts, multi-column grids, proportional movie posters, and responsive player controls for smartphones, tablets, and large screens.</string>
+    <string name="changelog_v90_03_title">v90.03 (2026-11-17) — Google Play Store Readiness &amp; Privacy Policy</string>
+    <string name="changelog_v90_03_desc">• Added full interactive Privacy &amp; Data Security Policy page and legal content disclaimer inside the About section.
+• Isolated demo IPTV showcase stream strictly to the GitHub flavor so Google Play builds remain 100% pure media players.
+• Configured modern uncompressed native library alignment (useLegacyPackaging = false) for Android App Bundles (AAB).</string>
+    <string name="changelog_v90_02_title">v90.02 (2026-11-17) — Security Hardening &amp; Policy Compliance</string>
+    <string name="changelog_v90_02_desc">• Upgraded Private Vault PIN hashing to PBKDF2-HMAC-SHA256 (100,000 iterations) with brute-force lockout protection.
+• Enforced strict AndroidKeyStore AES-256-GCM encryption for IPTV credentials and excluded sensitive caches from cloud backup.
+• Added FileProvider content URI wrapping for external DLNA/Cast sharing and optional SSL fallback toggle in Settings.</string>
+    <string name="changelog_v90_01_title">v90.01 (2026-11-16) — Dual Flavor Build &amp; Room SQLite Engine</string>
+    <string name="changelog_v90_01_desc">• Added GitHub and Google Play product flavors with automated unit testing and release signing.
+• Migrated IPTV stream storage to Room 2.6.1 SQLite database with Paging 3 support for large playlists.</string>
+    <string name="changelog_v90_06_title">v90.06 (2026-11-18) — Section-Restricted Instant Search &amp; 3-Version Changelog</string>
+    <string name="changelog_v90_06_desc">• Restored Stable IPTV Search System: Reverted experimental search changes and restored the fast, stable search engine from the verified baseline.
+• Section-Restricted Search: Searching inside Movies now searches exclusively within Movies; searching inside TV Series searches exclusively within TV Series; searching inside Live TV searches exclusively within Live TV — never mixing results from other sections.
+• Instant Live Search While Typing: Search results now update immediately with the first character and every subsequent keystroke without pressing Enter or waiting for delays.
+• Streamlined 3-Version Changelog: Updated the Changelog system to permanently retain and display only the latest 3 application versions.</string>
+    <string name="changelog_v90_05_title">v90.05 (2026-11-18) — Keyboard Viewport Resize &amp; Layout Adjustment</string>
+    <string name="changelog_v90_05_desc">• Fixed Android on-screen keyboard interaction (adjustResize &amp; WindowInsetsCompat.Type.ime()) so search results dynamically resize above the keyboard and the last item remains scrollable.</string>
+    <string name="changelog_v90_07_title">v90.07 (2026-11-18) — Google Play Launch Readiness &amp; Complete Branding</string>
+    <string name="changelog_v90_07_desc">• Complete Application Branding: Unified all internal folders, media session tags, privacy disclosures, and store assets under the official name IPTV and Video player.
+• Google Play Policy Verification: Verified 100% compliance with Google Play Data Safety, hardware-backed AndroidKeyStore encryption, and isolated Play Store release bundle configuration.</string>
+    <string name="changelog_v90_08_title">v90.08 — VEXO Player (IPTV and Video player) Official Store Release</string>
+    <string name="changelog_v90_08_desc">• Official Brand Identity: Set primary title to VEXO Player with secondary title IPTV and Video player underneath across the top header, About section, and Google Play Store listing.
+• Privacy &amp; Contact Integration: Added official developer contact email (AHMEDAHMED5547@GMAIL.COM) and GitHub Privacy Policy URLs across all store and in-app disclosures.
+• Rolling 3-Version Changelog: Automatically retains only the latest 3 releases (v90.08, v90.07, and v90.06).</string>
+    <string name="changelog_v90_09_title">v90.09 — Android 16 (API 36) Google Play Target SDK Upgrade</string>
+    <string name="changelog_v90_09_desc">• Android 16 (API Level 36) Compliance: Upgraded targetSdk and compileSdk to 36 to meet Google Play Console upload requirements for security and performance.
+• Build Compatibility: Preserved full Gradle 8.5 / AGP 8.2.2 green-build compatibility via android.suppressUnsupportedCompileSdk=36.
+• Rolling 3-Version Changelog: Retains only the latest 3 releases (v90.09, v90.08, and v90.07).</string>
+    <string name="changelog_v90_10_title">v90.10 — Google Play Release Bundle (Version Code 9010)</string>
+    <string name="changelog_v90_10_desc">• Play Console Release Increment: Incremented versionCode to 9010 with full Android 16 (API 36) target compliance and embedded native debug symbols (debugSymbolLevel = FULL).
+• Rolling 3-Version Changelog: Retains only the latest 3 releases (v90.10, v90.09, and v90.08).</string>
+    <string name="scale_original">Original</string>
+    <string name="refresh_library">Refresh</string>
+    <string name="loading_videos_msg">Scanning your video library...</string>
+    <string name="changelog_v90_11_title">v%1$s — Luxury Dark UI, Foldable Support &amp; Core Fixes</string>
+    <string name="changelog_v90_11_desc">• Luxury Dark Redesign &amp; Luxury Gold Theme: Refreshed Player Settings and Playback UI with glass panels, thin-line vector icons, glowing SeekBar, monospace timers, and marquee titles.
+• Full Foldable &amp; Adaptive Support: Added Jetpack WindowManager (Tabletop, Book, Folded Cover, and Unfolded postures) with hinge-safe controls/subtitles and centered large-screen dialogs.
+• Playback &amp; First-Install Fixes: Rebuilt rotation controls in ConstraintLayout, ported VLC changeSurfaceLayout() to fix Fit-to-Stretch cropping, and added ViewModel + ContentObserver + MediaScanner fallback.
+• Android 15/16 &amp; Brand Alignment: Enabled edge-to-edge, 16 KB native library alignment (AGP 8.5.1 + LibVLC 3.6.5), unified VEXO Player branding, and 4-version Changelog display.</string>
+    <string name="theme_luxury_gold">Luxury Gold (Champagne)</string>
+    <string name="appearance_mode_material_you">System (Material You)</string>
+    <string name="appearance_mode_luxury_dark">Luxury Dark</string>
+    <string name="tab_audio">Audio</string>
+    <string name="audio_empty_msg">No audio tracks found on device</string>
+    <string name="audio_sec_tracks">Tracks</string>
+    <string name="audio_sec_tracks_sub">Play all audio tracks with background queue</string>
+    <string name="audio_sec_artists">Artists</string>
+    <string name="audio_sec_albums">Albums</string>
+    <string name="audio_sec_genres">Genres</string>
+    <string name="audio_sec_playlists">Playlists</string>
+    <string name="audio_create_playlist">Create Playlist</string>
+    <string name="audio_playlist_name_hint">Playlist name...</string>
+    <string name="audio_only_mode_title">Audio Only (Background)</string>
+    <string name="audio_only_started_toast">Switched to background Audio-Only mode</string>
+    <string name="return_to_video">Return to Video</string>
+    <string name="sleep_timer_title">Sleep Timer</string>
+    <string name="sleep_timer_minutes">min</string>
+    <string name="sleep_timer_end_of_media">End of current video / track</string>
+    <string name="sleep_timer_end_short">END</string>
+    <string name="sleep_timer_custom">Custom Time (minutes)</string>
+    <string name="sleep_timer_extend_5m">Extend +5 min</string>
+    <string name="sleep_timer_cancel">Cancel Timer</string>
+    <string name="sleep_timer_cancelled_toast">Sleep timer cancelled</string>
+    <string name="sleep_timer_triggered_toast">Sleep timer ended — playback paused</string>
+    <string name="audio_fx_studio_title">Equalizer &amp; Audio Boost (200%)</string>
+    <string name="audio_fx_studio_sub">16 VLC presets, Bass Boost, Virtualizer &amp; Loudness Enhancer</string>
+    <string name="audio_fx_enable_switch">Enable Equalizer &amp; Audio Effects</string>
+    <string name="audio_fx_choose_preset">Choose VLC / Custom Preset</string>
+    <string name="audio_fx_volume_boost">Volume Boost</string>
+    <string name="audio_fx_boost_warning">Warning: High volume boost above 100% may distort audio or damage speakers.</string>
+    <string name="audio_fx_bass_boost">Bass Boost</string>
+    <string name="audio_fx_virtualizer">Virtualizer (Surround)</string>
+    <string name="audio_fx_save_preset">Save Custom Preset</string>
+    <string name="changelog_v90_12_title">v%1$s — Audio Library, Android Auto, 2x2 Folder Covers, Material You, Sleep Timer &amp; Audio-Only</string>
+    <string name="changelog_v90_12_desc">• Luxury Dark &amp; Material You: Fixed Luxury Dark theme visibility/persistence, added full Material You dynamic color support &amp; monochrome adaptive icon, and removed redundant App Version item from Settings.
+• VLC-Style Audio Library &amp; Android Auto: Added Audio tab (Artists, Albums, Tracks, Genres, Room Playlists via MIGRATION_2_3) and Media3 MediaLibraryService for Android Auto with voice search.
+• 2x2 Folder Cover Collages: Added memory &amp; disk cached 2x2 video frame collages with count badges on video folders.
+• Enhanced Sleep Timer, Audio Boost (200%) &amp; Audio-Only Background Mode: Added 15–90m/custom/end-of-track sleep timer with 15s fade-out, 16 VLC EQ presets + BassBoost/Virtualizer/LoudnessEnhancer, and seamless video-to-audio background playback.</string>
 </resources>

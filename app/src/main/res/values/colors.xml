@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg_dark">#090D16</color>
-    <color name="surface_dark">#131C2E</color>
+    <color name="bg_dark">#0A0A0F</color>
+    <color name="surface_dark">#12121A</color>
     <color name="accent_blue">#38BDF8</color>
+    <color name="luxury_gold">#D4AF37</color>
+    <color name="luxury_emerald">#10B981</color>
+    <color name="luxury_glass_surface">#CC12121A</color>
+    <color name="luxury_glass_border">#1FFFFFFF</color>
     <color name="white">#FFFFFF</color>
 </resources>

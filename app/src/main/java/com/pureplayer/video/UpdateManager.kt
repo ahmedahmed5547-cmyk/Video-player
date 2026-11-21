@@ -234,7 +234,7 @@ internal fun MainActivity.checkForGitHubUpdatesNow(repoSlug: String) {
                     val conn = (URL(rawUrl).openConnection() as HttpURLConnection).apply {
                         connectTimeout = 8000
                         readTimeout = 8000
-                        setRequestProperty("User-Agent", "PureVideoPlayer-Updater")
+                        setRequestProperty("User-Agent", "IPTVAndVideoPlayer-Updater")
                     }
                     if (conn.responseCode in 200..299) {
                         val gradleText = conn.inputStream.bufferedReader().use { it.readText() }
@@ -256,7 +256,7 @@ internal fun MainActivity.checkForGitHubUpdatesNow(repoSlug: String) {
                     connectTimeout = 8000
                     readTimeout = 8000
                     setRequestProperty("Accept", "application/vnd.github+json")
-                    setRequestProperty("User-Agent", "PureVideoPlayer-Updater")
+                    setRequestProperty("User-Agent", "IPTVAndVideoPlayer-Updater")
                 }
                 if (conn.responseCode in 200..299) {
                     val jsonStr = conn.inputStream.bufferedReader().use { it.readText() }
@@ -282,7 +282,7 @@ internal fun MainActivity.checkForGitHubUpdatesNow(repoSlug: String) {
                     connectTimeout = 8000
                     readTimeout = 8000
                     setRequestProperty("Accept", "application/vnd.github+json")
-                    setRequestProperty("User-Agent", "PureVideoPlayer-Updater")
+                    setRequestProperty("User-Agent", "IPTVAndVideoPlayer-Updater")
                 }
                 if (conn.responseCode in 200..299) {
                     val jsonStr = conn.inputStream.bufferedReader().use { it.readText() }
@@ -298,7 +298,7 @@ internal fun MainActivity.checkForGitHubUpdatesNow(repoSlug: String) {
 
             Pair(
                 Pair(remoteVersionCode, remoteVersionName.ifBlank { "$remoteVersionCode.0" }),
-                Pair(directApkUrl ?: "https://github.com/$repoSlug/releases/latest/download/PureVideoPlayer.apk", latestActionsUrl)
+                Pair(directApkUrl ?: "https://github.com/$repoSlug/releases/latest/download/IPTVAndVideoPlayer.apk", latestActionsUrl)
             )
         }
 
@@ -411,11 +411,11 @@ internal fun MainActivity.downloadAndInstallApkInApp(apkUrl: String, fallbackAct
                     instanceFollowRedirects = true
                     connectTimeout = 12_000
                     readTimeout = 20_000
-                    setRequestProperty("User-Agent", "PureVideoPlayer-Updater")
+                    setRequestProperty("User-Agent", "IPTVAndVideoPlayer-Updater")
                 }
                 if (conn.responseCode !in 200..299) return@withContext null
                 val totalBytes = conn.contentLength.coerceAtLeast(1)
-                val outFile = File(externalCacheDir ?: cacheDir, "PureVideoPlayer_update.apk")
+                val outFile = File(externalCacheDir ?: cacheDir, "IPTVAndVideoPlayer_update.apk")
                 if (outFile.exists()) outFile.delete()
 
                 conn.inputStream.use { input ->
@@ -458,19 +458,11 @@ internal fun MainActivity.downloadAndInstallApkInApp(apkUrl: String, fallbackAct
 }
 
 internal fun MainActivity.installDownloadedApkFile(apkFile: File) {
-    try {
-        val apkUri = FileProvider.getUriForFile(
-            this,
-            "${packageName}.fileprovider",
-            apkFile
-        )
-        val installIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(apkUri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        startActivity(installIntent)
-    } catch (_: Exception) {
-        Toast.makeText(this, getString(R.string.update_install_error_toast), Toast.LENGTH_LONG).show()
+    if (!BuildConfig.ALLOW_SELF_UPDATE) {
+        try {
+            apkFile.delete()
+        } catch (_: Exception) {}
+        return
     }
+    Toast.makeText(this, getString(R.string.update_fallback_actions_toast), Toast.LENGTH_SHORT).show()
 }

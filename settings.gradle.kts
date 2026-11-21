@@ -17,5 +17,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "PureVideoPlayer"
+rootProject.name = "IPTV_and_Video_player"
 include(":app")
