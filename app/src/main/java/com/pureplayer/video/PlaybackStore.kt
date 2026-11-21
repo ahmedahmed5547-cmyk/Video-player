@@ -115,6 +115,7 @@ object PlaybackStore {
     private const val KEY_SUB_LANGS_CSV = "preferred_sub_langs_csv"
     private const val KEY_THEME_INDEX = "app_theme_index"
     private const val KEY_APPEARANCE_MODE = "app_appearance_mode_v1"
+    private const val KEY_APPEARANCE_MIGRATED_V2 = "app_appearance_migrated_v2"
     private const val KEY_LAST_ACTIVE_FOLDER = "last_active_folder_name_v1"
     private const val KEY_AUDIO_PRESET_MODE = "audio_eq_preset_mode_v1"
     private const val KEY_AUDIO_PREAMP_DB = "audio_eq_preamp_db_v1"
@@ -261,19 +262,61 @@ object PlaybackStore {
     const val APPEARANCE_DARK = 0
     const val APPEARANCE_LIGHT = 1
     const val APPEARANCE_SYSTEM = 2
-    const val APPEARANCE_LUXURY_DARK = 3
+    private const val LEGACY_APPEARANCE_LUXURY_DARK = 3
 
-    // 0 = Dark, 1 = Light, 2 = System (Material You), 3 = Luxury Dark
-    fun getAppearanceMode(context: Context): Int = prefs(context).getInt(KEY_APPEARANCE_MODE, 0).coerceIn(0, 3)
+    const val THEME_AMOLED_GOLD = 1
+    const val THEME_MATERIAL_YOU = 5
+    const val THEME_LUXURY_GOLD = 8
+    const val THEME_LUXURY_DARK = 9
 
-    fun setAppearanceMode(context: Context, mode: Int) {
-        prefs(context).edit().putInt(KEY_APPEARANCE_MODE, mode.coerceIn(0, 3)).apply()
+    fun isDarkOnlyTheme(themeIndex: Int): Boolean {
+        return themeIndex == THEME_AMOLED_GOLD || themeIndex == THEME_LUXURY_DARK
     }
 
-    fun isLightThemeActive(context: Context): Boolean {
+    fun isMaterialYouSupported(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+    fun isMaterialYouSelected(context: Context): Boolean {
+        return isMaterialYouSupported() && getThemeIndex(context) == THEME_MATERIAL_YOU
+    }
+
+    fun migrateLegacyAppearanceIfNeeded(context: Context) {
+        val p = prefs(context)
+        val rawMode = p.getInt(KEY_APPEARANCE_MODE, APPEARANCE_DARK)
+        if (rawMode == LEGACY_APPEARANCE_LUXURY_DARK) {
+            p.edit()
+                .putInt(KEY_APPEARANCE_MODE, APPEARANCE_DARK)
+                .putInt(KEY_THEME_INDEX, THEME_LUXURY_DARK)
+                .putBoolean(KEY_APPEARANCE_MIGRATED_V2, true)
+                .apply()
+            return
+        }
+        if (!p.getBoolean(KEY_APPEARANCE_MIGRATED_V2, false)) {
+            val editor = p.edit().putBoolean(KEY_APPEARANCE_MIGRATED_V2, true)
+            if (rawMode == APPEARANCE_SYSTEM && isMaterialYouSupported()) {
+                editor.putInt(KEY_THEME_INDEX, THEME_MATERIAL_YOU)
+            }
+            editor.apply()
+        }
+    }
+
+    // 0 = Dark, 1 = Light, 2 = Follow System (brightness only)
+    fun getAppearanceMode(context: Context): Int {
+        migrateLegacyAppearanceIfNeeded(context)
+        return prefs(context).getInt(KEY_APPEARANCE_MODE, APPEARANCE_DARK).coerceIn(0, 2)
+    }
+
+    fun setAppearanceMode(context: Context, mode: Int) {
+        prefs(context).edit()
+            .putInt(KEY_APPEARANCE_MODE, mode.coerceIn(0, 2))
+            .putBoolean(KEY_APPEARANCE_MIGRATED_V2, true)
+            .apply()
+        applyAppearanceMode(context)
+    }
+
+    fun isRequestedBrightnessLight(context: Context): Boolean {
         return when (getAppearanceMode(context)) {
-            1 -> true
-            2 -> {
+            APPEARANCE_LIGHT -> true
+            APPEARANCE_SYSTEM -> {
                 val nightMask = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
                 nightMask != Configuration.UI_MODE_NIGHT_YES
             }
@@ -281,9 +324,22 @@ object PlaybackStore {
         }
     }
 
-    fun getThemeIndex(context: Context): Int = prefs(context).getInt(KEY_THEME_INDEX, 0).coerceIn(0, 8)
+    fun isLightThemeActive(context: Context): Boolean {
+        if (isDarkOnlyTheme(getThemeIndex(context))) return false
+        return isRequestedBrightnessLight(context)
+    }
+
+    fun getThemeIndex(context: Context): Int {
+        migrateLegacyAppearanceIfNeeded(context)
+        val idx = prefs(context).getInt(KEY_THEME_INDEX, 0).coerceIn(0, 9)
+        if (idx == THEME_MATERIAL_YOU && !isMaterialYouSupported()) return 0
+        return idx
+    }
+
     fun setThemeIndex(context: Context, index: Int) {
-        prefs(context).edit().putInt(KEY_THEME_INDEX, index.coerceIn(0, 8)).apply()
+        val safeIdx = index.coerceIn(0, 9)
+        if (safeIdx == THEME_MATERIAL_YOU && !isMaterialYouSupported()) return
+        prefs(context).edit().putInt(KEY_THEME_INDEX, safeIdx).apply()
     }
 
     fun getDynamicSystemAccentHex(context: Context): String {
@@ -302,16 +358,9 @@ object PlaybackStore {
     }
 
     fun getAccentColor(context: Context): Int {
-        val mode = getAppearanceMode(context)
-        if (mode == APPEARANCE_LUXURY_DARK) {
-            return Color.parseColor("#D4AF37")
-        }
-        if (mode == APPEARANCE_SYSTEM && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            return Color.parseColor(getDynamicSystemAccentHex(context))
-        }
         val isLight = isLightThemeActive(context)
         return when (getThemeIndex(context)) {
-            1 -> Color.parseColor(if (isLight) "#D97706" else "#F59E0B")
+            1 -> Color.parseColor("#F59E0B")
             2 -> Color.parseColor(if (isLight) "#059669" else "#10B981")
             3 -> Color.parseColor(if (isLight) "#E11D48" else "#F43F5E")
             4 -> Color.parseColor(if (isLight) "#7C3AED" else "#A855F7")
@@ -319,28 +368,49 @@ object PlaybackStore {
             6 -> Color.parseColor(if (isLight) "#EA580C" else "#FB923C")
             7 -> Color.parseColor(if (isLight) "#0D9488" else "#14B8A6")
             8 -> Color.parseColor(if (isLight) "#B4861C" else "#D4AF37")
+            9 -> Color.parseColor("#D4AF37")
             else -> Color.parseColor(if (isLight) "#0284C7" else "#38BDF8")
         }
     }
 
     fun getBackgroundColor(context: Context): Int {
-        if (isLightThemeActive(context)) {
+        val isLight = isLightThemeActive(context)
+        val idx = getThemeIndex(context)
+        if (idx == THEME_MATERIAL_YOU && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                return ContextCompat.getColor(
+                    context,
+                    if (isLight) android.R.color.system_neutral1_50 else android.R.color.system_neutral1_900
+                )
+            } catch (_: Exception) {}
+        }
+        if (isLight) {
             return Color.parseColor("#F1F5F9")
         }
-        return when (getThemeIndex(context)) {
+        return when (idx) {
             1 -> Color.parseColor("#000000")
-            8 -> Color.parseColor("#0A0A0F")
+            9 -> Color.parseColor("#07070B")
             else -> Color.parseColor("#0A0A0F")
         }
     }
 
     fun getSurfaceColor(context: Context): Int {
-        if (isLightThemeActive(context)) {
+        val isLight = isLightThemeActive(context)
+        val idx = getThemeIndex(context)
+        if (idx == THEME_MATERIAL_YOU && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                return ContextCompat.getColor(
+                    context,
+                    if (isLight) android.R.color.system_neutral1_0 else android.R.color.system_neutral1_800
+                )
+            } catch (_: Exception) {}
+        }
+        if (isLight) {
             return Color.parseColor("#FFFFFF")
         }
-        return when (getThemeIndex(context)) {
+        return when (idx) {
             1 -> Color.parseColor("#111111")
-            8 -> Color.parseColor("#12121A")
+            9 -> Color.parseColor("#111118")
             else -> Color.parseColor("#12121A")
         }
     }

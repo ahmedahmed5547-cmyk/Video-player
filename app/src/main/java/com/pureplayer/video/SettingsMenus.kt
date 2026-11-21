@@ -608,13 +608,13 @@ internal fun MainActivity.showSettingsAppearanceDisplayPage() {
         getString(R.string.theme_material_you),
         getString(R.string.theme_sunset_coral),
         getString(R.string.theme_teal_aqua),
-        getString(R.string.theme_luxury_gold)
+        getString(R.string.theme_luxury_gold),
+        getString(R.string.theme_luxury_dark)
     )
     val currentThemeName = themeNames[PlaybackStore.getThemeIndex(this).coerceIn(0, themeNames.size - 1)]
     val modeLabel = when (PlaybackStore.getAppearanceMode(this)) {
         PlaybackStore.APPEARANCE_LIGHT -> getString(R.string.appearance_mode_light)
-        PlaybackStore.APPEARANCE_SYSTEM -> getString(R.string.appearance_mode_material_you)
-        PlaybackStore.APPEARANCE_LUXURY_DARK -> getString(R.string.appearance_mode_luxury_dark)
+        PlaybackStore.APPEARANCE_SYSTEM -> getString(R.string.appearance_mode_follow_system)
         else -> getString(R.string.appearance_mode_dark)
     }
     val items = listOf(
@@ -1077,10 +1077,18 @@ internal fun MainActivity.showChangelogPage() {
         ChangelogReleaseEntry(
             version = verName,
             date = "2026-11-21",
-            iconEmoji = "✨",
-            title = getString(R.string.changelog_v90_12_title, verName),
-            description = getString(R.string.changelog_v90_12_desc),
+            iconEmoji = "🔧",
+            title = getString(R.string.changelog_v90_13_title, verName),
+            description = getString(R.string.changelog_v90_13_desc),
             isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.12",
+            date = "2026-11-21",
+            iconEmoji = "✨",
+            title = getString(R.string.changelog_v90_12_title, "90.12"),
+            description = getString(R.string.changelog_v90_12_desc),
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.11",
@@ -1278,7 +1286,8 @@ internal fun MainActivity.showThemeSelectorDialog() {
         ThemeOption("🌈", getString(R.string.theme_material_you), dynamicSysHex, "#090D16"),
         ThemeOption("🍊", getString(R.string.theme_sunset_coral), "#FB923C", "#090D16"),
         ThemeOption("🩵", getString(R.string.theme_teal_aqua), "#14B8A6", "#0A0A0F"),
-        ThemeOption("👑", getString(R.string.theme_luxury_gold), "#D4AF37", "#0A0A0F")
+        ThemeOption("👑", getString(R.string.theme_luxury_gold), "#D4AF37", "#0A0A0F"),
+        ThemeOption("🖤", getString(R.string.theme_luxury_dark), "#D4AF37", "#07070B")
     )
 
     val outerScroll = ScrollView(this).apply {
@@ -1342,10 +1351,9 @@ internal fun MainActivity.showThemeSelectorDialog() {
         }
     }
     val modeOptions = listOf(
-        Triple(PlaybackStore.APPEARANCE_SYSTEM, "🎨", getString(R.string.appearance_mode_material_you)),
+        Triple(PlaybackStore.APPEARANCE_SYSTEM, "📱", getString(R.string.appearance_mode_follow_system)),
         Triple(PlaybackStore.APPEARANCE_LIGHT, "☀️", getString(R.string.appearance_mode_light)),
-        Triple(PlaybackStore.APPEARANCE_DARK, "🌙", getString(R.string.appearance_mode_dark)),
-        Triple(PlaybackStore.APPEARANCE_LUXURY_DARK, "👑", getString(R.string.appearance_mode_luxury_dark))
+        Triple(PlaybackStore.APPEARANCE_DARK, "🌙", getString(R.string.appearance_mode_dark))
     )
     val modeButtons = mutableListOf<TextView>()
 
@@ -1381,7 +1389,7 @@ internal fun MainActivity.showThemeSelectorDialog() {
         (topPill.background as? GradientDrawable)?.setColor(activeAccent)
 
         modeButtons.forEachIndexed { mIdx, btn ->
-            val isModeSelected = (mIdx == activeMode)
+            val isModeSelected = (modeOptions[mIdx].first == activeMode)
             btn.setTextColor(if (isModeSelected) primaryText else PlaybackStore.getSecondaryTextColor(this))
             btn.background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
@@ -1436,7 +1444,7 @@ internal fun MainActivity.showThemeSelectorDialog() {
         }
     }
 
-    modeOptions.forEach { (modeCode, emoji, label) ->
+    modeOptions.forEachIndexed { mIdx, (modeCode, emoji, label) ->
         val btn = TextView(this).apply {
             text = "$emoji  $label"
             gravity = Gravity.CENTER
@@ -1444,7 +1452,7 @@ internal fun MainActivity.showThemeSelectorDialog() {
             setTypeface(typeface, Typeface.BOLD)
             setPadding(dp(8), dp(10), dp(8), dp(10))
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginEnd = if (modeCode < 2) dp(8) else 0
+                marginEnd = if (mIdx < modeOptions.lastIndex) dp(8) else 0
             }
             setOnClickListener {
                 selectedMode = modeCode
@@ -1496,11 +1504,21 @@ internal fun MainActivity.showThemeSelectorDialog() {
             textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
         }
+        val isMatYouUnsupported = (idx == PlaybackStore.THEME_MATERIAL_YOU && !PlaybackStore.isMaterialYouSupported())
+        val isDarkOnly = PlaybackStore.isDarkOnlyTheme(idx)
+        val hexHint = when {
+            isMatYouUnsupported -> "${opt.accentHex}  •  ${getString(R.string.material_you_needs_android_12)}"
+            isDarkOnly -> "${opt.accentHex}  •  ${getString(R.string.theme_dark_only_hint)}"
+            else -> opt.accentHex
+        }
         val tvHex = TextView(this).apply {
-            text = opt.accentHex
-            setTextColor(optAccent)
+            text = hexHint
+            setTextColor(if (isMatYouUnsupported) PlaybackStore.getSecondaryTextColor(hostActivity) else optAccent)
             textSize = 12f
             setPadding(0, dp(2), 0, 0)
+        }
+        if (isMatYouUnsupported) {
+            row.alpha = 0.48f
         }
         textCol.addView(tvName)
         textCol.addView(tvHex)
@@ -1518,8 +1536,15 @@ internal fun MainActivity.showThemeSelectorDialog() {
         row.addView(tvCheck)
 
         row.setOnClickListener {
+            if (isMatYouUnsupported) {
+                Toast.makeText(hostActivity, getString(R.string.material_you_needs_android_12), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             selectedIdx = idx
-            PlaybackStore.setThemeIndex(this, idx)
+            PlaybackStore.setThemeIndex(hostActivity, idx)
+            if (idx == PlaybackStore.THEME_MATERIAL_YOU && PlaybackStore.isMaterialYouSupported()) {
+                com.google.android.material.color.DynamicColors.applyToActivityIfAvailable(hostActivity)
+            }
             refreshVisualSelection(selectedIdx, selectedMode)
             applyUserTheme(animated = true)
         }

@@ -283,6 +283,7 @@ class MainActivity : AppCompatActivity() {
         applyUserTheme()
         observeVideoLibraryState()
         observeBackgroundAudioMiniPlayer()
+        handleNotificationReopenIntent(intent)
         checkPermissionAndLoad()
         if (savedInstanceState?.getBoolean("STATE_SETTINGS_OPEN", false) == true) {
             binding.root.post {
@@ -1785,6 +1786,26 @@ class MainActivity : AppCompatActivity() {
         videoLibraryViewModel.refreshLibrary(force = true, showLoadingIfEmpty = showSpinner)
     }
 
+
+    
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNotificationReopenIntent(intent)
+    }
+
+    private fun handleNotificationReopenIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra("OPEN_FROM_AUDIO_SERVICE", false) != true) return
+        intent.removeExtra("OPEN_FROM_AUDIO_SERVICE")
+        val st = VexoPlaybackService.playbackState.value
+        if (st.isActive && st.isFromVideoAudioOnly && st.currentUri.isNotBlank()) {
+            val uri = Uri.parse(st.currentUri)
+            val pos = st.positionMs
+            val title = st.title
+            VexoPlaybackService.sendAction(this, VexoPlaybackService.ACTION_STOP_AND_CLOSE)
+            launchPlayer(uri, title, pos)
+        }
+    }
 
     private fun observeBackgroundAudioMiniPlayer() {
         lifecycleScope.launch {

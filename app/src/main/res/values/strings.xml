@@ -352,7 +352,7 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="iptv_download_completed_toast">✅ Download saved to Movies/IPTV_and_Video_player: %1$s</string>
     <string name="iptv_download_failed_toast">⚠️ Could not start download for this stream</string>
     <string name="iptv_episode_play_option">Play Episode Now</string>
-    <string name="appearance_mode_section">Appearance Mode (Dark / Light / System)</string>
+    <string name="appearance_mode_section">Appearance Mode (System / Light / Dark)</string>
     <string name="appearance_mode_dark">Dark Mode (OLED)</string>
     <string name="appearance_mode_light">Light Mode</string>
     <string name="appearance_mode_system">System Default</string>
@@ -536,4 +536,11 @@ Any series, movie, or channel you play will appear here automatically so you can
 • VLC-Style Audio Library &amp; Android Auto: Added Audio tab (Artists, Albums, Tracks, Genres, Room Playlists via MIGRATION_2_3) and Media3 MediaLibraryService for Android Auto with voice search.
 • 2x2 Folder Cover Collages: Added memory &amp; disk cached 2x2 video frame collages with count badges on video folders.
 • Enhanced Sleep Timer, Audio Boost (200%) &amp; Audio-Only Background Mode: Added 15–90m/custom/end-of-track sleep timer with 15s fade-out, 16 VLC EQ presets + BassBoost/Virtualizer/LoudnessEnhancer, and seamless video-to-audio background playback.</string>
+    <string name="appearance_mode_follow_system">Follow System</string>
+    <string name="theme_luxury_dark">Luxury Dark</string>
+    <string name="theme_dark_only_hint">Dark only</string>
+    <string name="material_you_needs_android_12">Requires Android 12+</string>
+    <string name="changelog_v90_13_title">v%1$s — Theme Picker, PiP Audio-Only &amp; Folder Thumbnails Fix</string>
+    <string name="changelog_v90_13_desc">• Redesigned Theme Picker: 3 clean brightness chips (Follow System, Light, Dark) with Luxury Dark in the theme list and safe migration for old settings.\n• Added Headphone (Audio-Only) &amp; Play/Pause action buttons directly on the floating PiP mini player, plus tap-notification-to-resume video.\n• Fixed folder 2x2 video collage thumbnails with count badge and representative video frames (internal storage &amp; SD card) with disk + memory caching.</string>
+    <string name="audio_only_mode_label">Audio Only</string>
 </resources>

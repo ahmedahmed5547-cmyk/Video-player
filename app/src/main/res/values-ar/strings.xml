@@ -352,7 +352,7 @@
     <string name="iptv_download_completed_toast">✅ اكتمل التحميل في مجلد Movies/IPTV_and_Video_player: %1$s</string>
     <string name="iptv_download_failed_toast">⚠️ تعذر بدء التحميل المباشر لهذا الرابط</string>
     <string name="iptv_episode_play_option">تشغيل الحلقة الآن</string>
-    <string name="appearance_mode_section">وضع المظهر (داكن / فاتح / تلقائي)</string>
+    <string name="appearance_mode_section">وضع المظهر (النظام / فاتح / داكن)</string>
     <string name="appearance_mode_dark">الوضع الداكن (OLED)</string>
     <string name="appearance_mode_light">الوضع الفاتح (Light)</string>
     <string name="appearance_mode_system">تلقائي حسب النظام</string>
@@ -536,4 +536,11 @@
 • مكتبة الصوتيات وAndroid Auto: إضافة تبويب الصوتيات (فنانون، ألبومات، مقاطع، تصنيفات، وقوائم تشغيل عبر Room MIGRATION_2_3) وخدمة Media3 لـ Android Auto.
 • أغلفة المجلدات 2x2: استبدال أيقونة المجلد بكولاج من 4 لقطات فيديو مع كاش بالذاكرة والقرص وشارة عدد الفيديوهات.
 • مؤقت النوم ومعزز الصوت 200% ووضع الصوت بالخلفية: مؤقت نوم متقدم مع خفض صوت تدريجي، 16 إعداد VLC مع BassBoost وLoudnessEnhancer، وتشغيل الفيديو كصوت في الخلفية.</string>
+    <string name="appearance_mode_follow_system">تلقائي (النظام)</string>
+    <string name="theme_luxury_dark">الداكن الفاخر (Luxury Dark)</string>
+    <string name="theme_dark_only_hint">داكن فقط</string>
+    <string name="material_you_needs_android_12">يتطلب أندرويد 12 أو أحدث</string>
+    <string name="changelog_v90_13_title">الإصدار %1$s — إصلاح شاشة الثيمات وزر الصوت بالمشغّل المصغّر ومصغّرات المجلدات</string>
+    <string name="changelog_v90_13_desc">• تنظيم شاشة الثيمات: 3 خيارات إضاءة واضحة (النظام / فاتح / داكن) مع نقل Luxury Dark لقائمة الثيمات وحماية الإعدادات القديمة.\n• إضافة زر السماعة (صوت فقط) والتشغيل/الإيقاف مباشرة على النافذة المصغّرة العائمة (PiP) مع العودة للفيديو عند الضغط على الإشعار.\n• إصلاح مصغّرات المجلدات المجمّعة (2x2) مع شارة العدد وإطارات الفيديو التمثيلية (الذاكرة الداخلية وبطاقة SD) مع كاش القرص والذاكرة.</string>
+    <string name="audio_only_mode_label">صوت فقط</string>
 </resources>

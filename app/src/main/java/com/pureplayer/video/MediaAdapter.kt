@@ -224,36 +224,81 @@ object VideoThumbnailLoader {
         return out
     }
 
+    private fun scaleDownBitmap(src: Bitmap, maxW: Int = 360): Bitmap {
+        if (src.width <= maxW || src.width <= 0 || src.height <= 0) return src
+        val ratio = maxW.toFloat() / src.width.toFloat()
+        val newH = (src.height * ratio).toInt().coerceAtLeast(1)
+        return try {
+            Bitmap.createScaledBitmap(src, maxW, newH, true)
+        } catch (_: Exception) {
+            src
+        }
+    }
+
     private fun fetchBitmap(context: Context, video: VideoItem): Bitmap? {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val diskDir = File(context.cacheDir, "video_thumbs_v2").apply { if (!exists()) mkdirs() }
+        val diskFile = File(diskDir, "${video.uri.toString().hashCode()}.jpg")
+        if (diskFile.exists() && diskFile.length() > 0L) {
             try {
-                return context.contentResolver.loadThumbnail(video.uri, Size(320, 180), null)
-            } catch (e: Exception) { Log.w("MediaAdapter", "Handled non-fatal exception: ${e.javaClass.simpleName}") }
+                BitmapFactory.decodeFile(diskFile.absolutePath)?.let { return it }
+            } catch (_: Exception) {}
         }
 
-        try {
-            @Suppress("DEPRECATION")
-            val mini = MediaStore.Video.Thumbnails.getThumbnail(
-                context.contentResolver,
-                video.id,
-                MediaStore.Video.Thumbnails.MINI_KIND,
-                null
-            )
-            if (mini != null) return mini
-        } catch (e: Exception) { Log.w("MediaAdapter", "Handled non-fatal exception: ${e.javaClass.simpleName}") }
+        val targetUs = if (video.duration > 3_000L) {
+            (video.duration * 100L).coerceIn(1_000_000L, 15_000_000L)
+        } else {
+            1_000_000L
+        }
+
+        var decoded: Bitmap? = null
 
         val retriever = MediaMetadataRetriever()
-        return try {
+        try {
             retriever.setDataSource(context, video.uri)
-            retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            decoded = retriever.getFrameAtTime(targetUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                 ?: retriever.frameAtTime
         } catch (_: Exception) {
-            null
+            if (video.path.isNotBlank()) {
+                try {
+                    retriever.setDataSource(video.path)
+                    decoded = retriever.getFrameAtTime(targetUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                        ?: retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                        ?: retriever.frameAtTime
+                } catch (_: Exception) {}
+            }
         } finally {
-            try {
-                retriever.release()
-            } catch (e: Exception) { Log.w("MediaAdapter", "Handled non-fatal exception: ${e.javaClass.simpleName}") }
+            try { retriever.release() } catch (_: Exception) {}
         }
+
+        if (decoded == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                decoded = context.contentResolver.loadThumbnail(video.uri, Size(360, 202), null)
+            } catch (_: Exception) {}
+        }
+
+        if (decoded == null && video.id > 0L) {
+            try {
+                @Suppress("DEPRECATION")
+                decoded = MediaStore.Video.Thumbnails.getThumbnail(
+                    context.contentResolver,
+                    video.id,
+                    MediaStore.Video.Thumbnails.MINI_KIND,
+                    null
+                )
+            } catch (_: Exception) {}
+        }
+
+        if (decoded != null) {
+            val scaled = scaleDownBitmap(decoded, 360)
+            try {
+                FileOutputStream(diskFile).use { fos ->
+                    scaled.compress(Bitmap.CompressFormat.JPEG, 82, fos)
+                }
+            } catch (_: Exception) {}
+            return scaled
+        }
+        return null
     }
 }
 
@@ -479,12 +524,9 @@ class MediaAdapter(
                         binding.tvNewBadge.visibility = View.GONE
                     }
 
-                    binding.ivIcon.tag = null
-                    binding.ivIcon.alpha = 1f
-                    binding.ivIcon.scaleType = ImageView.ScaleType.CENTER_INSIDE
-                    binding.ivIcon.setPadding(20, 20, 20, 20)
-                    binding.ivIcon.imageTintList = ColorStateList.valueOf(accentColor)
-                    binding.ivIcon.setImageResource(R.drawable.ic_folder_cinema)
+                    binding.tvDurationBadge.text = "${item.videos.size}"
+                    binding.tvDurationBadge.visibility = View.VISIBLE
+                    thumbJob = VideoThumbnailLoader.loadFolderCollageThumbnail(ctx, item, binding.ivIcon, accentColor)
 
                     binding.tvTitle.text = if (isVaultMode) "🛡️ ${item.name}" else item.name
                     binding.tvSubtitle.text = ctx.getString(R.string.videos_count_format, item.videos.size)

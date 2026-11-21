@@ -1,3 +1,8 @@
+## v90.13 (2026-11-21)
+- **Theme Picker Redesign**: Top row now has 3 clean brightness options (Follow System, Light Mode, Dark Mode). Moved Luxury Dark into the theme palette below, enforced Android 12+ guard on Material You, kept dark-only themes coherent in light mode, and added safe legacy preference migration.
+- **PiP Mini Player Headphone Action**: Added Headphone (Audio-Only) and Play/Pause `RemoteAction` buttons directly on the floating PiP window, guarded PiP-to-audio transition, and wired tapping the notification to reopen the video player at the exact same position.
+- **Folder & Video Thumbnails Fix**: Wired 2x2 folder cover collage thumbnails + video count badge in `MediaAdapter.kt`, and upgraded `VideoThumbnailLoader` with disk caching, representative frame timestamps (~10% duration), and SD-card path fallback.
+
 # Changelog — VEXO Player: IPTV and Video player (`com.pureplayer.video`)
 
 ## v90.12 (2026-11-21) — Audio Library, Android Auto, 2x2 Folder Covers, Material You, Sleep Timer & Audio-Only Mode

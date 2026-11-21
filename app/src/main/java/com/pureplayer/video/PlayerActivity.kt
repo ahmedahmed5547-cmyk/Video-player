@@ -2,7 +2,12 @@ package com.pureplayer.video
 
 import android.util.Log
 
+import android.app.PendingIntent
 import android.app.PictureInPictureParams
+import android.app.RemoteAction
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.graphics.drawable.Icon
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
@@ -125,6 +130,27 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     private var currentDecoderIndex = 0
     private var isEnteringPipTransition = false
     private var wasInPipMode = false
+    private var isSwitchingToAudioOnly = false
+    private var pipReceiverRegistered = false
+
+    private val pipActionReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                ACTION_PIP_AUDIO_ONLY -> switchToBackgroundAudioOnlyMode()
+                ACTION_PIP_PLAY_PAUSE -> {
+                    if (::mediaPlayer.isInitialized) {
+                        if (mediaPlayer.isPlaying) {
+                            mediaPlayer.pause()
+                            updateAutoPipParams(isPlaying = false)
+                        } else {
+                            mediaPlayer.play()
+                            updateAutoPipParams(isPlaying = true)
+                        }
+                    }
+                }
+            }
+        }
+    }
     private var viewsAttached = true
     private var externalUserAgent: String? = null
     private var externalHttpReferer: String? = null
@@ -240,6 +266,14 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        try {
+            val pipFilter = IntentFilter().apply {
+                addAction(ACTION_PIP_AUDIO_ONLY)
+                addAction(ACTION_PIP_PLAY_PAUSE)
+            }
+            ContextCompat.registerReceiver(this, pipActionReceiver, pipFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
+            pipReceiverRegistered = true
+        } catch (_: Exception) {}
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -2913,8 +2947,34 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     private fun buildPipParams(isPlaying: Boolean = true): PictureInPictureParams? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
         return try {
+            val audioOnlyPending = PendingIntent.getBroadcast(
+                this,
+                201,
+                Intent(ACTION_PIP_AUDIO_ONLY).setPackage(packageName),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val audioOnlyAction = RemoteAction(
+                Icon.createWithResource(this, R.drawable.ic_headphones),
+                getString(R.string.audio_only_mode_label),
+                getString(R.string.audio_only_mode_label),
+                audioOnlyPending
+            )
+            val playPausePending = PendingIntent.getBroadcast(
+                this,
+                202,
+                Intent(ACTION_PIP_PLAY_PAUSE).setPackage(packageName),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val playPauseIcon = if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+            val playPauseAction = RemoteAction(
+                Icon.createWithResource(this, playPauseIcon),
+                if (isPlaying) "Pause" else "Play",
+                if (isPlaying) "Pause" else "Play",
+                playPausePending
+            )
             val builder = PictureInPictureParams.Builder()
                 .setAspectRatio(Rational(16, 9))
+                .setActions(listOf(audioOnlyAction, playPauseAction))
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 builder.setAutoEnterEnabled(PlaybackStore.isAutoPipEnabled(this) && isPlaying)
                 builder.setSeamlessResizeEnabled(true)
@@ -2985,6 +3045,10 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             binding.controlsContainer.visibility = View.GONE
         } else {
             isEnteringPipTransition = false
+            if (isSwitchingToAudioOnly) {
+                wasInPipMode = false
+                return
+            }
             val closedViaXButton = !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) || isFinishing
             if (closedViaXButton) {
                 stopPlaybackImmediatelyAndClosePip(finishActivity = true)
@@ -3366,6 +3430,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
     private fun switchToBackgroundAudioOnlyMode() {
         val uri = currentVideoUri ?: return
+        isSwitchingToAudioOnly = true
         val pos = if (::mediaPlayer.isInitialized) mediaPlayer.time.coerceAtLeast(0L) else 0L
         saveCurrentPositionNow()
         if (::mediaPlayer.isInitialized && mediaPlayer.isPlaying) {
@@ -3384,6 +3449,10 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     }
 
     override fun onDestroy() {
+        if (pipReceiverRegistered) {
+            try { unregisterReceiver(pipActionReceiver) } catch (_: Exception) {}
+            pipReceiverRegistered = false
+        }
         saveCurrentPositionNow()
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
