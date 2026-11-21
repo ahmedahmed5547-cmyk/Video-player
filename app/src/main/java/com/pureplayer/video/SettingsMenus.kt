@@ -1970,7 +1970,7 @@ internal fun androidx.appcompat.app.AppCompatActivity.showVexoAudioEffectsStudio
                 )
             )
             VexoAudioEffectsManager.applySavedEffects(ctx)
-            popSettingsBackStack()
+            ((ctx as? MainActivity)?.popSettingsBackStack() == true)
         }
         .setNeutralButton(getString(R.string.audio_fx_save_preset)) { _, _ ->
             val input = EditText(ctx).apply { hint = "My Custom Preset" }
@@ -1983,12 +1983,12 @@ internal fun androidx.appcompat.app.AppCompatActivity.showVexoAudioEffectsStudio
                         VexoAudioEffectsManager.saveCustomPreset(ctx, name, preAmpDb, bands)
                         Toast.makeText(ctx, "Saved: $name", Toast.LENGTH_SHORT).show()
                     }
-                    popSettingsBackStack()
+                    ((ctx as? MainActivity)?.popSettingsBackStack() == true)
                 }
-                .setNegativeButton(getString(R.string.cancel)) { _, _ -> popSettingsBackStack() }
+                .setNegativeButton(getString(R.string.cancel)) { _, _ -> ((ctx as? MainActivity)?.popSettingsBackStack() == true) }
                 .show()
         }
-        .setNegativeButton(getString(R.string.cancel)) { _, _ -> popSettingsBackStack() }
-        .setOnCancelListener { popSettingsBackStack() }
+        .setNegativeButton(getString(R.string.cancel)) { _, _ -> ((ctx as? MainActivity)?.popSettingsBackStack() == true) }
+        .setOnCancelListener { ((ctx as? MainActivity)?.popSettingsBackStack() == true) }
         .show()
 }
