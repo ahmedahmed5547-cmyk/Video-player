@@ -1283,7 +1283,7 @@ class MainActivity : AppCompatActivity() {
                 restoreTabSearchState(0)
                 updateBottomTabsVisualState()
                 if (savedVideoFolder != null) {
-                    openFolder(savedVideoFolder!!)
+                    openFolderNow(savedVideoFolder!!)
                 } else {
                     applyFolderVisibilityAndRefreshUI()
                 }
@@ -2145,12 +2145,12 @@ class MainActivity : AppCompatActivity() {
                     }
                     else -> {
                         rows.add(Triple("➕  ${getString(R.string.audio_playlists_manage)}", getString(R.string.audio_sec_playlists_sub), {
-                            showAudioPlaylistsManagerDialog(state.tracks)
+                            showAudioLibraryHubMenu(state)
                         }))
                         val filtered = state.playlists.filter { q.isEmpty() || it.name.lowercase().contains(q) }
                         filtered.forEach { pl ->
-                            rows.add(Triple("📑  ${pl.name}", "${pl.trackCount} tracks", {
-                                showAudioPlaylistsManagerDialog(state.tracks)
+                            rows.add(Triple("📑  ${pl.name}", "${pl.tracks.size} tracks", {
+                                showAudioTracksListDialog(pl.name, pl.tracks)
                             }))
                         }
                     }

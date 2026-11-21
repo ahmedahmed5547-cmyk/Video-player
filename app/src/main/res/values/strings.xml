@@ -551,4 +551,5 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="audio_playlists_manage">Create / Manage Playlists</string>
     <string name="changelog_v90_14_title">v%1$s — Persistent Bottom Bar, Smooth IPTV Switch &amp; Segmented Theme Control</string>
     <string name="changelog_v90_14_desc">• Fixed persistent bottom navigation bar across all 4 tabs (Video, Audio, Private, IPTV) with in-place Audio tab, per-tab scroll/folder/search preservation, and tap-active-tab to scroll to top.\n• Eliminated Video-to-IPTV stutter by caching IPTV sources off the main thread, cancelling pending video thumbnail decoders on leave, and deferring IPTV auto-refresh until after the first frame.\n• Replaced Theme Picker top chips with a uniform Material 3 Segmented Control (System / Light / Dark) with crisp vector icons.\n• Removed duplicated version badge from the Changelog top header while keeping versions inside each release entry.</string>
+    <string name="audio_sec_playlists_sub">Create, rename, reorder &amp; manage audio playlists</string>
 </resources>
