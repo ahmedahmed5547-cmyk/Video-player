@@ -1,4 +1,5 @@
 ## v90.13 (2026-11-21)
+- **Icon-Only Material 3 Bottom Navigation**: Replaced truncated bottom-bar text labels with consistent 24dp filled/outlined Material vector icons (Video, Audio, Private, IPTV), themed pill indicator with smooth selection animation, >=48dp touch targets, TalkBack contentDescriptions, and long-press tooltips.
 - **Theme Picker Redesign**: Top row now has 3 clean brightness options (Follow System, Light Mode, Dark Mode). Moved Luxury Dark into the theme palette below, enforced Android 12+ guard on Material You, kept dark-only themes coherent in light mode, and added safe legacy preference migration.
 - **PiP Mini Player Headphone Action**: Added Headphone (Audio-Only) and Play/Pause `RemoteAction` buttons directly on the floating PiP window, guarded PiP-to-audio transition, and wired tapping the notification to reopen the video player at the exact same position.
 - **Folder & Video Thumbnails Fix**: Wired 2x2 folder cover collage thumbnails + video count badge in `MediaAdapter.kt`, and upgraded `VideoThumbnailLoader` with disk caching, representative frame timestamps (~10% duration), and SD-card path fallback.

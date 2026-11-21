@@ -61,6 +61,8 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import android.widget.ImageView
+import androidx.appcompat.widget.TooltipCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowInsetsControllerCompat
@@ -124,6 +126,8 @@ class MainActivity : AppCompatActivity() {
     internal var currentMainTab = 0
     internal var isInVaultTab = false
     internal var isInIptvTab = false
+    private var isAudioTabHighlighted = false
+    private var lastAnimatedBottomTab = -1
     internal var isVaultSessionUnlocked = false
     internal var currentIptvCategoryOffset = 0
     internal var isLoadingNextIptvPage = false
@@ -531,41 +535,93 @@ class MainActivity : AppCompatActivity() {
         val lockedCount = PlaybackStore.getLockedFolders(this).size
         val inactiveColor = PlaybackStore.getSecondaryTextColor(this)
 
-        fun createTabBg(active: Boolean) = GradientDrawable().apply {
+        fun createPillBg(active: Boolean): GradientDrawable = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = dp(14).toFloat()
+            cornerRadius = dp(17).toFloat()
             if (active) {
-                setColor(Color.argb(42, Color.red(accent), Color.green(accent), Color.blue(accent)))
-                setStroke(dp(1), Color.argb(145, Color.red(accent), Color.green(accent), Color.blue(accent)))
+                setColor(Color.argb(48, Color.red(accent), Color.green(accent), Color.blue(accent)))
+                setStroke(dp(1), Color.argb(120, Color.red(accent), Color.green(accent), Color.blue(accent)))
             } else {
-                setColor(bg)
-                setStroke(dp(1), Color.parseColor("#18FFFFFF"))
+                setColor(Color.TRANSPARENT)
+                setStroke(0, Color.TRANSPARENT)
             }
         }
 
-        binding.tvTabVideos.text = getString(R.string.tab_video_folders_compact)
-        binding.tvTabVault.text = if (lockedCount > 0 && currentMainTab == 1 && isVaultSessionUnlocked) {
-            "${getString(R.string.tab_vault_compact)} ($lockedCount)"
-        } else {
-            getString(R.string.tab_vault_compact)
+        val activeTabKey = if (isAudioTabHighlighted) 3 else currentMainTab
+        val isVideos = (activeTabKey == 0)
+        val isAudio = (activeTabKey == 3)
+        val isVault = (activeTabKey == 1)
+        val isIptv = (activeTabKey == 2)
+        val animateSelection = (lastAnimatedBottomTab != activeTabKey)
+        lastAnimatedBottomTab = activeTabKey
+
+        fun applyTabState(
+            tabRoot: View,
+            pill: View,
+            icon: ImageView,
+            active: Boolean,
+            filledRes: Int,
+            outlinedRes: Int,
+            label: String
+        ) {
+            tabRoot.isSelected = active
+            tabRoot.contentDescription = label
+            TooltipCompat.setTooltipText(tabRoot, label)
+            pill.background = createPillBg(active)
+            icon.setImageResource(if (active) filledRes else outlinedRes)
+            icon.imageTintList = ColorStateList.valueOf(if (active) accent else inactiveColor)
+            if (animateSelection && active) {
+                pill.scaleX = 0.62f
+                pill.alpha = 0.25f
+                pill.animate().scaleX(1f).alpha(1f).setDuration(190L).setInterpolator(DecelerateInterpolator()).start()
+                icon.animate().scaleX(1.08f).scaleY(1.08f).setDuration(190L).setInterpolator(DecelerateInterpolator()).start()
+            } else {
+                pill.scaleX = 1f
+                pill.alpha = 1f
+                val sc = if (active) 1.06f else 1f
+                icon.scaleX = sc
+                icon.scaleY = sc
+            }
         }
-        binding.tvTabIptv.text = getString(R.string.tab_iptv_compact)
 
-        val isVideos = (currentMainTab == 0)
-        val isVault = (currentMainTab == 1)
-        val isIptv = (currentMainTab == 2)
+        val vaultLabel = if (lockedCount > 0 && currentMainTab == 1 && isVaultSessionUnlocked) {
+            "${getString(R.string.tab_vault)} ($lockedCount)"
+        } else {
+            getString(R.string.tab_vault)
+        }
 
-        binding.tabVideos.background = createTabBg(isVideos)
-        binding.tvTabVideos.setTextColor(if (isVideos) primaryText else inactiveColor)
-        binding.ivTabVideos.imageTintList = ColorStateList.valueOf(if (isVideos) accent else inactiveColor)
+        applyTabState(
+            binding.tabVideos, binding.pillTabVideos, binding.ivTabVideos,
+            isVideos, R.drawable.ic_nav_video_filled, R.drawable.ic_nav_video_outlined,
+            getString(R.string.tab_video_folders_compact)
+        )
+        applyTabState(
+            binding.tabAudio, binding.pillTabAudio, binding.ivTabAudio,
+            isAudio, R.drawable.ic_nav_audio_filled, R.drawable.ic_nav_audio_outlined,
+            getString(R.string.tab_audio)
+        )
+        applyTabState(
+            binding.tabVault, binding.pillTabVault, binding.ivTabVault,
+            isVault, R.drawable.ic_nav_private_filled, R.drawable.ic_nav_private_outlined,
+            vaultLabel
+        )
+        applyTabState(
+            binding.tabIptv, binding.pillTabIptv, binding.ivTabIptv,
+            isIptv, R.drawable.ic_nav_iptv_filled, R.drawable.ic_nav_iptv_outlined,
+            getString(R.string.tab_iptv_compact)
+        )
 
-        binding.tabVault.background = createTabBg(isVault)
-        binding.tvTabVault.setTextColor(if (isVault) primaryText else inactiveColor)
-        binding.ivTabVault.imageTintList = ColorStateList.valueOf(if (isVault) accent else inactiveColor)
-
-        binding.tabIptv.background = createTabBg(isIptv)
-        binding.tvTabIptv.setTextColor(if (isIptv) primaryText else inactiveColor)
-        binding.ivTabIptv.imageTintList = ColorStateList.valueOf(if (isIptv) accent else inactiveColor)
+        if (lockedCount > 0 && currentMainTab == 1 && isVaultSessionUnlocked) {
+            binding.tvVaultBadge.text = lockedCount.toString()
+            binding.tvVaultBadge.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(8).toFloat()
+                setColor(accent)
+            }
+            binding.tvVaultBadge.visibility = View.VISIBLE
+        } else {
+            binding.tvVaultBadge.visibility = View.GONE
+        }
     }
 
     internal fun calculateAdaptiveGridSpanCount(): Int {
@@ -1121,6 +1177,7 @@ class MainActivity : AppCompatActivity() {
             binding.btnTopMenu,
             binding.btnAddIptvSourceBar,
             binding.tabVideos,
+            binding.tabAudio,
             binding.tabVault,
             binding.tabIptv,
             binding.fabResumeLast
@@ -1196,6 +1253,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.tabVideos.setOnClickListener {
+            isAudioTabHighlighted = false
             if (currentMainTab != 0) {
                 if (currentMainTab == 2) {
                     iptvSessionSyncGuard.onLeaveMainIptvSection()
@@ -1215,6 +1273,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.tabVault.setOnClickListener {
+            isAudioTabHighlighted = false
             if (currentMainTab == 1 && isVaultSessionUnlocked) {
                 if (isShowingFolderVideos) {
                     showFoldersList()
@@ -1276,6 +1335,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.tabIptv.setOnClickListener {
+            isAudioTabHighlighted = false
             if (currentMainTab != 2) {
                 currentMainTab = 2
                 isInVaultTab = false
@@ -1305,6 +1365,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.tabAudio.setOnClickListener {
+            isAudioTabHighlighted = true
+            updateBottomTabsVisualState()
             openVlcStyleAudioLibraryDialog()
         }
 

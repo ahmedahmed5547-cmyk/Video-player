@@ -4,6 +4,7 @@ import android.util.Log
 
 import android.app.PendingIntent
 import android.app.PictureInPictureParams
+import androidx.core.content.ContextCompat
 import android.app.RemoteAction
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
@@ -129,6 +130,11 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     private var hasAppliedInitialEqualizer = false
     private var currentDecoderIndex = 0
     private var isEnteringPipTransition = false
+    companion object {
+        const val ACTION_PIP_AUDIO_ONLY = "com.pureplayer.video.ACTION_PIP_AUDIO_ONLY"
+        const val ACTION_PIP_PLAY_PAUSE = "com.pureplayer.video.ACTION_PIP_PLAY_PAUSE"
+    }
+
     private var wasInPipMode = false
     private var isSwitchingToAudioOnly = false
     private var pipReceiverRegistered = false

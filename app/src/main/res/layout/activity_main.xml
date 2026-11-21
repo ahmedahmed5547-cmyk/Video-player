@@ -516,156 +516,148 @@
             android:tint="#94A3B8" />
     </LinearLayout>
 
-    <!-- Bottom Navigation Bar: Tab 1 (Video Folders), Tab 2 (Private Vault), Tab 3 (IPTV) -->
+    <!-- Bottom Navigation Bar: Material 3 Icon-Only (Video, Audio, Private, IPTV) -->
     <LinearLayout
         android:id="@+id/bottomNavBar"
         android:layout_width="0dp"
         android:layout_height="@dimen/bottom_nav_height"
+        android:minHeight="60dp"
         android:background="#131C2E"
         android:elevation="12dp"
         android:gravity="center"
         android:orientation="horizontal"
-        android:paddingStart="10dp"
+        android:paddingStart="12dp"
         android:paddingTop="6dp"
-        android:paddingEnd="10dp"
+        android:paddingEnd="12dp"
         android:paddingBottom="6dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
-        <LinearLayout
+        <FrameLayout
             android:id="@+id/tabVideos"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_marginEnd="4dp"
+            android:minWidth="48dp"
+            android:minHeight="48dp"
             android:layout_weight="1"
-            android:contentDescription="@string/tab_video_folders"
-            android:gravity="center"
-            android:orientation="horizontal"
-            android:paddingStart="6dp"
-            android:paddingEnd="6dp">
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/tab_video_folders">
+
+            <View
+                android:id="@+id/pillTabVideos"
+                android:layout_width="64dp"
+                android:layout_height="34dp"
+                android:layout_gravity="center" />
 
             <ImageView
                 android:id="@+id/ivTabVideos"
-                android:layout_width="@dimen/bottom_nav_icon_size"
-                android:layout_height="@dimen/bottom_nav_icon_size"
-                android:layout_marginEnd="5dp"
-                android:src="@drawable/ic_folder_cinema"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_nav_video_filled"
                 android:tint="#38BDF8" />
+        </FrameLayout>
 
-            <TextView
-                android:id="@+id/tvTabVideos"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:gravity="center"
-                android:maxLines="1"
-                android:text="@string/tab_video_folders_compact"
-                android:textColor="#FFFFFF"
-                android:textSize="@dimen/bottom_nav_text_size"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <LinearLayout
+        <FrameLayout
             android:id="@+id/tabAudio"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="4dp"
+            android:minWidth="48dp"
+            android:minHeight="48dp"
             android:layout_weight="1"
-            android:contentDescription="@string/tab_audio"
-            android:gravity="center"
-            android:orientation="horizontal"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp">
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/tab_audio">
+
+            <View
+                android:id="@+id/pillTabAudio"
+                android:layout_width="64dp"
+                android:layout_height="34dp"
+                android:layout_gravity="center" />
 
             <ImageView
                 android:id="@+id/ivTabAudio"
-                android:layout_width="@dimen/bottom_nav_icon_size"
-                android:layout_height="@dimen/bottom_nav_icon_size"
-                android:layout_marginEnd="4dp"
-                android:src="@drawable/ic_music_note"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_nav_audio_outlined"
                 android:tint="#94A3B8" />
+        </FrameLayout>
 
-            <TextView
-                android:id="@+id/tvTabAudio"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:gravity="center"
-                android:maxLines="1"
-                android:text="@string/tab_audio"
-                android:textColor="#94A3B8"
-                android:textSize="@dimen/bottom_nav_text_size"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <LinearLayout
+        <FrameLayout
             android:id="@+id/tabVault"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="4dp"
+            android:minWidth="48dp"
+            android:minHeight="48dp"
             android:layout_weight="1"
-            android:contentDescription="@string/tab_vault"
-            android:gravity="center"
-            android:orientation="horizontal"
-            android:paddingStart="6dp"
-            android:paddingEnd="6dp">
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/tab_vault">
+
+            <View
+                android:id="@+id/pillTabVault"
+                android:layout_width="64dp"
+                android:layout_height="34dp"
+                android:layout_gravity="center" />
 
             <ImageView
                 android:id="@+id/ivTabVault"
-                android:layout_width="@dimen/bottom_nav_icon_size"
-                android:layout_height="@dimen/bottom_nav_icon_size"
-                android:layout_marginEnd="5dp"
-                android:src="@drawable/ic_lock_modern"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_nav_private_outlined"
                 android:tint="#94A3B8" />
 
             <TextView
-                android:id="@+id/tvTabVault"
+                android:id="@+id/tvVaultBadge"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
+                android:layout_height="16dp"
+                android:minWidth="16dp"
+                android:layout_gravity="center"
+                android:layout_marginStart="18dp"
+                android:layout_marginBottom="16dp"
                 android:gravity="center"
-                android:maxLines="1"
-                android:text="@string/tab_vault_compact"
-                android:textColor="#94A3B8"
-                android:textSize="@dimen/bottom_nav_text_size"
-                android:textStyle="bold" />
-        </LinearLayout>
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:textColor="#090D16"
+                android:textSize="9.5sp"
+                android:textStyle="bold"
+                android:importantForAccessibility="no"
+                android:visibility="gone" />
+        </FrameLayout>
 
-        <LinearLayout
+        <FrameLayout
             android:id="@+id/tabIptv"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_marginStart="4dp"
+            android:minWidth="48dp"
+            android:minHeight="48dp"
             android:layout_weight="1"
-            android:contentDescription="@string/tab_iptv_compact"
-            android:gravity="center"
-            android:orientation="horizontal"
-            android:paddingStart="6dp"
-            android:paddingEnd="6dp">
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/tab_iptv_compact">
+
+            <View
+                android:id="@+id/pillTabIptv"
+                android:layout_width="64dp"
+                android:layout_height="34dp"
+                android:layout_gravity="center" />
 
             <ImageView
                 android:id="@+id/ivTabIptv"
-                android:layout_width="@dimen/bottom_nav_icon_size"
-                android:layout_height="@dimen/bottom_nav_icon_size"
-                android:layout_marginEnd="5dp"
-                android:src="@drawable/ic_iptv_tv"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_nav_iptv_outlined"
                 android:tint="#94A3B8" />
-
-            <TextView
-                android:id="@+id/tvTabIptv"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:gravity="center"
-                android:maxLines="1"
-                android:text="@string/tab_iptv_compact"
-                android:textColor="#94A3B8"
-                android:textSize="@dimen/bottom_nav_text_size"
-                android:textStyle="bold" />
-        </LinearLayout>
+        </FrameLayout>
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
