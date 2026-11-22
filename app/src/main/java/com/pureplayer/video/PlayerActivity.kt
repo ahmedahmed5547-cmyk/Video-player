@@ -1373,10 +1373,10 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                         if (::mediaPlayer.isInitialized) {
                             if (mediaPlayer.isPlaying) {
                                 mediaPlayer.pause()
-                                updatePlayPauseIcon(false)
+                                binding.btnPlayPause.setImageResource(R.drawable.ic_play_modern)
                             } else {
                                 mediaPlayer.play()
-                                updatePlayPauseIcon(true)
+                                binding.btnPlayPause.setImageResource(R.drawable.ic_pause_modern)
                             }
                         }
                         showControls()

@@ -1,4 +1,4 @@
-## v90.18 (2026-11-22)
+## v90.19 (2026-11-22)
 - **IPTV Source Instant Sync Fix**: Fixed a stale in-memory cache bug where newly added IPTV playlists/movie libraries saved to Room but did not appear until restarting the app. Moved the sources cache directly into `IptvRepository` so every add/edit/delete updates immediately with zero-lag tab switching.
 
 ## v90.17 (2026-11-22)
