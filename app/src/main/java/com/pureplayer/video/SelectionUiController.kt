@@ -354,6 +354,52 @@ internal fun MainActivity.removeSelectedFromVaultBatch(videos: List<VideoItem>, 
  * Task 2: Batch delete triggering AT MOST ONE system permission dialog on Android 11+ (MediaStore.createDeleteRequest),
  * and zero system dialogs for directly deletable / app-owned Vault files.
  */
+internal fun MainActivity.ensureAllFilesAccessThen(onProceed: () -> Unit) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+        onProceed()
+        return
+    }
+    if (Environment.isExternalStorageManager()) {
+        onProceed()
+        return
+    }
+    if (allFilesAccessRefusedThisSession) {
+        onProceed()
+        return
+    }
+    AlertDialog.Builder(this)
+        .setTitle(getString(R.string.all_files_access_title))
+        .setMessage(getString(R.string.all_files_access_message))
+        .setPositiveButton(getString(R.string.all_files_access_grant_btn)) { _, _ ->
+            pendingAllFilesAction = onProceed
+            try {
+                val intent = android.content.Intent(
+                    android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+                allFilesAccessLauncher.launch(intent)
+            } catch (_: Exception) {
+                try {
+                    val fallback = android.content.Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                    allFilesAccessLauncher.launch(fallback)
+                } catch (_: Exception) {
+                    pendingAllFilesAction = null
+                    allFilesAccessRefusedThisSession = true
+                    onProceed()
+                }
+            }
+        }
+        .setNegativeButton(getString(R.string.all_files_access_later_btn)) { _, _ ->
+            allFilesAccessRefusedThisSession = true
+            onProceed()
+        }
+        .show()
+}
+
+/**
+ * FIX 1: Zero repeated delete prompts when All Files Access (MANAGE_EXTERNAL_STORAGE) is granted.
+ * Falls back to ONE batched MediaStore.createDeleteRequest if the user refuses All Files Access.
+ */
 internal fun MainActivity.confirmAndBatchDeleteSelected(
     videos: List<VideoItem>,
     folders: List<VideoFolder>,
@@ -373,7 +419,9 @@ internal fun MainActivity.confirmAndBatchDeleteSelected(
         .setTitle(getString(R.string.delete_confirm_title))
         .setMessage(msg)
         .setPositiveButton(getString(R.string.delete_action)) { _, _ ->
-            executeBatchDeleteUris(allUris, videos, folders)
+            ensureAllFilesAccessThen {
+                executeBatchDeleteUris(allUris, videos, folders)
+            }
         }
         .setNegativeButton(getString(R.string.cancel), null)
         .show()
@@ -392,27 +440,45 @@ private fun MainActivity.executeBatchDeleteUris(
         val allVideoObjs = linkedMapOf<String, VideoItem>()
         videos.forEach { allVideoObjs[it.uri.toString()] = it }
         folders.forEach { f -> f.videos.forEach { allVideoObjs[it.uri.toString()] = it } }
+        val hasAllFilesAccess = Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()
 
         withContext(Dispatchers.IO) {
             for (uri in allUris) {
                 var removed = false
-                try {
-                    val rows = contentResolver.delete(uri, null, null)
-                    removed = rows > 0
-                } catch (_: SecurityException) {
-                    removed = false
-                } catch (_: Exception) {
-                    removed = false
-                }
-                if (!removed) {
-                    val path = allVideoObjs[uri.toString()]?.path.orEmpty()
-                    if (path.isNotBlank()) {
-                        val f = File(path)
-                        if (f.exists() && f.canWrite() && f.delete()) {
-                            removed = true
-                        }
+                val path = allVideoObjs[uri.toString()]?.path.orEmpty()
+
+                // 1) With All Files Access (API 30+) or Android 10-, delete directly via File API first (ZERO system dialogs!)
+                if (hasAllFilesAccess && path.isNotBlank()) {
+                    val f = File(path)
+                    if (f.exists() && f.delete()) {
+                        removed = true
+                        // Clean up stale MediaStore row silently
+                        runCatching { contentResolver.delete(uri, null, null) }
+                        MediaScannerConnection.scanFile(applicationContext, arrayOf(path), null, null)
                     }
                 }
+
+                // 2) Try direct ContentResolver delete
+                if (!removed) {
+                    try {
+                        val rows = contentResolver.delete(uri, null, null)
+                        removed = rows > 0
+                    } catch (_: SecurityException) {
+                        removed = false
+                    } catch (_: Exception) {
+                        removed = false
+                    }
+                }
+
+                // 3) Fallback direct File.delete if writable
+                if (!removed && path.isNotBlank()) {
+                    val f = File(path)
+                    if (f.exists() && f.canWrite() && f.delete()) {
+                        removed = true
+                        MediaScannerConnection.scanFile(applicationContext, arrayOf(path), null, null)
+                    }
+                }
+
                 if (removed) {
                     deletedDirectly++
                 } else {
@@ -425,13 +491,12 @@ private fun MainActivity.executeBatchDeleteUris(
         if (remainingForSystemPrompt.isEmpty()) {
             selectionViewModel.exitSelection()
             Toast.makeText(this@executeBatchDeleteUris, getString(R.string.batch_delete_done_toast, deletedDirectly), Toast.LENGTH_SHORT).show()
-            videoLibraryViewModel.refreshLibrary(force = true, showLoadingIfEmpty = false)
+            videoLibraryViewModel.refreshLibrary(force = true, showLoadingIfEmpty = false, isUserPullRefresh = false)
             return@launch
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
-                // Single unified MediaStore batch delete prompt for ALL remaining items at once!
                 val pendingIntent = MediaStore.createDeleteRequest(contentResolver, remainingForSystemPrompt)
                 val request = IntentSenderRequest.Builder(pendingIntent.intentSender).build()
                 batchDeleteRequestLauncher.launch(request)
@@ -441,11 +506,22 @@ private fun MainActivity.executeBatchDeleteUris(
 
         selectionViewModel.exitSelection()
         Toast.makeText(this@executeBatchDeleteUris, getString(R.string.video_delete_failed_toast), Toast.LENGTH_SHORT).show()
-        videoLibraryViewModel.refreshLibrary(force = true, showLoadingIfEmpty = false)
+        videoLibraryViewModel.refreshLibrary(force = true, showLoadingIfEmpty = false, isUserPullRefresh = false)
     }
 }
 
 internal fun MainActivity.startBatchCopyOrMoveFlow(
+    videos: List<VideoItem>,
+    folders: List<VideoFolder>,
+    isMove: Boolean,
+    isVault: Boolean
+) {
+    ensureAllFilesAccessThen {
+        showDestinationFolderPicker(videos, folders, isMove, isVault)
+    }
+}
+
+private fun MainActivity.showDestinationFolderPicker(
     videos: List<VideoItem>,
     folders: List<VideoFolder>,
     isMove: Boolean,
@@ -480,52 +556,206 @@ internal fun MainActivity.startBatchCopyOrMoveFlow(
         return
     }
 
-    val labels = dirEntries.map { "${it.key}\n${it.value.absolutePath}" }.toTypedArray()
     val titleRes = if (isMove) R.string.selection_pick_dest_move else R.string.selection_pick_dest_copy
-    AlertDialog.Builder(this)
-        .setTitle(getString(titleRes))
-        .setItems(labels) { _, which ->
-            val destDir = dirEntries[which].value
-            confirmPasteAndDuplicatePolicy(videos, folders, destDir, isMove, isVault)
+    val items = mutableListOf<PremiumMenuItem>()
+
+    // Quick "+ Create new folder" card at top
+    val baseParent = if (isVault) {
+        File(filesDir, "vexo_vault_private").apply {
+            if (!exists()) mkdirs()
+            VaultFileOperations.ensureNoMediaMarker(this)
         }
-        .setNegativeButton(getString(R.string.cancel), null)
-        .show()
+    } else {
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES) ?: filesDir
+    }
+    items.add(
+        PremiumMenuItem(
+            iconEmoji = "➕",
+            title = getString(R.string.selection_new_folder),
+            subtitle = baseParent.absolutePath.replace("/storage/emulated/0", "Internal Storage"),
+            isAccentHighlighted = true,
+            onClick = {
+                val input = android.widget.EditText(this).apply {
+                    hint = getString(R.string.selection_new_folder_hint)
+                    setSingleLine(true)
+                }
+                AlertDialog.Builder(this)
+                    .setTitle(getString(R.string.selection_new_folder))
+                    .setView(input)
+                    .setPositiveButton(getString(R.string.selection_paste_here_btn)) { _, _ ->
+                        val name = input.text?.toString().orEmpty().trim().replace("/", "_")
+                        if (name.isNotEmpty()) {
+                            val newDir = File(baseParent, name).apply { mkdirs() }
+                            if (isVault) VaultFileOperations.ensureNoMediaMarker(newDir)
+                            prepareAndResolveConflictsBeforeTransfer(videos, folders, newDir, isMove, isVault)
+                        }
+                    }
+                    .setNegativeButton(getString(R.string.cancel), null)
+                    .show()
+            }
+        )
+    )
+
+    dirEntries.forEach { (folderLabel, dirFile) ->
+        val friendlyPath = dirFile.absolutePath.replace("/storage/emulated/0", "Internal Storage")
+        val emoji = when {
+            isVault -> "🛡️"
+            folderLabel.equals("Movies", ignoreCase = true) -> "🎬"
+            folderLabel.equals("Download", ignoreCase = true) -> "⬇️"
+            else -> "📁"
+        }
+        items.add(
+            PremiumMenuItem(
+                iconEmoji = emoji,
+                title = folderLabel,
+                subtitle = friendlyPath,
+                statusChip = getString(R.string.selection_paste_here_btn),
+                onClick = {
+                    // FIX 2: Check for real conflicts FIRST — zero dialog if no conflicts exist!
+                    prepareAndResolveConflictsBeforeTransfer(videos, folders, dirFile, isMove, isVault)
+                }
+            )
+        )
+    }
+
+    showPremiumMenuDialog(
+        headerIcon = if (isMove) "✂️" else "📋",
+        title = getString(titleRes),
+        subtitle = getString(R.string.selection_paste_sub),
+        items = items,
+        showHeaderVersionBadge = false
+    )
 }
 
-private fun MainActivity.confirmPasteAndDuplicatePolicy(
+private data class PlannedTransferItem(
+    val video: VideoItem,
+    val fileName: String,
+    val isFolderConflict: Boolean = false
+)
+
+/**
+ * FIX 2: Only shows a conflict dialog when a file/folder with the same name ACTUALLY exists
+ * in the destination. Supports per-item resolution + "Apply to all remaining conflicts" checkbox.
+ */
+private fun MainActivity.prepareAndResolveConflictsBeforeTransfer(
     videos: List<VideoItem>,
     folders: List<VideoFolder>,
     destDir: File,
     isMove: Boolean,
     isVault: Boolean
 ) {
-    val policies = arrayOf(
-        getString(R.string.dup_policy_keep_both),
-        getString(R.string.dup_policy_skip),
-        getString(R.string.dup_policy_replace)
-    )
-    var chosenPolicy = DuplicateResolution.KEEP_BOTH
-    AlertDialog.Builder(this)
-        .setTitle(getString(R.string.selection_paste_here_title, destDir.name))
-        .setSingleChoiceItems(policies, 0) { _, which ->
-            chosenPolicy = when (which) {
-                1 -> DuplicateResolution.SKIP
-                2 -> DuplicateResolution.REPLACE
-                else -> DuplicateResolution.KEEP_BOTH
+    val allPlanned = mutableListOf<PlannedTransferItem>()
+    val conflicts = mutableListOf<PlannedTransferItem>()
+
+    // Expand videos + folders (guarding against moving a folder into itself!)
+    val expandedVideos = mutableListOf<VideoItem>()
+    expandedVideos.addAll(videos)
+    for (f in folders) {
+        val sampleParent = f.videos.firstOrNull { it.path.isNotBlank() }?.path?.let { File(it).parentFile }
+        if (sampleParent != null && isMove && VaultFileOperations.isMovingFolderIntoItself(sampleParent, destDir)) {
+            continue
+        }
+        expandedVideos.addAll(f.videos)
+    }
+
+    val autoPolicies = mutableMapOf<String, DuplicateResolution>()
+    for (v in expandedVideos) {
+        val srcFile = if (v.path.isNotBlank()) File(v.path) else null
+        val fileName = srcFile?.name?.takeIf { it.isNotBlank() } ?: "${v.title}.mp4"
+        val isSameDir = srcFile != null && VaultFileOperations.isSameDirectory(srcFile, destDir)
+
+        if (isSameDir) {
+            if (isMove) {
+                // Moving to same folder -> do nothing silently (no dialog)
+                continue
+            } else {
+                // Copying to same folder -> auto-create "name (1).ext" (no dialog)
+                autoPolicies[v.uri.toString()] = DuplicateResolution.KEEP_BOTH
+                allPlanned.add(PlannedTransferItem(v, fileName))
+                continue
             }
         }
-        .setPositiveButton(getString(R.string.selection_paste_here_btn)) { _, _ ->
-            executeAtomicCopyOrMoveBatch(videos, folders, destDir, chosenPolicy, isMove, isVault)
+
+        val item = PlannedTransferItem(v, fileName)
+        allPlanned.add(item)
+        if (File(destDir, fileName).exists()) {
+            conflicts.add(item)
         }
-        .setNegativeButton(getString(R.string.cancel), null)
+    }
+
+    if (allPlanned.isEmpty()) {
+        selectionViewModel.exitSelection()
+        return
+    }
+
+    if (conflicts.isEmpty()) {
+        // ZERO conflicts -> run silently with progress indicator only, NO dialog!
+        executeAtomicCopyOrMoveBatch(allPlanned, autoPolicies, destDir, isMove, isVault)
+    } else {
+        promptNextConflict(conflicts, 0, allPlanned, autoPolicies, destDir, isMove, isVault)
+    }
+}
+
+private fun MainActivity.promptNextConflict(
+    conflicts: List<PlannedTransferItem>,
+    index: Int,
+    allPlanned: List<PlannedTransferItem>,
+    policies: MutableMap<String, DuplicateResolution>,
+    destDir: File,
+    isMove: Boolean,
+    isVault: Boolean
+) {
+    if (index >= conflicts.size) {
+        executeAtomicCopyOrMoveBatch(allPlanned, policies, destDir, isMove, isVault)
+        return
+    }
+    val current = conflicts[index]
+    val remainingCount = conflicts.size - index
+    var applyToAll = false
+
+    val box = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(20), dp(14), dp(20), dp(8))
+        addView(TextView(this@promptNextConflict).apply {
+            text = getString(R.string.conflict_dialog_message, current.fileName, destDir.name)
+            textSize = 14.5f
+        })
+        if (remainingCount > 1) {
+            addView(android.widget.CheckBox(this@promptNextConflict).apply {
+                text = getString(R.string.conflict_apply_all, remainingCount - 1)
+                setPadding(0, dp(10), 0, 0)
+                setOnCheckedChangeListener { _, checked -> applyToAll = checked }
+            })
+        }
+    }
+
+    fun choose(res: DuplicateResolution) {
+        if (applyToAll) {
+            for (i in index until conflicts.size) {
+                policies[conflicts[i].video.uri.toString()] = res
+            }
+            executeAtomicCopyOrMoveBatch(allPlanned, policies, destDir, isMove, isVault)
+        } else {
+            policies[current.video.uri.toString()] = res
+            promptNextConflict(conflicts, index + 1, allPlanned, policies, destDir, isMove, isVault)
+        }
+    }
+
+    val replaceLabel = if (current.isFolderConflict) getString(R.string.dup_policy_merge) else getString(R.string.dup_policy_replace)
+    AlertDialog.Builder(this)
+        .setTitle(getString(R.string.conflict_dialog_title))
+        .setView(box)
+        .setPositiveButton(replaceLabel) { _, _ -> choose(DuplicateResolution.REPLACE) }
+        .setNeutralButton(getString(R.string.dup_policy_keep_both)) { _, _ -> choose(DuplicateResolution.KEEP_BOTH) }
+        .setNegativeButton(getString(R.string.dup_policy_skip)) { _, _ -> choose(DuplicateResolution.SKIP) }
+        .setCancelable(true)
         .show()
 }
 
 private fun MainActivity.executeAtomicCopyOrMoveBatch(
-    videos: List<VideoItem>,
-    folders: List<VideoFolder>,
+    plannedItems: List<PlannedTransferItem>,
+    policies: Map<String, DuplicateResolution>,
     destDir: File,
-    policy: DuplicateResolution,
     isMove: Boolean,
     isVault: Boolean
 ) {
@@ -538,31 +768,27 @@ private fun MainActivity.executeAtomicCopyOrMoveBatch(
             if (!destDir.exists()) destDir.mkdirs()
             if (isVault) VaultFileOperations.ensureNoMediaMarker(destDir)
 
-            val allItems = mutableListOf<VideoItem>()
-            allItems.addAll(videos)
-            for (f in folders) {
-                val sampleParent = f.videos.firstOrNull { it.path.isNotBlank() }?.path?.let { File(it).parentFile }
-                if (sampleParent != null && isMove && VaultFileOperations.isMovingFolderIntoItself(sampleParent, destDir)) {
-                    continue
-                }
-                allItems.addAll(f.videos)
-            }
-
             var ok = 0
             var skipped = 0
             var failed = 0
-            val newlyWrittenPaths = mutableListOf<String>()
+            val scanPaths = mutableListOf<String>()
 
-            for (v in allItems) {
+            for (item in plannedItems) {
+                val v = item.video
+                val policy = policies[v.uri.toString()] ?: DuplicateResolution.KEEP_BOTH
                 val srcFile = if (v.path.isNotBlank()) File(v.path) else null
-                val fileName = srcFile?.name?.takeIf { it.isNotBlank() } ?: "${v.title}.mp4"
-                val targetFile = VaultFileOperations.resolveDestinationFile(destDir, fileName, policy)
+                val targetFile = VaultFileOperations.resolveDestinationFile(destDir, item.fileName, policy)
                 if (targetFile == null) {
                     skipped++
                     continue
                 }
                 val success = if (srcFile != null && srcFile.exists() && srcFile.canRead()) {
-                    VaultFileOperations.atomicCopyOrMoveFile(srcFile, targetFile, deleteSourceAfterVerify = isMove)
+                    val moved = VaultFileOperations.atomicCopyOrMoveFile(srcFile, targetFile, deleteSourceAfterVerify = isMove)
+                    if (moved && isMove) {
+                        runCatching { contentResolver.delete(v.uri, null, null) }
+                        scanPaths.add(srcFile.absolutePath)
+                    }
+                    moved
                 } else {
                     val copied = VaultFileOperations.copyFromUriToFile(this@executeAtomicCopyOrMoveBatch, v.uri, targetFile)
                     if (copied && isMove) {
@@ -572,15 +798,15 @@ private fun MainActivity.executeAtomicCopyOrMoveBatch(
                 }
                 if (success) {
                     ok++
-                    if (!isVault) newlyWrittenPaths.add(targetFile.absolutePath)
+                    if (!isVault) scanPaths.add(targetFile.absolutePath)
                 } else {
                     failed++
                 }
             }
-            if (!isVault && newlyWrittenPaths.isNotEmpty()) {
+            if (scanPaths.isNotEmpty()) {
                 MediaScannerConnection.scanFile(
                     applicationContext,
-                    newlyWrittenPaths.toTypedArray(),
+                    scanPaths.toTypedArray(),
                     null,
                     null
                 )
@@ -594,7 +820,7 @@ private fun MainActivity.executeAtomicCopyOrMoveBatch(
             getString(R.string.batch_file_op_result_toast, result.succeeded, result.skipped, result.failed),
             Toast.LENGTH_LONG
         ).show()
-        videoLibraryViewModel.refreshLibrary(force = true, showLoadingIfEmpty = false)
+        videoLibraryViewModel.refreshLibrary(force = true, showLoadingIfEmpty = false, isUserPullRefresh = false)
     }
 }
 

@@ -1,3 +1,8 @@
+## v90.16 (2026-11-22)
+- **One-Time Delete Permission (All Files Access)**: Added `MANAGE_EXTERNAL_STORAGE` flow with a single explanation dialog on Android 11+; once granted, Delete, Copy, Move, and Vault operations run silently via direct File APIs + MediaStore sync with zero repeated popups (falling back to one batched `createDeleteRequest` if declined).
+- **Smart Conflict-Only Copy/Move Dialog**: Copy/Move now runs silently when no filename conflict exists; the conflict dialog appears only for actual collisions (Replace / Keep both `name (1).ext` / Skip + "Apply to all remaining conflicts" checkbox), with silent same-folder Move skip and auto-rename same-folder Copy.
+- **Instant Launch Without Startup Spinner**: Persisted `first_scan_done` flag so normal launches hydrate instantly from cache with zero loading/refresh circle and silent background refresh (spinner appears only on fresh-install first scan or manual pull-to-refresh).
+
 ## v90.15 (2026-11-22)
 - **Unified Selection Mode (Main Library & Vault)**: Removed old long-press popup menus; long-pressing any video or folder now enters multi-selection mode with contextual top bar, Select All, mixed multi-select, single-video Details (including codec & modified date), atomic Copy/Move with Skip/Replace/Keep Both duplicate handling, rotation persistence, Back-exits-selection-first, and Vault `FLAG_SECURE` + `.nomedia` protection.
 - **Single-Prompt Batch Delete**: Fixed repeated Android 11+ delete permission prompts by attempting direct delete for app-owned files and sending a single unified `MediaStore.createDeleteRequest` for all remaining URIs.

@@ -449,7 +449,7 @@ class PurePlayerUnitTests {
         assertEquals(existing, VaultFileOperations.resolveDestinationFile(destDir, "clip.mp4", DuplicateResolution.REPLACE))
         val keepBoth = VaultFileOperations.resolveDestinationFile(destDir, "clip.mp4", DuplicateResolution.KEEP_BOTH)
         assertNotNull(keepBoth)
-        assertEquals("clip_(1).mp4", keepBoth!!.name)
+        assertEquals("clip (1).mp4", keepBoth!!.name)
 
         // Move folder into itself guard
         assertTrue(VaultFileOperations.isMovingFolderIntoItself(tempDir, destDir))
@@ -480,5 +480,15 @@ class PurePlayerUnitTests {
         assertNull(BatteryOptimizationManager.evaluateLowBatteryAlert(15, false, true, false))
         assertEquals(5, BatteryOptimizationManager.evaluateLowBatteryAlert(5, false, true, false))
         assertNull(BatteryOptimizationManager.evaluateLowBatteryAlert(5, true, false, false))
+    }
+
+    @Test
+    fun vaultFileOperations_conflictDetectionAndSameDir() {
+        val tempDir = java.nio.file.Files.createTempDirectory("vexo_conflict_").toFile()
+        val existing = java.io.File(tempDir, "movie.mp4").apply { writeText("DATA") }
+        assertTrue(VaultFileOperations.isSameDirectory(existing, tempDir))
+        assertEquals(listOf("movie.mp4"), VaultFileOperations.hasAnyConflict(tempDir, listOf("movie.mp4", "fresh.mp4")))
+        assertTrue(VaultFileOperations.hasAnyConflict(tempDir, listOf("fresh.mp4")).isEmpty())
+        tempDir.deleteRecursively()
     }
 }

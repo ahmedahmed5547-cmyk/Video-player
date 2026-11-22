@@ -125,6 +125,19 @@ class MainActivity : AppCompatActivity() {
         androidx.lifecycle.ViewModelProvider(this)[SelectionViewModel::class.java]
     }
     internal lateinit var iptvAdapter: MediaAdapter
+    internal var pendingAllFilesAction: (() -> Unit)? = null
+    internal var allFilesAccessRefusedThisSession: Boolean = false
+    internal val allFilesAccessLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        val granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.R || android.os.Environment.isExternalStorageManager()
+        if (!granted) {
+            allFilesAccessRefusedThisSession = true
+        }
+        val action = pendingAllFilesAction
+        pendingAllFilesAction = null
+        action?.invoke()
+    }
     internal val batchDeleteRequestLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
@@ -1527,7 +1540,7 @@ class MainActivity : AppCompatActivity() {
             if (currentMainTab == 2) {
                 binding.swipeRefresh.isRefreshing = false
             } else {
-                checkPermissionAndLoad()
+                checkPermissionAndLoad(isUserPullRefresh = true)
             }
         }
 
@@ -1876,8 +1889,8 @@ class MainActivity : AppCompatActivity() {
                     if (currentMainTab == 2) return@collect
                     when (state) {
                         is VideoLibraryUiState.Loading -> {
-                            binding.swipeRefresh.isRefreshing = true
-                            binding.libraryLoadingBar.visibility = View.VISIBLE
+                            binding.swipeRefresh.isRefreshing = false
+                            binding.libraryLoadingBar.visibility = if (PlaybackStore.isFirstLibraryScanDone(this@MainActivity)) View.GONE else View.VISIBLE
                             binding.btnGrantPermission.visibility = View.GONE
                             binding.btnRefreshEmpty.visibility = View.GONE
                             binding.recyclerView.visibility = View.GONE
@@ -1924,9 +1937,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    internal fun checkPermissionAndLoad() {
+    internal fun checkPermissionAndLoad(isUserPullRefresh: Boolean = false) {
         if (hasVideoAccessPermission()) {
-            videoLibraryViewModel.refreshLibrary(force = true, showLoadingIfEmpty = true)
+            val firstDone = PlaybackStore.isFirstLibraryScanDone(this)
+            videoLibraryViewModel.refreshLibrary(
+                force = isUserPullRefresh || !firstDone,
+                showLoadingIfEmpty = !firstDone,
+                isUserPullRefresh = isUserPullRefresh
+            )
         } else {
             binding.swipeRefresh.isRefreshing = false
             videoLibraryViewModel.onPermissionDenied()

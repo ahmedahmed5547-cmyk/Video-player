@@ -607,4 +607,18 @@
     <string name="disabled_label">معطّل</string>
     <string name="changelog_v90_15_title">الإصدار %1$s — وضع التحديد المتعدد، عمليات الخزنة، سلاسة IPTV وتوفير البطارية</string>
     <string name="changelog_v90_15_desc" formatted="false">• استبدال قوائم الضغط المطوّل بوضع تحديد متكامل (المكتبة الرئيسية والخزنة الخاصة): شريط سياقي، تحديد الكل، تحديد متعدد مختلط، التفاصيل، نسخ/نقل ذري مع معالجة التكرار.\n• حل مشكلة تكرار إذن الحذف عبر طلب حذف جماعي واحد (MediaStore.createDeleteRequest).\n• إزالة التقطيع واختفاء المجلدات بين الفيديو وIPTV عبر فصل قائمة IPTV في RecyclerView مستقل.\n• إضافة إعدادات توفير البطارية ومؤشر البطارية في المشغّل وتنبيهات 15%/5% وإيقاف المؤقتات الخلفية.</string>
+    <string name="all_files_access_title">السماح بالوصول لجميع الملفات (مرة واحدة)</string>
+    <string name="all_files_access_message">امنح VEXO Player صلاحية الوصول للملفات مرة واحدة فقط حتى تتمكن من حذف ونسخ ونقل وإدارة فيديوهات الخزنة بسلاسة دون تكرار نافذة السماح في كل مرة.</string>
+    <string name="all_files_access_grant_btn">السماح مرة واحدة</string>
+    <string name="all_files_access_later_btn">ليس الآن</string>
+    <string name="conflict_dialog_title">الملف موجود بالفعل</string>
+    <string name="conflict_dialog_message" formatted="false">الملف %1$s موجود بالفعل داخل %2$s. ماذا تريد أن تفعل؟</string>
+    <string name="conflict_apply_all">تطبيق على جميع التعارضات المتبقية (%1$d)</string>
+    <string name="dup_policy_merge">دمج</string>
+    <string name="changelog_v90_16_title">الإصدار %1$s — إذن حذف لمرة واحدة، حوار تعارض ذكي وتشغيل فوري</string>
+    <string name="changelog_v90_16_desc" formatted="false">• إضافة صلاحية الوصول لجميع الملفات (أندرويد 11+) لمرة واحدة فقط حتى يعمل الحذف والنسخ والنقل والخزنة بدون تكرار نافذة السماح.
+• إصلاح نافذة الملفات المكررة عند النسخ/النقل لتظهر فقط عند وجود تعارض حقيقي مع خيار التطبيق على باقي التعارضات.
+• إخفاء دائرة التحميل عند فتح التطبيق بشكل طبيعي وعرض المكتبة فوراً من الكاش مع تحديث صامت في الخلفية.</string>
+    <string name="selection_new_folder">إنشاء مجلد جديد</string>
+    <string name="selection_new_folder_hint">اسم المجلد</string>
 </resources>

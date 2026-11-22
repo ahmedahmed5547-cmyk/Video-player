@@ -126,18 +126,26 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
 
         ensureObserverRegistered()
         val currentState = _uiState.value
+        val firstScanDone = PlaybackStore.isFirstLibraryScanDone(appContext)
         val needsScan = permissionJustChanged ||
             hasMediaChangedSinceLastLoad ||
             currentState is VideoLibraryUiState.PermissionDenied ||
-            currentState is VideoLibraryUiState.Empty ||
-            (currentState is VideoLibraryUiState.Loading && !isScanRunning.get())
+            (!firstScanDone && currentState !is VideoLibraryUiState.Success && !isScanRunning.get())
 
         if (needsScan) {
-            refreshLibrary(force = false, showLoadingIfEmpty = currentState !is VideoLibraryUiState.Success)
+            refreshLibrary(
+                force = false,
+                showLoadingIfEmpty = !firstScanDone && currentState !is VideoLibraryUiState.Success,
+                isUserPullRefresh = false
+            )
         }
     }
 
-    fun refreshLibrary(force: Boolean = true, showLoadingIfEmpty: Boolean = true) {
+    fun refreshLibrary(
+        force: Boolean = true,
+        showLoadingIfEmpty: Boolean = true,
+        isUserPullRefresh: Boolean = false
+    ) {
         if (!hasVideoAccessPermission()) {
             _uiState.value = VideoLibraryUiState.PermissionDenied
             return
@@ -151,18 +159,19 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
             scanJob?.cancel()
         }
 
+        val firstScanDone = PlaybackStore.isFirstLibraryScanDone(appContext)
         val currentState = _uiState.value
         if (currentState is VideoLibraryUiState.Success) {
-            if (force) {
+            if (isUserPullRefresh) {
                 _uiState.value = currentState.copy(isRefreshing = true)
             }
-        } else if (showLoadingIfEmpty) {
-            // Instant cache hydration before MediaStore query if available
+        } else {
+            // Instant cache hydration before MediaStore query — ZERO spinner on normal launches!
             val cached = runCatching { VideoIndexCache.getInstantCachedVideos(appContext) }.getOrDefault(emptyList())
             if (cached.isNotEmpty()) {
                 val cachedFolders = groupVideosIntoFolders(cached)
-                _uiState.value = VideoLibraryUiState.Success(cached, cachedFolders, isRefreshing = true)
-            } else {
+                _uiState.value = VideoLibraryUiState.Success(cached, cachedFolders, isRefreshing = isUserPullRefresh)
+            } else if (showLoadingIfEmpty && !firstScanDone) {
                 _uiState.value = VideoLibraryUiState.Loading
             }
         }
@@ -181,6 +190,7 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
                 withContext(Dispatchers.IO) {
                     runCatching { VideoIndexCache.saveCachedVideos(appContext, videoList) }
                 }
+                PlaybackStore.setFirstLibraryScanDone(appContext, true)
 
                 if (videoList.isEmpty()) {
                     _uiState.value = VideoLibraryUiState.Empty

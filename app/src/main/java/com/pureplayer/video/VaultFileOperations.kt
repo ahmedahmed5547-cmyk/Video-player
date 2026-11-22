@@ -47,10 +47,10 @@ object VaultFileOperations {
                 val base = if (dotIdx > 0) desiredName.substring(0, dotIdx) else desiredName
                 val ext = if (dotIdx > 0) desiredName.substring(dotIdx) else ""
                 var counter = 1
-                var unique = File(destDir, "${base}_($counter)$ext")
+                var unique = File(destDir, "${base} ($counter)$ext")
                 while (unique.exists()) {
                     counter++
-                    unique = File(destDir, "${base}_($counter)$ext")
+                    unique = File(destDir, "${base} ($counter)$ext")
                 }
                 unique
             }
@@ -193,5 +193,36 @@ object VaultFileOperations {
             tmpFile.delete()
             false
         }
+    }
+
+    fun isSameDirectory(sourceFileOrDir: File, destDir: File): Boolean {
+        return try {
+            val srcParent = if (sourceFileOrDir.isDirectory) sourceFileOrDir.canonicalPath else sourceFileOrDir.parentFile?.canonicalPath
+            srcParent != null && srcParent.trimEnd(File.separatorChar) == destDir.canonicalPath.trimEnd(File.separatorChar)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun resolveFolderDestination(destDir: File, desiredFolderName: String, policy: DuplicateResolution): File? {
+        val candidate = File(destDir, desiredFolderName)
+        if (!candidate.exists()) return candidate
+        return when (policy) {
+            DuplicateResolution.SKIP -> null
+            DuplicateResolution.REPLACE -> candidate // Merge into existing folder
+            DuplicateResolution.KEEP_BOTH -> {
+                var counter = 1
+                var unique = File(destDir, "$desiredFolderName ($counter)")
+                while (unique.exists()) {
+                    counter++
+                    unique = File(destDir, "$desiredFolderName ($counter)")
+                }
+                unique
+            }
+        }
+    }
+
+    fun hasAnyConflict(destDir: File, fileNames: List<String>): List<String> {
+        return fileNames.filter { name -> File(destDir, name).exists() }
     }
 }

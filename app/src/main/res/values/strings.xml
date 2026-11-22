@@ -607,4 +607,18 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="disabled_label">Disabled</string>
     <string name="changelog_v90_15_title">v%1$s — Multi-Selection Mode, Vault Batch Ops, Zero-Lag IPTV &amp; Battery Saver</string>
     <string name="changelog_v90_15_desc" formatted="false">• Replaced long-press popups with a full Selection Mode (Main Library &amp; Private Vault): contextual top bar, Select All, mixed multi-select, Details, atomic Copy/Move with duplicate handling, and rotation persistence.\n• Fixed repeated delete permission prompts via unified batch MediaStore.createDeleteRequest (at most one prompt per batch).\n• Eliminated Video-to-IPTV lag &amp; folder flicker using a dedicated persistent IPTV RecyclerView.\n• Added Battery Saver settings, lifecycle-aware player battery indicator, low-battery 15%/5% notices, and stopped background UI tickers.</string>
+    <string name="all_files_access_title">Allow All Files Access (One-Time)</string>
+    <string name="all_files_access_message">Grant VEXO Player All Files Access once so you can delete, copy, move, and manage Vault videos smoothly without repeated system confirmation popups.</string>
+    <string name="all_files_access_grant_btn">Allow once</string>
+    <string name="all_files_access_later_btn">Not now</string>
+    <string name="conflict_dialog_title">File already exists</string>
+    <string name="conflict_dialog_message" formatted="false">%1$s already exists in %2$s. What would you like to do?</string>
+    <string name="conflict_apply_all">Apply to all remaining conflicts (%1$d)</string>
+    <string name="dup_policy_merge">Merge</string>
+    <string name="changelog_v90_16_title">v%1$s — One-Time Delete Permission, Smart Conflict Dialog &amp; Instant Launch</string>
+    <string name="changelog_v90_16_desc" formatted="false">• Added one-time All Files Access (Android 11+) so Delete, Copy, Move, and Vault operations run silently without repeated Allow popups (with single-batch fallback if declined).
+• Fixed Copy/Move duplicate dialog: now appears only when a real filename conflict exists, with an Apply-to-all checkbox for multiple conflicts and silent same-folder handling.
+• Removed startup refresh circle on normal launches: library loads instantly from cache and refreshes silently in the background (spinner shown only on first install scan or manual pull-to-refresh).</string>
+    <string name="selection_new_folder">Create new folder</string>
+    <string name="selection_new_folder_hint">Folder name</string>
 </resources>

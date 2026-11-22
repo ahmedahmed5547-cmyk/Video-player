@@ -116,6 +116,7 @@ object PlaybackStore {
     private const val KEY_THEME_INDEX = "app_theme_index"
     private const val KEY_APPEARANCE_MODE = "app_appearance_mode_v1"
     private const val KEY_APPEARANCE_MIGRATED_V2 = "app_appearance_migrated_v2"
+    private const val KEY_FIRST_SCAN_DONE = "vexo_first_library_scan_done_v1"
     private const val KEY_LAST_ACTIVE_FOLDER = "last_active_folder_name_v1"
     private const val KEY_AUDIO_PRESET_MODE = "audio_eq_preset_mode_v1"
     private const val KEY_AUDIO_PREAMP_DB = "audio_eq_preamp_db_v1"
@@ -733,6 +734,13 @@ object PlaybackStore {
     }
 
     
+    fun isFirstLibraryScanDone(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_FIRST_SCAN_DONE, false)
+
+    fun setFirstLibraryScanDone(context: Context, done: Boolean) {
+        prefs(context).edit().putBoolean(KEY_FIRST_SCAN_DONE, done).apply()
+    }
+
     fun setFolderLocked(context: Context, folderName: String, locked: Boolean) {
         val updated = getLockedFolders(context).toMutableSet()
         if (locked) updated.add(folderName) else updated.remove(folderName)
