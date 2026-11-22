@@ -1,3 +1,6 @@
+## v90.18 (2026-11-22)
+- **IPTV Source Instant Sync Fix**: Fixed a stale in-memory cache bug where newly added IPTV playlists/movie libraries saved to Room but did not appear until restarting the app. Moved the sources cache directly into `IptvRepository` so every add/edit/delete updates immediately with zero-lag tab switching.
+
 ## v90.17 (2026-11-22)
 - **Tablet & Large-Screen Settings Fix**: Resolved the ~75dp narrow strip bug on 10" tablets and large displays caused by applying full-screen horizontal padding (`getMenuHorizontalPaddingDp`) inside a container already capped at `computeDialogMaxWidthDp`. Settings and menus now render cleanly centered (600dp Medium / 680dp Expanded, full-width on Compact phones) with live rotation & split-screen resize adaptation.
 

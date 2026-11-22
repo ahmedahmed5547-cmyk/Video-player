@@ -1623,12 +1623,15 @@ object IptvRepository {
     private val favoriteIdsMemoryCache = ConcurrentHashMap<String, MutableSet<String>>()
     private val seriesLastEpMemoryCache = ConcurrentHashMap<String, IptvSeriesLastEpEntity>()
     private val sectionCountsMemoryCache = ConcurrentHashMap<String, Map<IptvContentType, Int>>()
+    @Volatile
+    private var sourcesMemoryCache: List<IptvSource>? = null
     private val categoriesMemoryCache = ConcurrentHashMap<String, List<IptvCategory>>()
     private val firstPageStreamsMemoryCache = ConcurrentHashMap<String, List<IptvStreamItem>>()
     private val seriesInfoMemoryCache = ConcurrentHashMap<String, IptvSeriesInfoResult>()
     private val warmedUpSources = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 
     fun invalidateSourceMemoryCaches(sourceId: String) {
+        sourcesMemoryCache = null
         if (sourceId.isBlank()) return
         sectionCountsMemoryCache.remove(sourceId)
         val prefix = "${sourceId}_"
@@ -1803,14 +1806,19 @@ object IptvRepository {
         }
     }
 
-    fun getSources(context: Context): List<IptvSource> = runOnIoPool {
-        ensureMigratedToRoomIo(context)
-        try {
-            dao(context).getAllSourcesSync().map { it.toDomain() }
-        } catch (e: Exception) {
-            runCatching { Log.w("IptvRepository", "getSources failed: ${e.javaClass.simpleName}") }
-            emptyList()
+    fun getSources(context: Context): List<IptvSource> {
+        sourcesMemoryCache?.let { return it }
+        val loaded = runOnIoPool {
+            ensureMigratedToRoomIo(context)
+            try {
+                dao(context).getAllSourcesSync().map { it.toDomain() }
+            } catch (e: Exception) {
+                runCatching { Log.w("IptvRepository", "getSources failed: ${e.javaClass.simpleName}") }
+                emptyList()
+            }
         }
+        sourcesMemoryCache = loaded
+        return loaded
     }
 
     private fun saveSourcesListIo(context: Context, sources: List<IptvSource>) {
@@ -1818,6 +1826,7 @@ object IptvRepository {
             val roomDao = dao(context)
             roomDao.clearAllSourcesSync()
             roomDao.upsertSourcesSync(sources.map { IptvSourceEntity.fromDomain(it) })
+            sourcesMemoryCache = sources.toList()
         } catch (e: Exception) {
             runCatching { Log.w("IptvRepository", "saveSourcesListIo failed: ${e.javaClass.simpleName}") }
         }
@@ -2018,6 +2027,7 @@ object IptvRepository {
     fun deleteSource(context: Context, sourceId: String) = runOnIoPool {
         ensureMigratedToRoomIo(context)
         try {
+            sourcesMemoryCache = null
             dao(context).deleteAllDataForSourceSync(sourceId)
             favoriteIdsMemoryCache.remove(sourceId)
             warmedUpSources.remove(sourceId)

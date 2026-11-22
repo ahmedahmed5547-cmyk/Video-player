@@ -623,4 +623,6 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="selection_new_folder_hint">Folder name</string>
     <string name="changelog_v90_17_title">v%1$s — Tablet &amp; Large-Screen Settings Layout Fix</string>
     <string name="changelog_v90_17_desc" formatted="false">• Fixed narrow crushed Settings screen on tablets, foldables, and large landscape displays by removing double horizontal padding inside width-constrained menu containers (centered 600dp on Medium / 680dp on Expanded, full-width on phones).\n• Added live rotation and split-screen resize adaptation without losing Settings state.</string>
+    <string name="changelog_v90_18_title">v%1$s — Instant IPTV Source Visibility Fix</string>
+    <string name="changelog_v90_18_desc" formatted="false">• Fixed a bug where newly added IPTV playlists/movie libraries did not appear immediately after adding due to a stale in-memory cache; IPTV sources now sync instantly while keeping zero-lag tab switching.</string>
 </resources>

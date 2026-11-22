@@ -2028,11 +2028,7 @@ class MainActivity : AppCompatActivity() {
 
     
     internal fun getCachedOrLoadIptvSources(): List<IptvSource> {
-        val cached = cachedIptvSources
-        if (cached != null) return cached
-        val loaded = IptvRepository.getSources(this)
-        cachedIptvSources = loaded
-        return loaded
+        return IptvRepository.getSources(this)
     }
 
     internal fun invalidateIptvSourcesCache() {
