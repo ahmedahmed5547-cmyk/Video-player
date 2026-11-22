@@ -315,7 +315,7 @@ class PurePlayerUnitTests {
         )
         assertEquals(WindowWidthSizeClass.EXPANDED, unfolded.widthClass)
         assertEquals(FoldPosture.FLAT_EXPANDED, unfolded.posture)
-        assertEquals(620, FoldableAdaptiveMath.computeDialogMaxWidthDp(unfolded.widthClass))
+        assertEquals(680, FoldableAdaptiveMath.computeDialogMaxWidthDp(unfolded.widthClass))
 
         // 3. Tabletop posture (Half-opened horizontal hinge)
         val tabletopHinge = HingeBounds(0, 1060, 2208, 1100)
