@@ -1,3 +1,6 @@
+## v90.17 (2026-11-22)
+- **Tablet & Large-Screen Settings Fix**: Resolved the ~75dp narrow strip bug on 10" tablets and large displays caused by applying full-screen horizontal padding (`getMenuHorizontalPaddingDp`) inside a container already capped at `computeDialogMaxWidthDp`. Settings and menus now render cleanly centered (600dp Medium / 680dp Expanded, full-width on Compact phones) with live rotation & split-screen resize adaptation.
+
 ## v90.16 (2026-11-22)
 - **One-Time Delete Permission (All Files Access)**: Added `MANAGE_EXTERNAL_STORAGE` flow with a single explanation dialog on Android 11+; once granted, Delete, Copy, Move, and Vault operations run silently via direct File APIs + MediaStore sync with zero repeated popups (falling back to one batched `createDeleteRequest` if declined).
 - **Smart Conflict-Only Copy/Move Dialog**: Copy/Move now runs silently when no filename conflict exists; the conflict dialog appears only for actual collisions (Replace / Keep both `name (1).ext` / Skip + "Apply to all remaining conflicts" checkbox), with silent same-folder Move skip and auto-rename same-folder Copy.

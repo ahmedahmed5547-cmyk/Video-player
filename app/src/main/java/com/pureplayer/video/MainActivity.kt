@@ -368,6 +368,7 @@ class MainActivity : AppCompatActivity() {
         super.onConfigurationChanged(newConfig)
         applyUserTheme(animated = false)
         updateRecyclerLayoutManager()
+        updateActiveFullScreenMenuLayoutForWindowSize()
     }
 
     override fun onResume() {
@@ -693,6 +694,17 @@ class MainActivity : AppCompatActivity() {
         val horizPad = dp(ResponsiveUiMetrics.getListHorizontalPaddingDp(cfg.screenWidthDp))
         if (binding.recyclerView.paddingLeft != horizPad || binding.recyclerView.paddingRight != horizPad) {
             binding.recyclerView.setPadding(horizPad, binding.recyclerView.paddingTop, horizPad, binding.recyclerView.paddingBottom)
+        }
+        if (binding.iptvRecyclerView.paddingLeft != horizPad || binding.iptvRecyclerView.paddingRight != horizPad) {
+            binding.iptvRecyclerView.setPadding(horizPad, binding.iptvRecyclerView.paddingTop, horizPad, binding.iptvRecyclerView.paddingBottom)
+        }
+        val navSidePad = dp(FoldableAdaptiveMath.computeBottomNavSidePaddingDp(cfg.screenWidthDp))
+        if (binding.bottomNavBar.paddingLeft != navSidePad || binding.bottomNavBar.paddingRight != navSidePad) {
+            binding.bottomNavBar.setPadding(navSidePad, binding.bottomNavBar.paddingTop, navSidePad, binding.bottomNavBar.paddingBottom)
+        }
+        val audioSidePad = if (cfg.screenWidthDp >= 900) dp(((cfg.screenWidthDp - 760) / 2).coerceIn(16, 480)) else dp(12)
+        if (binding.audioTabContainer.paddingLeft != audioSidePad || binding.audioTabContainer.paddingRight != audioSidePad) {
+            binding.audioTabContainer.setPadding(audioSidePad, binding.audioTabContainer.paddingTop, audioSidePad, binding.audioTabContainer.paddingBottom)
         }
         val targetRv = if (currentMainTab == 2) binding.iptvRecyclerView else binding.recyclerView
         if (::iptvAdapter.isInitialized) iptvAdapter.isGridMode = gridEnabled

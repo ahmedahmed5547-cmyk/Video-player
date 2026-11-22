@@ -149,6 +149,8 @@ object ResponsiveUiMetrics {
     ): Int {
         return if (isGridMode) {
             when {
+                screenWidthDp >= 2000 -> if (isPosterSection) 8 else 7
+                screenWidthDp >= 1600 -> if (isPosterSection) 7 else 6
                 screenWidthDp >= 1200 -> if (isPosterSection) 6 else 5
                 screenWidthDp >= 840 -> if (isPosterSection) 5 else 4
                 screenWidthDp >= 600 -> if (isPosterSection) 4 else 3
@@ -157,6 +159,7 @@ object ResponsiveUiMetrics {
             }
         } else {
             when {
+                screenWidthDp >= 1600 -> 3
                 screenWidthDp >= 1080 -> 2
                 smallestScreenWidthDp >= 600 && screenWidthDp >= 700 -> 2
                 else -> 1
@@ -217,7 +220,8 @@ object ResponsiveUiMetrics {
      */
     fun getListHorizontalPaddingDp(screenWidthDp: Int): Int {
         return when {
-            screenWidthDp >= 1200 -> 24
+            screenWidthDp >= 1600 -> 40
+            screenWidthDp >= 1200 -> 28
             screenWidthDp >= 840 -> 18
             screenWidthDp >= 600 -> 14
             else -> 6

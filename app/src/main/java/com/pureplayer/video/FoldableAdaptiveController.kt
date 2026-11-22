@@ -100,9 +100,45 @@ object FoldableAdaptiveMath {
     fun computeDialogMaxWidthDp(widthClass: WindowWidthSizeClass): Int {
         return when (widthClass) {
             WindowWidthSizeClass.COMPACT -> 0
-            WindowWidthSizeClass.MEDIUM -> 580
-            WindowWidthSizeClass.EXPANDED -> 620
+            WindowWidthSizeClass.MEDIUM -> 600
+            WindowWidthSizeClass.EXPANDED -> 680
         }
+    }
+
+    /**
+     * Computes the exact Settings/Menu card container width in dp (0 = MATCH_PARENT on Compact phones).
+     * Guarantees centered responsive width on Medium (600-839dp) and Expanded (>=840dp) displays
+     * without ever overflowing narrow split-screen windows.
+     */
+    fun computeEffectiveMenuWidthDp(winWidthDp: Int): Int {
+        val maxDp = when {
+            winWidthDp >= 1200 -> 760
+            winWidthDp >= 840 -> 680
+            winWidthDp >= 600 -> 600
+            else -> 0
+        }
+        if (maxDp <= 0) return 0
+        return maxDp.coerceAtMost((winWidthDp - 32).coerceAtLeast(320))
+    }
+
+    /**
+     * Centers bottom navigation icons cleanly on large tablets, ChromeOS, Desktop & Android XR (>=900dp)
+     * while keeping standard 12dp padding on phones and narrow split-screen windows.
+     */
+    fun computeBottomNavSidePaddingDp(winWidthDp: Int): Int {
+        return if (winWidthDp >= 900) {
+            ((winWidthDp - 640) / 2).coerceIn(12, 640)
+        } else {
+            12
+        }
+    }
+
+    /**
+     * Clean internal horizontal padding (in dp) INSIDE the already width-constrained cardContainer.
+     * Never scales with outer screen width (preventing double-constraining on 1280dp+ tablets/desktops).
+     */
+    fun computeMenuInnerPaddingDp(winWidthDp: Int): Int {
+        return if (winWidthDp < 360) 14 else 20
     }
 
     /**

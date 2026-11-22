@@ -491,4 +491,40 @@ class PurePlayerUnitTests {
         assertTrue(VaultFileOperations.hasAnyConflict(tempDir, listOf("fresh.mp4")).isEmpty())
         tempDir.deleteRecursively()
     }
+
+    @Test
+    fun responsiveSettingsMenuWidth_allScreenSizes() {
+        // Phone Portrait 360x800dp -> Compact (0 = MATCH_PARENT, content = 360 - 40 = 320dp)
+        assertEquals(0, FoldableAdaptiveMath.computeEffectiveMenuWidthDp(360))
+        assertEquals(20, FoldableAdaptiveMath.computeMenuInnerPaddingDp(360))
+
+        // Phone Landscape 800x360dp & Tablet Portrait 800x1280dp -> Medium (600dp, content = 560dp)
+        assertEquals(600, FoldableAdaptiveMath.computeEffectiveMenuWidthDp(800))
+        assertTrue(FoldableAdaptiveMath.computeEffectiveMenuWidthDp(800) - 2 * FoldableAdaptiveMath.computeMenuInnerPaddingDp(800) >= 520)
+
+        // Foldable Unfolded 840x900dp -> Expanded (680dp, content = 640dp)
+        assertEquals(680, FoldableAdaptiveMath.computeEffectiveMenuWidthDp(840))
+
+        // Tablet 10" Landscape 1280x800dp -> Extra-Large (760dp, content = 720dp — never ~75dp!)
+        val tabletWidth = FoldableAdaptiveMath.computeEffectiveMenuWidthDp(1280)
+        val tabletInnerPad = FoldableAdaptiveMath.computeMenuInnerPaddingDp(1280)
+        assertEquals(760, tabletWidth)
+        assertEquals(720, tabletWidth - 2 * tabletInnerPad)
+
+        // Desktop / ChromeOS 1920x1080dp & Ultra-Wide 2560dp -> Extra-Large (760dp centered, content = 720dp)
+        assertEquals(760, FoldableAdaptiveMath.computeEffectiveMenuWidthDp(1920))
+        assertEquals(760, FoldableAdaptiveMath.computeEffectiveMenuWidthDp(2560))
+        assertEquals(720, FoldableAdaptiveMath.computeEffectiveMenuWidthDp(2560) - 2 * FoldableAdaptiveMath.computeMenuInnerPaddingDp(2560))
+
+        // Ultra-wide grid/list spans & bottom nav centering
+        assertEquals(7, ResponsiveUiMetrics.calculateAdaptiveSpanCount(2560, 2560, isGridMode = true, isPosterSection = false))
+        assertEquals(8, ResponsiveUiMetrics.calculateAdaptiveSpanCount(2560, 2560, isGridMode = true, isPosterSection = true))
+        assertEquals(3, ResponsiveUiMetrics.calculateAdaptiveSpanCount(1920, 1920, isGridMode = false))
+        assertEquals(12, FoldableAdaptiveMath.computeBottomNavSidePaddingDp(360))
+        assertTrue(FoldableAdaptiveMath.computeBottomNavSidePaddingDp(1920) >= 600)
+
+        // Tablet Split-screen 640dp -> Medium (600dp) & narrow split 420dp -> Compact (MATCH_PARENT)
+        assertEquals(600, FoldableAdaptiveMath.computeEffectiveMenuWidthDp(640))
+        assertEquals(0, FoldableAdaptiveMath.computeEffectiveMenuWidthDp(420))
+    }
 }

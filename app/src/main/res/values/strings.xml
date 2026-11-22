@@ -621,4 +621,6 @@ Any series, movie, or channel you play will appear here automatically so you can
 • Removed startup refresh circle on normal launches: library loads instantly from cache and refreshes silently in the background (spinner shown only on first install scan or manual pull-to-refresh).</string>
     <string name="selection_new_folder">Create new folder</string>
     <string name="selection_new_folder_hint">Folder name</string>
+    <string name="changelog_v90_17_title">v%1$s — Tablet &amp; Large-Screen Settings Layout Fix</string>
+    <string name="changelog_v90_17_desc" formatted="false">• Fixed narrow crushed Settings screen on tablets, foldables, and large landscape displays by removing double horizontal padding inside width-constrained menu containers (centered 600dp on Medium / 680dp on Expanded, full-width on phones).\n• Added live rotation and split-screen resize adaptation without losing Settings state.</string>
 </resources>

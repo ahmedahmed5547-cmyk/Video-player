@@ -346,13 +346,13 @@ internal fun MainActivity.showPremiumMenuDialog(
     }
 
     val (winWidthDp, _) = FoldableWindowMetricsHelper.computeCurrentWindowDp(this)
-    val widthClass = FoldableAdaptiveMath.classifyWidth(winWidthDp)
-    val maxDialogWidthDp = FoldableAdaptiveMath.computeDialogMaxWidthDp(widthClass)
-    val horizPadDp = ResponsiveUiMetrics.getMenuHorizontalPaddingDp(winWidthDp)
-    val cardWidthPx = if (maxDialogWidthDp > 0) dp(maxDialogWidthDp) else ViewGroup.LayoutParams.MATCH_PARENT
+    val effectiveWidthDp = FoldableAdaptiveMath.computeEffectiveMenuWidthDp(winWidthDp)
+    val innerPadDp = FoldableAdaptiveMath.computeMenuInnerPaddingDp(winWidthDp)
+    val cardWidthPx = if (effectiveWidthDp > 0) dp(effectiveWidthDp) else ViewGroup.LayoutParams.MATCH_PARENT
     val cardContainer = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(horizPadDp), dp(22), dp(horizPadDp), dp(32))
+        tag = "vexo_responsive_menu_card"
+        setPadding(dp(innerPadDp), dp(22), dp(innerPadDp), dp(32))
         setBackgroundColor(bg)
         layoutParams = FrameLayout.LayoutParams(
             cardWidthPx,
@@ -397,7 +397,8 @@ internal fun MainActivity.showPremiumMenuDialog(
         textSize = 20f
         letterSpacing = 0.04f
         setTypeface(typeface, Typeface.BOLD)
-        maxLines = 1
+        maxLines = 2
+        ellipsize = android.text.TextUtils.TruncateAt.END
     }
     titlePillRow.addView(tvTitle)
 
@@ -665,4 +666,23 @@ internal fun MainActivity.showPremiumMenuDialog(
     cardContainer.addView(tvFooter)
 
     presentInFullScreenHost(outerScroll, cardContainer, animatedRows, bg)
+}
+
+internal fun MainActivity.updateActiveFullScreenMenuLayoutForWindowSize() {
+    val card = activeFullScreenCardView ?: return
+    if (card.tag != "vexo_responsive_menu_card") return
+    val (winWidthDp, _) = FoldableWindowMetricsHelper.computeCurrentWindowDp(this)
+    val effectiveWidthDp = FoldableAdaptiveMath.computeEffectiveMenuWidthDp(winWidthDp)
+    val innerPadDp = FoldableAdaptiveMath.computeMenuInnerPaddingDp(winWidthDp)
+    val newWidthPx = if (effectiveWidthDp > 0) dp(effectiveWidthDp) else ViewGroup.LayoutParams.MATCH_PARENT
+    val lp = card.layoutParams as? FrameLayout.LayoutParams ?: FrameLayout.LayoutParams(
+        newWidthPx,
+        ViewGroup.LayoutParams.WRAP_CONTENT,
+        Gravity.CENTER_HORIZONTAL
+    )
+    lp.width = newWidthPx
+    lp.gravity = Gravity.CENTER_HORIZONTAL
+    card.layoutParams = lp
+    card.setPadding(dp(innerPadDp), dp(22), dp(innerPadDp), dp(32))
+    card.requestLayout()
 }

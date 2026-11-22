@@ -1088,10 +1088,18 @@ internal fun MainActivity.showChangelogPage() {
         ChangelogReleaseEntry(
             version = verName,
             date = "2026-11-22",
-            iconEmoji = "✅",
-            title = getString(R.string.changelog_v90_16_title, verName),
-            description = getString(R.string.changelog_v90_16_desc),
+            iconEmoji = "📱",
+            title = getString(R.string.changelog_v90_17_title, verName),
+            description = getString(R.string.changelog_v90_17_desc),
             isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.16",
+            date = "2026-11-22",
+            iconEmoji = "✅",
+            title = getString(R.string.changelog_v90_16_title, "90.16"),
+            description = getString(R.string.changelog_v90_16_desc),
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.15",
@@ -1335,13 +1343,18 @@ internal fun MainActivity.showThemeSelectorDialog() {
             ViewGroup.LayoutParams.MATCH_PARENT
         )
     }
+    val (winWidthDp, _) = FoldableWindowMetricsHelper.computeCurrentWindowDp(this)
+    val effectiveThemeW = FoldableAdaptiveMath.computeEffectiveMenuWidthDp(winWidthDp)
+    val themeInnerPad = FoldableAdaptiveMath.computeMenuInnerPaddingDp(winWidthDp)
     val cardContainer = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(20), dp(22), dp(20), dp(28))
+        tag = "vexo_responsive_menu_card"
+        setPadding(dp(themeInnerPad), dp(22), dp(themeInnerPad), dp(28))
         setBackgroundColor(surface)
-        layoutParams = ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
+        layoutParams = FrameLayout.LayoutParams(
+            if (effectiveThemeW > 0) dp(effectiveThemeW) else ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER_HORIZONTAL
         )
     }
     outerScroll.addView(cardContainer)
