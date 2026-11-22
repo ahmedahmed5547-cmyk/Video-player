@@ -666,18 +666,20 @@ class MainActivity : AppCompatActivity() {
         if (binding.recyclerView.paddingLeft != horizPad || binding.recyclerView.paddingRight != horizPad) {
             binding.recyclerView.setPadding(horizPad, binding.recyclerView.paddingTop, horizPad, binding.recyclerView.paddingBottom)
         }
-        val currentLm = binding.recyclerView.layoutManager
+        val targetRv = if (currentMainTab == 2) binding.iptvRecyclerView else binding.recyclerView
+        if (::iptvAdapter.isInitialized) iptvAdapter.isGridMode = gridEnabled
+        val currentLm = targetRv.layoutManager
         if (targetSpan > 1) {
             if (currentLm is GridLayoutManager) {
                 if (currentLm.spanCount != targetSpan) {
                     currentLm.spanCount = targetSpan
                 }
             } else {
-                binding.recyclerView.layoutManager = GridLayoutManager(this, targetSpan)
+                targetRv.layoutManager = GridLayoutManager(this, targetSpan)
             }
         } else {
             if (currentLm is GridLayoutManager || currentLm == null) {
-                binding.recyclerView.layoutManager = LinearLayoutManager(this)
+                targetRv.layoutManager = LinearLayoutManager(this)
             }
         }
         if (adapter.itemCount > 0) adapter.notifyItemRangeChanged(0, adapter.itemCount)
@@ -723,16 +725,24 @@ class MainActivity : AppCompatActivity() {
     private fun setupRecyclerView() {
         adapter = MediaAdapter(
             onFolderClick = { folder ->
-                openFolderNow(folder)
+                if (selectionViewModel.isSelectionActive()) {
+                    selectionViewModel.toggleKey(SelectionViewModel.keyForFolder(folder), isVault = isInVaultTab)
+                } else {
+                    openFolderNow(folder)
+                }
             },
             onVideoClick = { video ->
-                handleVideoSelection(video.uri, video.title)
+                if (selectionViewModel.isSelectionActive()) {
+                    selectionViewModel.toggleKey(SelectionViewModel.keyForVideo(video), isVault = isInVaultTab)
+                } else {
+                    handleVideoSelection(video.uri, video.title)
+                }
             },
             onVideoLongClick = { video ->
-                showVideoLongPressMenu(video)
+                selectionViewModel.enterSelectionWith(SelectionViewModel.keyForVideo(video), isVault = isInVaultTab)
             },
             onFolderLongClick = { folder ->
-                showFolderLockMenu(folder)
+                selectionViewModel.enterSelectionWith(SelectionViewModel.keyForFolder(folder), isVault = isInVaultTab)
             },
             onIptvItemClick = { item ->
                 handleIptvItemClick(item)
@@ -755,6 +765,29 @@ class MainActivity : AppCompatActivity() {
         )
         updateRecyclerLayoutManager()
         binding.recyclerView.adapter = adapter
+        iptvAdapter = MediaAdapter(
+            onFolderClick = {},
+            onVideoClick = {},
+            onVideoLongClick = {},
+            onFolderLongClick = {},
+            onIptvItemClick = { item -> handleIptvItemClick(item) },
+            onIptvItemLongClick = { item -> handleIptvItemLongClick(item) },
+            onIptvFavoriteToggle = { streamItem, nowFav ->
+                val msgRes = if (nowFav) R.string.iptv_fav_added_toast else R.string.iptv_fav_removed_toast
+                Toast.makeText(this, getString(msgRes, streamItem.title), Toast.LENGTH_SHORT).show()
+                if (currentMainTab == 2 && iptvSectionSubTab == 1) {
+                    renderIptvCurrentLevel()
+                } else {
+                    updateIptvSubTabsVisualState()
+                }
+            },
+            onIptvDownloadClick = { item -> handleIptvDownloadRequest(item) }
+        )
+        binding.iptvRecyclerView.setHasFixedSize(true)
+        binding.iptvRecyclerView.setItemViewCacheSize(12)
+        binding.iptvRecyclerView.layoutManager = LinearLayoutManager(this)
+        binding.iptvRecyclerView.adapter = iptvAdapter
+        setupSelectionModeUi()
         binding.recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 super.onScrolled(recyclerView, dx, dy)
@@ -1274,7 +1307,10 @@ class MainActivity : AppCompatActivity() {
                     setSubtleIptvSyncIndicatorVisible(false)
                 }
                 isAudioTabHighlighted = false
+                selectionViewModel.exitSelection()
+                updateVaultScreenSecurityFlag(false)
                 binding.audioTabContainer.visibility = View.GONE
+                binding.iptvRecyclerView.visibility = View.GONE
                 binding.swipeRefresh.visibility = View.VISIBLE
                 currentMainTab = 0
                 isInVaultTab = false
@@ -1309,7 +1345,10 @@ class MainActivity : AppCompatActivity() {
             }
             saveCurrentTabUiState()
             isAudioTabHighlighted = false
+            selectionViewModel.exitSelection()
+            updateVaultScreenSecurityFlag(true)
             binding.audioTabContainer.visibility = View.GONE
+            binding.iptvRecyclerView.visibility = View.GONE
             binding.swipeRefresh.visibility = View.VISIBLE
             if (currentMainTab == 1 && isVaultSessionUnlocked) {
                 if (isShowingFolderVideos) {
@@ -1376,8 +1415,11 @@ class MainActivity : AppCompatActivity() {
                 saveCurrentTabUiState()
                 VideoThumbnailLoader.cancelAllPending()
                 isAudioTabHighlighted = false
+                selectionViewModel.exitSelection()
+                updateVaultScreenSecurityFlag(false)
                 binding.audioTabContainer.visibility = View.GONE
-                binding.swipeRefresh.visibility = View.VISIBLE
+                binding.swipeRefresh.visibility = View.GONE
+                binding.iptvRecyclerView.visibility = View.VISIBLE
                 currentMainTab = 2
                 isInVaultTab = false
                 isInIptvTab = true
@@ -1397,7 +1439,7 @@ class MainActivity : AppCompatActivity() {
                 iptvSessionSyncGuard.onInternalSectionNavigation(iptvNavLevel, activeIptvContentType, activeIptvCategoryId, iptvSectionSubTab)
                 renderIptvCurrentLevel()
             } else {
-                binding.recyclerView.smoothScrollToPosition(0)
+                binding.iptvRecyclerView.smoothScrollToPosition(0)
             }
         }
 
@@ -1426,7 +1468,10 @@ class MainActivity : AppCompatActivity() {
             isAudioTabHighlighted = true
             binding.iptvHeaderBar.visibility = View.GONE
             binding.emptyLayout.visibility = View.GONE
+            selectionViewModel.exitSelection()
+            updateVaultScreenSecurityFlag(false)
             binding.swipeRefresh.visibility = View.GONE
+            binding.iptvRecyclerView.visibility = View.GONE
             binding.fabResumeLast.visibility = View.GONE
             binding.audioTabContainer.visibility = View.VISIBLE
             binding.tvToolbarTitle.text = getString(R.string.tab_audio)
@@ -1508,6 +1553,10 @@ class MainActivity : AppCompatActivity() {
      */
     private fun handleUnifiedBackSwipeNavigation(): Boolean {
         when {
+            selectionViewModel.isSelectionActive() -> {
+                selectionViewModel.exitSelection()
+                return true
+            }
             isSearchActive -> {
                 closeSearchBar()
                 return true
@@ -1729,9 +1778,7 @@ class MainActivity : AppCompatActivity() {
 
     internal fun applyFolderVisibilityAndRefreshUI() {
         if (currentMainTab == 2) {
-            updateRecyclerLayoutManager()
-            updateBottomTabsVisualState()
-            renderIptvCurrentLevel()
+            // Do NOT re-render IPTV or disturb iptvRecyclerView when background video MediaStore updates arrive!
             return
         }
         binding.iptvHeaderBar.visibility = View.GONE

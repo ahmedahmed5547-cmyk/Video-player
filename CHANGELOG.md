@@ -1,3 +1,9 @@
+## v90.15 (2026-11-22)
+- **Unified Selection Mode (Main Library & Vault)**: Removed old long-press popup menus; long-pressing any video or folder now enters multi-selection mode with contextual top bar, Select All, mixed multi-select, single-video Details (including codec & modified date), atomic Copy/Move with Skip/Replace/Keep Both duplicate handling, rotation persistence, Back-exits-selection-first, and Vault `FLAG_SECURE` + `.nomedia` protection.
+- **Single-Prompt Batch Delete**: Fixed repeated Android 11+ delete permission prompts by attempting direct delete for app-owned files and sending a single unified `MediaStore.createDeleteRequest` for all remaining URIs.
+- **Zero-Lag Video <-> IPTV Switching**: Eliminated lag and disappearing video folders by hosting IPTV in its own dedicated persistent `iptvRecyclerView`/`iptvAdapter` and isolating background `MediaStore` updates from IPTV.
+- **Battery Optimization & Saver Mode**: Stopped background player UI tickers in `onStop()`, debounced `MediaStore` `ContentObserver` scans, paused IPTV background sync in Battery Saver, added Battery Saver settings (manual + auto on System Power Save or <= threshold), lifecycle-aware player battery indicator, and one-shot 15%/5% low-battery notices.
+
 ## v90.14 (2026-11-21)
 - **Persistent Bottom Navigation Bar**: Hosted Audio Library in-place above the fixed bottom bar so all 4 tabs (Video, Audio, Private, IPTV) share one persistent bar with zero flicker or recreation, per-tab scroll/folder/search state preservation, and re-tap to scroll to top or pop to root.
 - **Smooth Tab Switching (Video -> IPTV)**: Eliminated main-thread stutter by caching IPTV sources off the main thread, cancelling pending `VideoThumbnailLoader` jobs on tab leave, disabling reset entrance animations on tab switch, enabling `setHasFixedSize(true)`, and deferring IPTV auto-refresh until after the first frame.

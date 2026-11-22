@@ -416,4 +416,69 @@ class PurePlayerUnitTests {
         assertTrue(SleepTimerManager.onMediaTrackEnded())
         assertEquals(SleepTimerMode.OFF, SleepTimerManager.state.value.mode)
     }
+
+    @Test
+    fun selectionViewModel_multiSelectAndSelectAll() {
+        val vm = SelectionViewModel()
+        assertFalse(vm.isSelectionActive())
+        vm.enterSelectionWith("v:content://1", isVault = false)
+        assertTrue(vm.isSelectionActive())
+        assertEquals(1, vm.state.value.count)
+
+        vm.toggleKey("f:Movies", isVault = false)
+        assertEquals(2, vm.state.value.count)
+        assertTrue(vm.isSelected("v:content://1"))
+        assertTrue(vm.isSelected("f:Movies"))
+
+        vm.selectAll(listOf("v:content://1", "f:Movies", "v:content://2"), isVault = false)
+        assertEquals(3, vm.state.value.count)
+
+        // Calling selectAll again when all are selected exits selection mode
+        vm.selectAll(listOf("v:content://1", "f:Movies", "v:content://2"), isVault = false)
+        assertFalse(vm.isSelectionActive())
+    }
+
+    @Test
+    fun vaultFileOperations_duplicatePoliciesAndAtomicMove() {
+        val tempDir = java.nio.file.Files.createTempDirectory("vexo_test_").toFile()
+        val destDir = java.io.File(tempDir, "dest").apply { mkdirs() }
+        val srcFile = java.io.File(tempDir, "clip.mp4").apply { writeText("VEXO_ATOMIC_TEST_DATA") }
+        val existing = java.io.File(destDir, "clip.mp4").apply { writeText("OLD") }
+
+        assertNull(VaultFileOperations.resolveDestinationFile(destDir, "clip.mp4", DuplicateResolution.SKIP))
+        assertEquals(existing, VaultFileOperations.resolveDestinationFile(destDir, "clip.mp4", DuplicateResolution.REPLACE))
+        val keepBoth = VaultFileOperations.resolveDestinationFile(destDir, "clip.mp4", DuplicateResolution.KEEP_BOTH)
+        assertNotNull(keepBoth)
+        assertEquals("clip_(1).mp4", keepBoth!!.name)
+
+        // Move folder into itself guard
+        assertTrue(VaultFileOperations.isMovingFolderIntoItself(tempDir, destDir))
+        assertFalse(VaultFileOperations.isMovingFolderIntoItself(destDir, tempDir))
+
+        // Atomic move with CRC32 verification
+        val movedOk = VaultFileOperations.atomicCopyOrMoveFile(srcFile, keepBoth, deleteSourceAfterVerify = true)
+        assertTrue(movedOk)
+        assertFalse(srcFile.exists())
+        assertTrue(keepBoth.exists())
+        assertEquals("VEXO_ATOMIC_TEST_DATA", keepBoth.readText())
+
+        // .nomedia creation
+        VaultFileOperations.ensureNoMediaMarker(destDir)
+        assertTrue(java.io.File(destDir, ".nomedia").exists())
+
+        tempDir.deleteRecursively()
+    }
+
+    @Test
+    fun batteryOptimization_autoThresholdAndLowBatteryAlerts() {
+        assertTrue(BatteryOptimizationManager.shouldBatterySaverBeActive(true, false, false, 90, 15))
+        assertTrue(BatteryOptimizationManager.shouldBatterySaverBeActive(false, true, true, 80, 15))
+        assertTrue(BatteryOptimizationManager.shouldBatterySaverBeActive(false, true, false, 15, 15))
+        assertFalse(BatteryOptimizationManager.shouldBatterySaverBeActive(false, true, false, 40, 15))
+
+        assertEquals(15, BatteryOptimizationManager.evaluateLowBatteryAlert(15, false, false, false))
+        assertNull(BatteryOptimizationManager.evaluateLowBatteryAlert(15, false, true, false))
+        assertEquals(5, BatteryOptimizationManager.evaluateLowBatteryAlert(5, false, true, false))
+        assertNull(BatteryOptimizationManager.evaluateLowBatteryAlert(5, true, false, false))
+    }
 }

@@ -124,19 +124,19 @@ internal fun MainActivity.renderIptvCurrentLevel() {
         binding.tvToolbarTitle.text = getString(R.string.iptv_toolbar_title)
         binding.tvIptvStatusSubtitle.text = getString(R.string.iptv_sources_subtitle)
         binding.emptyLayout.visibility = View.GONE
-        binding.recyclerView.visibility = View.VISIBLE
+        binding.iptvRecyclerView.visibility = View.VISIBLE
         val initialCards = listOf<Any>(
             IptvAddCardItem(
                 title = "➕  " + getString(R.string.iptv_add_source_title),
                 subtitle = getString(R.string.iptv_add_source_subtitle)
             )
         )
-        adapter.submitIptvList(initialCards, resetAnimation = false)
+        iptvAdapter.submitIptvList(initialCards, resetAnimation = false)
         return
     }
 
     binding.emptyLayout.visibility = View.GONE
-    binding.recyclerView.visibility = View.VISIBLE
+    binding.iptvRecyclerView.visibility = View.VISIBLE
 
     when (iptvNavLevel) {
         0 -> {
@@ -152,7 +152,7 @@ internal fun MainActivity.renderIptvCurrentLevel() {
                     subtitle = getString(R.string.iptv_add_source_subtitle)
                 )
             )
-            adapter.submitIptvList(list, resetAnimation = false)
+            iptvAdapter.submitIptvList(list, resetAnimation = false)
         }
         1 -> {
             // Level 1: IPTV Smarters Pro Dashboard for Active Source (Shows ONLY non-empty sections + Favorites & Continue Watching!)
@@ -218,7 +218,7 @@ internal fun MainActivity.renderIptvCurrentLevel() {
                     subtitle = getString(R.string.iptv_add_source_subtitle)
                 )
             )
-            adapter.submitIptvList(sectionCards)
+            iptvAdapter.submitIptvList(sectionCards)
         }
         2, 3 -> {
             val src = activeIptvSource ?: return
@@ -238,8 +238,8 @@ internal fun MainActivity.renderIptvCurrentLevel() {
                     showEmptyState(getString(R.string.iptv_favorites_empty_msg), showButton = false)
                 } else {
                     binding.emptyLayout.visibility = View.GONE
-                    binding.recyclerView.visibility = View.VISIBLE
-                    adapter.submitIptvList(favStreams)
+                    binding.iptvRecyclerView.visibility = View.VISIBLE
+                    iptvAdapter.submitIptvList(favStreams)
                 }
                 return
             }
@@ -253,8 +253,8 @@ internal fun MainActivity.renderIptvCurrentLevel() {
                     showEmptyState(getString(R.string.iptv_recent_empty_msg), showButton = false)
                 } else {
                     binding.emptyLayout.visibility = View.GONE
-                    binding.recyclerView.visibility = View.VISIBLE
-                    adapter.submitIptvList(recentStreams)
+                    binding.iptvRecyclerView.visibility = View.VISIBLE
+                    iptvAdapter.submitIptvList(recentStreams)
                 }
                 return
             }
@@ -270,7 +270,7 @@ internal fun MainActivity.renderIptvCurrentLevel() {
                     contentType = cType,
                     allCategoryLabel = getString(R.string.iptv_all_channels_category)
                 )
-                adapter.submitIptvList(categories)
+                iptvAdapter.submitIptvList(categories)
             } else {
                 binding.tvToolbarTitle.text = activeIptvCategoryName
                 if (iptvSessionSyncGuard.shouldReuseLoadedCategoryPage(
@@ -281,7 +281,7 @@ internal fun MainActivity.renderIptvCurrentLevel() {
                     )
                 ) {
                     binding.tvIptvStatusSubtitle.text = "${currentIptvPagedList.size}${if (hasMoreIptvCategoryPages) "+" else ""} ${getString(R.string.iptv_items_unit)}"
-                    adapter.submitIptvList(ArrayList(currentIptvPagedList), resetAnimation = false)
+                    iptvAdapter.submitIptvList(ArrayList(currentIptvPagedList), resetAnimation = false)
                 } else {
                     loadInitialIptvStreamsPage(src, cType)
                 }
@@ -300,7 +300,7 @@ internal fun MainActivity.renderIptvCurrentLevel() {
             } else null
             val prefix = if (!lastEpLabel.isNullOrBlank()) "▶ ${getString(R.string.iptv_last_watched_ep_badge, lastEpLabel)}  •  " else ""
             binding.tvIptvStatusSubtitle.text = prefix + sInfo.plot.ifBlank { "${sInfo.seasons.size} Seasons" }
-            adapter.submitIptvList(sInfo.seasons)
+            iptvAdapter.submitIptvList(sInfo.seasons)
         }
         5 -> {
             // Level 5: Season Episodes
@@ -309,7 +309,7 @@ internal fun MainActivity.renderIptvCurrentLevel() {
             val season = activeIptvSeasonGroup ?: return
             binding.tvToolbarTitle.text = "${sInfo.seriesTitle} • ${season.name}"
             binding.tvIptvStatusSubtitle.text = getString(R.string.iptv_episodes_count_format, season.episodes.size)
-            adapter.submitIptvList(season.episodes)
+            iptvAdapter.submitIptvList(season.episodes)
         }
     }
 }
@@ -334,7 +334,7 @@ internal fun MainActivity.loadInitialIptvStreamsPage(src: IptvSource, cType: Ipt
     currentIptvCategoryOffset = firstPage.size
     hasMoreIptvCategoryPages = (firstPage.size >= IptvRepository.DEFAULT_PAGE_SIZE)
     binding.tvIptvStatusSubtitle.text = "${currentIptvPagedList.size}${if (hasMoreIptvCategoryPages) "+" else ""} ${getString(R.string.iptv_items_unit)}"
-    adapter.submitIptvList(ArrayList(currentIptvPagedList), resetAnimation = false)
+    iptvAdapter.submitIptvList(ArrayList(currentIptvPagedList), resetAnimation = false)
 }
 
 internal fun MainActivity.loadNextIptvStreamsPage() {
@@ -365,7 +365,7 @@ internal fun MainActivity.loadNextIptvStreamsPage() {
                 currentIptvCategoryOffset += nextPage.size
                 hasMoreIptvCategoryPages = (nextPage.size >= IptvRepository.DEFAULT_PAGE_SIZE)
                 binding.tvIptvStatusSubtitle.text = "${currentIptvPagedList.size}${if (hasMoreIptvCategoryPages) "+" else ""} ${getString(R.string.iptv_items_unit)}"
-                adapter.submitIptvList(ArrayList(currentIptvPagedList), resetAnimation = false)
+                iptvAdapter.submitIptvList(ArrayList(currentIptvPagedList), resetAnimation = false)
             } else {
                 hasMoreIptvCategoryPages = false
             }
@@ -961,6 +961,7 @@ internal fun MainActivity.setSubtleIptvSyncIndicatorVisible(visible: Boolean) {
  * - Triggers again only after the user leaves the main IPTV section and reopens it.
  */
 internal fun MainActivity.triggerAutoRefreshOnEnteringIptvSection() {
+    if (BatteryOptimizationManager.isBatterySaverActive(this)) return
     if (!iptvSessionSyncGuard.onEnterMainIptvSection()) return
     val hostActivity = this
     val sources = IptvRepository.getSources(this)

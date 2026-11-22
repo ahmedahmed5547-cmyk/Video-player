@@ -441,6 +441,16 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
         )
     ) else emptyList()) + listOf(
         PremiumMenuItem(
+            iconEmoji = "🔋",
+            title = getString(R.string.battery_saver_title),
+            subtitle = if (BatteryOptimizationManager.isBatterySaverActive(this)) getString(R.string.battery_saver_status_on) else getString(R.string.battery_saver_status_off),
+            isAccentHighlighted = BatteryOptimizationManager.isBatterySaverActive(this),
+            onClick = {
+                pushSettingsBackStack { showProSettingsDialog(clearStack = false) }
+                showBatterySaverSettingsDialog()
+            }
+        ),
+        PremiumMenuItem(
             iconEmoji = "ℹ️",
             title = getString(R.string.settings_hub_about_title),
             subtitle = getString(R.string.settings_hub_about_sub, BuildConfig.VERSION_NAME),
@@ -1077,11 +1087,19 @@ internal fun MainActivity.showChangelogPage() {
     val allConfiguredReleases = listOf(
         ChangelogReleaseEntry(
             version = verName,
+            date = "2026-11-22",
+            iconEmoji = "🔋",
+            title = getString(R.string.changelog_v90_15_title, verName),
+            description = getString(R.string.changelog_v90_15_desc),
+            isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.14",
             date = "2026-11-21",
             iconEmoji = "⚡",
-            title = getString(R.string.changelog_v90_14_title, verName),
+            title = getString(R.string.changelog_v90_14_title, "90.14"),
             description = getString(R.string.changelog_v90_14_desc),
-            isLatest = true
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.13",
@@ -2068,4 +2086,80 @@ internal fun androidx.appcompat.app.AppCompatActivity.showVexoAudioEffectsStudio
         .setNegativeButton(getString(R.string.cancel)) { _, _ -> ((ctx as? MainActivity)?.popSettingsBackStack() == true) }
         .setOnCancelListener { ((ctx as? MainActivity)?.popSettingsBackStack() == true) }
         .show()
+}
+
+
+internal fun MainActivity.showBatterySaverSettingsDialog() {
+    val manualOn = BatteryOptimizationManager.isManualBatterySaverEnabled(this)
+    val autoOn = BatteryOptimizationManager.isAutoBatterySaverEnabled(this)
+    val threshold = BatteryOptimizationManager.getAutoThresholdPercent(this)
+    val showIndicator = BatteryOptimizationManager.isPlayerBatteryIndicatorEnabled(this)
+    val lowAlerts = BatteryOptimizationManager.isLowBatteryAlertsEnabled(this)
+
+    val items = listOf(
+        PremiumMenuItem(
+            iconEmoji = if (manualOn) "🔋" else "⚡",
+            title = getString(R.string.battery_saver_manual_title),
+            subtitle = if (manualOn) getString(R.string.battery_saver_manual_on_sub) else getString(R.string.battery_saver_manual_off_sub),
+            isAccentHighlighted = manualOn,
+            onClick = {
+                BatteryOptimizationManager.setManualBatterySaverEnabled(this, !manualOn)
+                showBatterySaverSettingsDialog()
+            }
+        ),
+        PremiumMenuItem(
+            iconEmoji = "🤖",
+            title = getString(R.string.battery_saver_auto_title),
+            subtitle = if (autoOn) getString(R.string.battery_saver_auto_on_sub, threshold) else getString(R.string.battery_saver_auto_off_sub),
+            isAccentHighlighted = autoOn,
+            onClick = {
+                BatteryOptimizationManager.setAutoBatterySaverEnabled(this, !autoOn)
+                showBatterySaverSettingsDialog()
+            }
+        ),
+        PremiumMenuItem(
+            iconEmoji = "📉",
+            title = getString(R.string.battery_saver_threshold_title),
+            subtitle = "$threshold%",
+            onClick = {
+                val options = arrayOf("10%", "15%", "20%", "25%")
+                val values = intArrayOf(10, 15, 20, 25)
+                AlertDialog.Builder(this)
+                    .setTitle(getString(R.string.battery_saver_threshold_title))
+                    .setItems(options) { _, which ->
+                        BatteryOptimizationManager.setAutoThresholdPercent(this, values[which])
+                        showBatterySaverSettingsDialog()
+                    }
+                    .show()
+            }
+        ),
+        PremiumMenuItem(
+            iconEmoji = "📊",
+            title = getString(R.string.battery_indicator_title),
+            subtitle = if (showIndicator) getString(R.string.enabled_label) else getString(R.string.disabled_label),
+            isAccentHighlighted = showIndicator,
+            onClick = {
+                BatteryOptimizationManager.setPlayerBatteryIndicatorEnabled(this, !showIndicator)
+                showBatterySaverSettingsDialog()
+            }
+        ),
+        PremiumMenuItem(
+            iconEmoji = "⚠️",
+            title = getString(R.string.low_battery_alerts_title),
+            subtitle = if (lowAlerts) getString(R.string.low_battery_alerts_sub) else getString(R.string.disabled_label),
+            isAccentHighlighted = lowAlerts,
+            onClick = {
+                BatteryOptimizationManager.setLowBatteryAlertsEnabled(this, !lowAlerts)
+                showBatterySaverSettingsDialog()
+            }
+        )
+    )
+
+    showPremiumMenuDialog(
+        headerIcon = "🔋",
+        title = getString(R.string.battery_saver_title),
+        subtitle = if (BatteryOptimizationManager.isBatterySaverActive(this)) getString(R.string.battery_saver_status_on) else getString(R.string.battery_saver_status_off),
+        items = items,
+        showHeaderVersionBadge = false
+    )
 }

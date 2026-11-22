@@ -28,6 +28,7 @@ import android.media.session.PlaybackState
 import android.provider.Settings
 import android.widget.Toast
 import android.net.Uri
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -133,6 +134,45 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     companion object {
         const val ACTION_PIP_AUDIO_ONLY = "com.pureplayer.video.ACTION_PIP_AUDIO_ONLY"
         const val ACTION_PIP_PLAY_PAUSE = "com.pureplayer.video.ACTION_PIP_PLAY_PAUSE"
+    }
+
+    private var batteryReceiverRegistered = false
+    private var lowBatteryNotified15 = false
+    private var lowBatteryNotified5 = false
+
+    private val batteryReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != Intent.ACTION_BATTERY_CHANGED) return
+            val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+            val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
+            val pct = if (level >= 0) ((level * 100) / scale).coerceIn(0, 100) else return
+            val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+            val isCharging = (status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL)
+
+            if (BatteryOptimizationManager.isPlayerBatteryIndicatorEnabled(this@PlayerActivity)) {
+                val icon = if (isCharging) "⚡" else "🔋"
+                binding.tvPlayerBattery.text = "$icon $pct%"
+                binding.tvPlayerBattery.visibility = View.VISIBLE
+            } else {
+                binding.tvPlayerBattery.visibility = View.GONE
+            }
+
+            if (BatteryOptimizationManager.isLowBatteryAlertsEnabled(this@PlayerActivity)) {
+                val alertLvl = BatteryOptimizationManager.evaluateLowBatteryAlert(
+                    percent = pct,
+                    isCharging = isCharging,
+                    alreadyNotified15 = lowBatteryNotified15,
+                    alreadyNotified5 = lowBatteryNotified5
+                )
+                if (alertLvl == 15) {
+                    lowBatteryNotified15 = true
+                    Toast.makeText(this@PlayerActivity, getString(R.string.low_battery_notice_15), Toast.LENGTH_LONG).show()
+                } else if (alertLvl == 5) {
+                    lowBatteryNotified5 = true
+                    Toast.makeText(this@PlayerActivity, getString(R.string.low_battery_notice_5), Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     private var wasInPipMode = false
@@ -3294,6 +3334,12 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
     override fun onResume() {
         super.onResume()
+        if (!batteryReceiverRegistered) {
+            try {
+                registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                batteryReceiverRegistered = true
+            } catch (_: Exception) {}
+        }
         hideSystemBars()
         applyThemeAndSubtitleStyle()
         binding.videoSurfaceFrame.post {
@@ -3318,6 +3364,10 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
     override fun onStop() {
         super.onStop()
+        if (batteryReceiverRegistered) {
+            try { unregisterReceiver(batteryReceiver) } catch (_: Exception) {}
+            batteryReceiverRegistered = false
+        }
         saveCurrentPositionNow()
         isEnteringPipTransition = false
         val inPip = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) isInPictureInPictureMode else false
@@ -3328,6 +3378,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             updateAutoPipParams(isPlaying = false)
             updateMediaSessionPlaybackState(isPlaying = false)
             abandonPlayerAudioFocus()
+            handler.removeCallbacksAndMessages(null)
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             if (viewsAttached && ::mediaPlayer.isInitialized) {
                 detachVlcViewsSafely()

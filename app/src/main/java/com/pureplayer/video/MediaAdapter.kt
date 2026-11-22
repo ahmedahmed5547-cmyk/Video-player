@@ -97,7 +97,8 @@ object VideoThumbnailLoader {
         imageView.setImageResource(R.drawable.ic_play_modern)
 
         return scope.launch {
-            val bmp = loadSemaphore.withPermit { fetchBitmap(context, video) }
+            val appCtx = context.applicationContext
+            val bmp = loadSemaphore.withPermit { fetchBitmap(appCtx, video) }
             if (bmp != null) {
                 memoryCache.put(key, bmp)
                 withContext(Dispatchers.Main) {
@@ -145,7 +146,8 @@ object VideoThumbnailLoader {
         imageView.setImageResource(R.drawable.ic_folder_cinema)
 
         return scope.launch {
-            val diskDir = File(context.cacheDir, "folder_thumbs").apply { mkdirs() }
+            val appCtx = context.applicationContext
+            val diskDir = File(appCtx.cacheDir, "folder_thumbs").apply { mkdirs() }
             val diskFile = File(diskDir, "${key.hashCode()}.jpg")
             var collageBmp: Bitmap? = if (diskFile.exists() && diskFile.length() > 0L) {
                 runCatching { BitmapFactory.decodeFile(diskFile.absolutePath) }.getOrNull()
@@ -348,6 +350,17 @@ class MediaAdapter(
     private var lastAnimatedPosition = -1
     var isGridMode: Boolean = false
     var isVaultMode: Boolean = false
+    var isSelectionMode: Boolean = false
+    var selectedItemKeys: Set<String> = emptySet()
+
+    fun updateSelectionState(active: Boolean, keys: Set<String>) {
+        val changed = (isSelectionMode != active || selectedItemKeys != keys)
+        isSelectionMode = active
+        selectedItemKeys = keys
+        if (changed) {
+            notifyItemRangeChanged(0, itemCount)
+        }
+    }
     private val decelerateInterpolator = DecelerateInterpolator(1.6f)
     private val overshootInterpolator = OvershootInterpolator(1.4f)
 
@@ -397,6 +410,7 @@ class MediaAdapter(
     override fun onViewRecycled(holder: MediaViewHolder) {
         super.onViewRecycled(holder)
         holder.cancelThumbnailLoad()
+            binding.tvSelectionCheck.visibility = View.GONE
         holder.itemView.animate().cancel()
         holder.itemView.alpha = 1f
         holder.itemView.translationY = 0f
@@ -536,6 +550,9 @@ class MediaAdapter(
 
                     binding.tvTitle.text = if (isVaultMode) "🛡️ ${item.name}" else item.name
                     binding.tvSubtitle.text = ctx.getString(R.string.videos_count_format, item.videos.size)
+                    val folderKey = SelectionViewModel.keyForFolder(item)
+                    val isFolderSelected = isSelectionMode && selectedItemKeys.contains(folderKey)
+                    applySelectionVisual(ctx, isFolderSelected, accentColor)
                     binding.root.setOnClickListener { onFolderClick(item) }
                     binding.root.setOnLongClickListener {
                         onFolderLongClick(item)
@@ -581,6 +598,9 @@ class MediaAdapter(
                     binding.tvSubtitle.text = "$sizeMb$resShort$resumeBadge"
 
                     thumbJob = VideoThumbnailLoader.loadVideoThumbnail(ctx, item, binding.ivIcon, accentColor)
+                    val videoKey = SelectionViewModel.keyForVideo(item)
+                    val isVideoSelected = isSelectionMode && selectedItemKeys.contains(videoKey)
+                    applySelectionVisual(ctx, isVideoSelected, accentColor)
                     binding.root.setOnClickListener { onVideoClick(item) }
                     binding.root.setOnLongClickListener {
                         onVideoLongClick(item)
@@ -844,6 +864,29 @@ class MediaAdapter(
             } else {
                 binding.root.alpha = 1f
                 binding.root.translationY = 0f
+            }
+        }
+
+        private fun applySelectionVisual(ctx: Context, selected: Boolean, accentColor: Int) {
+            if (selected) {
+                binding.root.strokeColor = accentColor
+                binding.root.strokeWidth = dp(ctx, 2)
+                binding.tvSelectionCheck.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(accentColor)
+                }
+                binding.tvSelectionCheck.visibility = View.VISIBLE
+                if (!BatteryOptimizationManager.shouldReduceAnimations(ctx)) {
+                    binding.tvSelectionCheck.scaleX = 0.65f
+                    binding.tvSelectionCheck.scaleY = 0.65f
+                    binding.tvSelectionCheck.animate().scaleX(1f).scaleY(1f).setDuration(150L)
+                        .setInterpolator(OvershootInterpolator(1.6f)).start()
+                } else {
+                    binding.tvSelectionCheck.scaleX = 1f
+                    binding.tvSelectionCheck.scaleY = 1f
+                }
+            } else {
+                binding.tvSelectionCheck.visibility = View.GONE
             }
         }
 
