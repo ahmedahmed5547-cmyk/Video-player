@@ -480,8 +480,7 @@ internal fun MainActivity.startBatchCopyOrMoveFlow(
         return
     }
 
-    val labels = dirEntries.map { "${it.key}
-${it.value.absolutePath}" }.toTypedArray()
+    val labels = dirEntries.map { "${it.key}\n${it.value.absolutePath}" }.toTypedArray()
     val titleRes = if (isMove) R.string.selection_pick_dest_move else R.string.selection_pick_dest_copy
     AlertDialog.Builder(this)
         .setTitle(getString(titleRes))
