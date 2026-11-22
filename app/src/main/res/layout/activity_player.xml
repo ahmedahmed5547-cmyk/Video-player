@@ -335,6 +335,22 @@
                 android:src="@drawable/ic_sleep_timer"
                 android:tint="#FFFFFF" />
 
+            <TextView
+                android:id="@+id/tvPlayerBattery"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:background="#66000000"
+                android:paddingStart="7dp"
+                android:paddingTop="3dp"
+                android:paddingEnd="7dp"
+                android:paddingBottom="3dp"
+                android:text="🔋 --%"
+                android:textColor="#E2E8F0"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
             <ImageButton
                 android:id="@+id/btnAudioOnly"
                 android:layout_width="38dp"

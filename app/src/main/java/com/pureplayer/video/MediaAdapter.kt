@@ -410,7 +410,6 @@ class MediaAdapter(
     override fun onViewRecycled(holder: MediaViewHolder) {
         super.onViewRecycled(holder)
         holder.cancelThumbnailLoad()
-            binding.tvSelectionCheck.visibility = View.GONE
         holder.itemView.animate().cancel()
         holder.itemView.alpha = 1f
         holder.itemView.translationY = 0f
@@ -454,6 +453,7 @@ class MediaAdapter(
 
         fun bind(item: Any, position: Int) {
             cancelThumbnailLoad()
+            binding.tvSelectionCheck.visibility = View.GONE
             val ctx = binding.root.context
             val accentColor = PlaybackStore.getAccentColor(ctx)
             val surfaceColor = PlaybackStore.getSurfaceColor(ctx)

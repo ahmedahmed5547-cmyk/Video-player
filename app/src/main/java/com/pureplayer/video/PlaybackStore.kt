@@ -732,6 +732,13 @@ object PlaybackStore {
         prefs(context).edit().putBoolean(KEY_PRIVACY_BIOMETRIC, enabled).apply()
     }
 
+    
+    fun setFolderLocked(context: Context, folderName: String, locked: Boolean) {
+        val updated = getLockedFolders(context).toMutableSet()
+        if (locked) updated.add(folderName) else updated.remove(folderName)
+        setLockedFolders(context, updated)
+    }
+
     fun getLockedFolders(context: Context): Set<String> =
         prefs(context).getStringSet(KEY_LOCKED_FOLDERS, emptySet())?.toSet() ?: emptySet()
 

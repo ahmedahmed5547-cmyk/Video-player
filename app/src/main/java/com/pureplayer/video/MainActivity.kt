@@ -120,7 +120,22 @@ class MainActivity : AppCompatActivity() {
 
     private var publicFoldersOnly = listOf<VideoFolder>()
     internal var publicVideosFlat = listOf<VideoItem>()
-    private var vaultFoldersOnly = listOf<VideoFolder>()
+    internal var vaultFoldersOnly = listOf<VideoFolder>()
+    internal val selectionViewModel: SelectionViewModel by lazy {
+        androidx.lifecycle.ViewModelProvider(this)[SelectionViewModel::class.java]
+    }
+    internal lateinit var iptvAdapter: MediaAdapter
+    internal val batchDeleteRequestLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        selectionViewModel.exitSelection()
+        if (result.resultCode == RESULT_OK) {
+            Toast.makeText(this, getString(R.string.video_deleted_toast), Toast.LENGTH_SHORT).show()
+            videoLibraryViewModel.refreshLibrary(force = true, showLoadingIfEmpty = false)
+        } else {
+            Toast.makeText(this, getString(R.string.video_delete_failed_toast), Toast.LENGTH_SHORT).show()
+        }
+    }
     internal var vaultVideosFlat = listOf<VideoItem>()
 
     // 0 = Video Folders, 1 = Private Vault, 2 = IPTV
@@ -191,7 +206,7 @@ class MainActivity : AppCompatActivity() {
     }
     private var activeAudioSection = AudioTabSection.TRACKS
 
-    private val videoLibraryViewModel: VideoLibraryViewModel by lazy {
+    internal val videoLibraryViewModel: VideoLibraryViewModel by lazy {
         ViewModelProvider(this)[VideoLibraryViewModel::class.java]
     }
 
