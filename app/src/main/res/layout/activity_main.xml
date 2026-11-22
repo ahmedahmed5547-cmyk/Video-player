@@ -664,6 +664,102 @@
             android:tint="#94A3B8" />
     </LinearLayout>
 
+    <!-- Left-Side Navigation Rail for Android TV & Expanded Wide Screens (>= 840dp; hidden on phones) -->
+    <LinearLayout
+        android:id="@+id/sideNavRail"
+        android:layout_width="76dp"
+        android:layout_height="0dp"
+        android:background="#131C2E"
+        android:elevation="12dp"
+        android:gravity="center_horizontal|top"
+        android:orientation="vertical"
+        android:paddingTop="18dp"
+        android:paddingBottom="18dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topBar">
+
+        <FrameLayout
+            android:id="@+id/railTabVideos"
+            android:layout_width="56dp"
+            android:layout_height="52dp"
+            android:layout_marginBottom="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:nextFocusRight="@id/recyclerView"
+            android:contentDescription="@string/tab_video_folders">
+
+            <ImageView
+                android:id="@+id/ivRailVideos"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_nav_video_filled"
+                android:tint="#38BDF8" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/railTabAudio"
+            android:layout_width="56dp"
+            android:layout_height="52dp"
+            android:layout_marginBottom="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:nextFocusRight="@id/audioTabListView"
+            android:contentDescription="@string/tab_audio">
+
+            <ImageView
+                android:id="@+id/ivRailAudio"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_nav_audio_outlined"
+                android:tint="#94A3B8" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/railTabVault"
+            android:layout_width="56dp"
+            android:layout_height="52dp"
+            android:layout_marginBottom="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:nextFocusRight="@id/recyclerView"
+            android:contentDescription="@string/tab_vault">
+
+            <ImageView
+                android:id="@+id/ivRailVault"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_nav_private_outlined"
+                android:tint="#94A3B8" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/railTabIptv"
+            android:layout_width="56dp"
+            android:layout_height="52dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:nextFocusRight="@id/iptvRecyclerView"
+            android:contentDescription="@string/tab_iptv_compact">
+
+            <ImageView
+                android:id="@+id/ivRailIptv"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_nav_iptv_outlined"
+                android:tint="#94A3B8" />
+        </FrameLayout>
+    </LinearLayout>
+
     <!-- Bottom Navigation Bar: Material 3 Icon-Only (Video, Audio, Private, IPTV) -->
     <LinearLayout
         android:id="@+id/bottomNavBar"

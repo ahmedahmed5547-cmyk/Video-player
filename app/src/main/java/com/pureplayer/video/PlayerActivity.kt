@@ -1367,6 +1367,74 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                     showVerticalSliderIndicator(isVolume = true, percent = pct)
                     return true
                 }
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                    val controlsVisible = (binding.controlsContainer.visibility == View.VISIBLE)
+                    if (!controlsVisible) {
+                        if (::mediaPlayer.isInitialized) {
+                            if (mediaPlayer.isPlaying) {
+                                mediaPlayer.pause()
+                                updatePlayPauseIcon(false)
+                            } else {
+                                mediaPlayer.play()
+                                updatePlayPauseIcon(true)
+                            }
+                        }
+                        showControls()
+                        scheduleHideControls()
+                        return true
+                    } else {
+                        scheduleHideControls()
+                    }
+                }
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    if (binding.controlsContainer.visibility != View.VISIBLE) {
+                        if (::mediaPlayer.isInitialized) {
+                            val target = (mediaPlayer.time - 10_000L).coerceAtLeast(0L)
+                            mediaPlayer.time = target
+                            showToastIndicator("⏪ -10s")
+                        }
+                        return true
+                    } else {
+                        scheduleHideControls()
+                    }
+                }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    if (binding.controlsContainer.visibility != View.VISIBLE) {
+                        if (::mediaPlayer.isInitialized) {
+                            val len = mediaPlayer.length.coerceAtLeast(0L)
+                            val target = if (len > 0L) (mediaPlayer.time + 10_000L).coerceAtMost(len) else (mediaPlayer.time + 10_000L)
+                            mediaPlayer.time = target
+                            showToastIndicator("⏩ +10s")
+                        }
+                        return true
+                    } else {
+                        scheduleHideControls()
+                    }
+                }
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    if (binding.controlsContainer.visibility != View.VISIBLE) {
+                        val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                        val nextVol = (audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) + 1).coerceAtMost(maxVol)
+                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, nextVol, 0)
+                        val pct = ((nextVol.toFloat() / maxVol.toFloat()) * 100).toInt()
+                        showVerticalSliderIndicator(isVolume = true, percent = pct)
+                        return true
+                    } else {
+                        scheduleHideControls()
+                    }
+                }
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    if (binding.controlsContainer.visibility != View.VISIBLE) {
+                        val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                        val nextVol = (audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) - 1).coerceAtLeast(0)
+                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, nextVol, 0)
+                        val pct = ((nextVol.toFloat() / maxVol.toFloat()) * 100).toInt()
+                        showVerticalSliderIndicator(isVolume = true, percent = pct)
+                        return true
+                    } else {
+                        scheduleHideControls()
+                    }
+                }
             }
         }
         return super.dispatchKeyEvent(event)

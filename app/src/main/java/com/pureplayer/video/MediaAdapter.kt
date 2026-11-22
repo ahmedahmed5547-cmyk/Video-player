@@ -423,6 +423,23 @@ class MediaAdapter(
         private var thumbJob: Job? = null
 
         init {
+            binding.root.isFocusable = true
+            binding.root.setOnFocusChangeListener { v, hasFocus ->
+                val accent = PlaybackStore.getAccentColor(v.context)
+                val card = v as? com.google.android.material.card.MaterialCardView
+                if (hasFocus) {
+                    card?.strokeColor = accent
+                    card?.strokeWidth = dp(v.context, 3)
+                    card?.cardElevation = dp(v.context, 8).toFloat()
+                    if (!BatteryOptimizationManager.shouldReduceAnimations(v.context)) {
+                        v.animate().scaleX(1.03f).scaleY(1.03f).setDuration(120L).start()
+                    }
+                } else {
+                    card?.strokeWidth = dp(v.context, 1)
+                    card?.cardElevation = dp(v.context, 2).toFloat()
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(100L).start()
+                }
+            }
             binding.root.setOnTouchListener { v, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {

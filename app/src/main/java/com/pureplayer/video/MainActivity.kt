@@ -665,6 +665,22 @@ class MainActivity : AppCompatActivity() {
         } else {
             binding.tvVaultBadge.visibility = View.GONE
         }
+
+        // Sync Left-Side Navigation Rail for Android TV & Expanded Wide Screens
+        val surfaceColor = PlaybackStore.getSurfaceColor(this)
+        binding.sideNavRail.setBackgroundColor(surfaceColor)
+        fun styleRailTab(tab: View, icon: ImageView, active: Boolean, filledRes: Int, outlinedRes: Int, label: String) {
+            tab.isSelected = active
+            tab.contentDescription = label
+            TooltipCompat.setTooltipText(tab, label)
+            tab.background = createPillBg(active)
+            icon.setImageResource(if (active) filledRes else outlinedRes)
+            icon.imageTintList = ColorStateList.valueOf(if (active) accent else inactiveColor)
+        }
+        styleRailTab(binding.railTabVideos, binding.ivRailVideos, isVideos, R.drawable.ic_nav_video_filled, R.drawable.ic_nav_video_outlined, getString(R.string.tab_video_folders_compact))
+        styleRailTab(binding.railTabAudio, binding.ivRailAudio, isAudio, R.drawable.ic_nav_audio_filled, R.drawable.ic_nav_audio_outlined, getString(R.string.tab_audio))
+        styleRailTab(binding.railTabVault, binding.ivRailVault, isVault, R.drawable.ic_nav_private_filled, R.drawable.ic_nav_private_outlined, vaultLabel)
+        styleRailTab(binding.railTabIptv, binding.ivRailIptv, isIptv, R.drawable.ic_nav_iptv_filled, R.drawable.ic_nav_iptv_outlined, getString(R.string.tab_iptv_compact))
     }
 
     internal fun calculateAdaptiveGridSpanCount(): Int {
@@ -697,6 +713,24 @@ class MainActivity : AppCompatActivity() {
         }
         if (binding.iptvRecyclerView.paddingLeft != horizPad || binding.iptvRecyclerView.paddingRight != horizPad) {
             binding.iptvRecyclerView.setPadding(horizPad, binding.iptvRecyclerView.paddingTop, horizPad, binding.iptvRecyclerView.paddingBottom)
+        }
+        val isTvDevice = TvFocusHelper.isTelevisionDevice(this)
+        val useSideRail = TvFocusHelper.shouldUseSideNavigationRail(isTvDevice, cfg.screenWidthDp)
+        val (overscanH, overscanV) = TvFocusHelper.getOverscanMarginsDp(isTvDevice)
+        val overscanHPx = dp(overscanH)
+        val overscanVPx = dp(overscanV)
+        if (binding.mainRoot.paddingLeft != overscanHPx || binding.mainRoot.paddingTop != overscanVPx) {
+            binding.mainRoot.setPadding(overscanHPx, overscanVPx, overscanHPx, overscanVPx)
+        }
+        binding.sideNavRail.visibility = if (useSideRail) View.VISIBLE else View.GONE
+        binding.bottomNavBar.visibility = if (useSideRail) View.GONE else View.VISIBLE
+        val contentStartMargin = if (useSideRail) dp(76) else 0
+        listOf(binding.swipeRefresh, binding.iptvRecyclerView, binding.audioTabContainer, binding.iptvHeaderBar).forEach { v ->
+            val lp = v.layoutParams as? ViewGroup.MarginLayoutParams
+            if (lp != null && lp.marginStart != contentStartMargin) {
+                lp.marginStart = contentStartMargin
+                v.layoutParams = lp
+            }
         }
         val navSidePad = dp(FoldableAdaptiveMath.computeBottomNavSidePaddingDp(cfg.screenWidthDp))
         if (binding.bottomNavBar.paddingLeft != navSidePad || binding.bottomNavBar.paddingRight != navSidePad) {
@@ -1519,6 +1553,11 @@ class MainActivity : AppCompatActivity() {
             updateBottomTabsVisualState()
             showInPlaceAudioLibraryTab()
         }
+
+        binding.railTabVideos.setOnClickListener { binding.tabVideos.performClick() }
+        binding.railTabAudio.setOnClickListener { binding.tabAudio.performClick() }
+        binding.railTabVault.setOnClickListener { binding.tabVault.performClick() }
+        binding.railTabIptv.setOnClickListener { binding.tabIptv.performClick() }
 
         binding.btnMiniPlayPause.setOnClickListener {
             VexoPlaybackService.sendAction(this, VexoPlaybackService.ACTION_TOGGLE_PLAY_PAUSE)

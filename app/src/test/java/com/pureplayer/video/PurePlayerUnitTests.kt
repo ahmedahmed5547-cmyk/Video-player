@@ -527,4 +527,16 @@ class PurePlayerUnitTests {
         assertEquals(600, FoldableAdaptiveMath.computeEffectiveMenuWidthDp(640))
         assertEquals(0, FoldableAdaptiveMath.computeEffectiveMenuWidthDp(420))
     }
+
+    @Test
+    fun tvFocusHelper_navigationRailAndOverscan() {
+        assertFalse(TvFocusHelper.shouldUseSideNavigationRail(isTv = false, screenWidthDp = 360))
+        assertFalse(TvFocusHelper.shouldUseSideNavigationRail(isTv = false, screenWidthDp = 640))
+        assertTrue(TvFocusHelper.shouldUseSideNavigationRail(isTv = false, screenWidthDp = 840))
+        assertTrue(TvFocusHelper.shouldUseSideNavigationRail(isTv = false, screenWidthDp = 1280))
+        assertTrue(TvFocusHelper.shouldUseSideNavigationRail(isTv = true, screenWidthDp = 720))
+
+        assertEquals(Pair(36, 20), TvFocusHelper.getOverscanMarginsDp(isTv = true))
+        assertEquals(Pair(0, 0), TvFocusHelper.getOverscanMarginsDp(isTv = false))
+    }
 }
