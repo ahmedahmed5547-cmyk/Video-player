@@ -547,7 +547,7 @@ private fun MainActivity.showDestinationFolderPicker(
             if (!exists()) mkdirs()
             VaultFileOperations.ensureNoMediaMarker(this)
         }
-        candidateDirs["VEXO Vault"] = privateVaultDir
+        candidateDirs["V Player Vault"] = privateVaultDir
     }
 
     val dirEntries = candidateDirs.entries.toList()

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Subtle inner shadow base -->
+    <path
+        android:fillColor="#44000000"
+        android:pathData="M54,56m-31,0a31,31 0,1 1,62 0a31,31 0,1 1,-62 0" />
+    <!-- Smoked frosted dark glass lens -->
+    <path
+        android:strokeColor="#667DD3FC"
+        android:strokeWidth="1.6"
+        android:pathData="M54,54m-30,0a30,30 0,1 1,60 0a30,30 0,1 1,-60 0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="24"
+                android:startY="24"
+                android:endX="84"
+                android:endY="84"
+                android:startColor="#3DFFFFFF"
+                android:centerColor="#1A38BDF8"
+                android:endColor="#14090D16" />
+        </aapt:attr>
+    </path>
+    <!-- Crisp glass specular arc -->
+    <path
+        android:fillColor="#38FFFFFF"
+        android:pathData="M30,44C34,30 50,24 68,28C52,29 39,37 33,49Z" />
+    <!-- Luminous cyan play triangle -->
+    <path android:pathData="M43,35L74,54L43,73Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="43"
+                android:startY="35"
+                android:endX="74"
+                android:endY="73"
+                android:startColor="#7DD3FC"
+                android:endColor="#38BDF8" />
+        </aapt:attr>
+    </path>
+</vector>

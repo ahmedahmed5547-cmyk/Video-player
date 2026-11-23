@@ -610,7 +610,7 @@
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:text="VEXO Player"
+                android:text="V Player"
                 android:textColor="#FFFFFF"
                 android:textSize="13.5sp"
                 android:textStyle="bold" />

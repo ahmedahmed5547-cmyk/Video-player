@@ -98,7 +98,7 @@ class VexoPlaybackService : MediaLibraryService() {
                 action = ACTION_PLAY_AUDIO_ONLY_VIDEO
                 putExtra(EXTRA_URI, uri.toString())
                 putExtra(EXTRA_TITLE, title)
-                putExtra(EXTRA_SUBTITLE, "VEXO Player • Audio Only")
+                putExtra(EXTRA_SUBTITLE, "V Player • Audio Only")
                 putExtra(EXTRA_POSITION_MS, positionMs)
                 putExtra(EXTRA_SPEED, speed)
                 putExtra(EXTRA_IS_VIDEO_AUDIO_ONLY, true)
@@ -211,8 +211,8 @@ class VexoPlaybackService : MediaLibraryService() {
             when (intent.action) {
                 ACTION_PLAY_AUDIO_ONLY_VIDEO -> {
                     val uriStr = intent.getStringExtra(EXTRA_URI).orEmpty()
-                    val title = intent.getStringExtra(EXTRA_TITLE) ?: "VEXO Player"
-                    val sub = intent.getStringExtra(EXTRA_SUBTITLE) ?: "VEXO Player • Audio Only"
+                    val title = intent.getStringExtra(EXTRA_TITLE) ?: "V Player"
+                    val sub = intent.getStringExtra(EXTRA_SUBTITLE) ?: "V Player • Audio Only"
                     val pos = intent.getLongExtra(EXTRA_POSITION_MS, 0L)
                     val speed = intent.getFloatExtra(EXTRA_SPEED, 1.0f).coerceIn(0.25f, 4.0f)
                     if (uriStr.isNotEmpty()) {
@@ -250,7 +250,7 @@ class VexoPlaybackService : MediaLibraryService() {
                                 .setMediaMetadata(
                                     MediaMetadata.Builder()
                                         .setTitle(titles.getOrElse(idx) { "Audio Track" })
-                                        .setArtist(artists.getOrElse(idx) { "VEXO Player" })
+                                        .setArtist(artists.getOrElse(idx) { "V Player" })
                                         .build()
                                 )
                                 .build()
@@ -285,7 +285,7 @@ class VexoPlaybackService : MediaLibraryService() {
             isActive = current != null && exo.playbackState != Player.STATE_IDLE,
             isPlaying = exo.isPlaying,
             isFromVideoAudioOnly = isCurrentSessionFromVideo,
-            title = meta?.title?.toString() ?: "VEXO Player",
+            title = meta?.title?.toString() ?: "V Player",
             subtitle = meta?.artist?.toString() ?: "",
             currentUri = current?.localConfiguration?.uri?.toString() ?: current?.mediaId ?: "",
             positionMs = exo.currentPosition.coerceAtLeast(0L),
@@ -329,7 +329,7 @@ class VexoPlaybackService : MediaLibraryService() {
             browser: MediaSession.ControllerInfo,
             params: LibraryParams?
         ): ListenableFuture<LibraryResult<MediaItem>> {
-            val rootItem = buildBrowsableNode(NODE_ROOT, "VEXO Player", MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+            val rootItem = buildBrowsableNode(NODE_ROOT, "V Player", MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
             return Futures.immediateFuture(LibraryResult.ofItem(rootItem, params))
         }
 

@@ -324,7 +324,7 @@ internal fun MainActivity.showPremiumMenuDialog(
     title: String,
     subtitle: String?,
     items: List<PremiumMenuItem>,
-    showHeaderVersionBadge: Boolean = true
+    showHeaderVersionBadge: Boolean = false
 ) {
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
@@ -422,7 +422,7 @@ internal fun MainActivity.showPremiumMenuDialog(
             setStroke(dp(1), Color.argb(95, Color.red(accent), Color.green(accent), Color.blue(accent)))
         }
     }
-    if (showHeaderVersionBadge) {
+    if (false && showHeaderVersionBadge) {
         titlePillRow.addView(tvVersionPill)
     }
     headerTextCol.addView(titlePillRow)
@@ -656,7 +656,7 @@ internal fun MainActivity.showPremiumMenuDialog(
 
     // Refined Luxury Footer
     val tvFooter = TextView(this).apply {
-        text = "VEXO Player • Crafted by Ahmed M Moumen"
+        text = "V Player • Crafted by Ahmed M Moumen"
         gravity = Gravity.CENTER
         setTextColor(secondaryText)
         textSize = 11.5f

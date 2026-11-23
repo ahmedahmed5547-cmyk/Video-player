@@ -1,3 +1,12 @@
+## v90.21 (2026-11-23)
+- **Brand Identity — V Player**: Renamed all user-visible labels to **V Player** while keeping `applicationId = "com.pureplayer.video"`, package structure, signing config, preferences, and databases completely unchanged for seamless in-place updates.
+- **Subtitle Menu Simplified**: Reordered player subtitle menu to **1. Auto search** (with **Search by name** as inline fallback only) and **2. Translate subtitle to my language**, followed by existing items in order.
+- **Subtitle Translation — Frozen Cue Fix & Quality Upgrade**:
+  - Strictly preserved original `[startMs, endMs]` per cue (`mergeTranslatedTextsPreservingTiming`), enforced half-open `[startMs, endMs)` active-cue resolution (`resolveActiveCueAt`), polled at `100ms` even when paused, restarted subtitle updates in `onResume()`, and added `translationRequestId` stale-result cancellation.
+  - Added neighboring-cue context, proper-noun glossary hints, `[music]`/`♪`/timecode protection, automatic source-language detection, Arabic & Hebrew RTL formatting, readable line wrapping, per-cue persistent JSON caching, current-position prefetch, and **Bilingual Subtitles** mode.
+- **Clean Version Display**: Removed app version badges from Settings & About headers; version number now appears inside **Changelog** only.
+- **Adaptive Launcher Icon Styles**: Added 6 adaptive vector icon variants (**Default**, **Material You**, **Glass Light**, **Glass Dark**, **Obsidian Dark**, **Aurora Gradient**) with `activity-alias` switching (`AppIconManager`) and a 3-column preview grid in **Appearance**.
+
 ## v90.20 (2026-11-22)
 - **Bug Fix — Unified Player Gesture State Machine**: Replaced legacy `GestureDetector` with pure-Kotlin `PlayerGestureStateMachine` enforcing strict axis locking (Brightness / Volume / Seek), long-press cancellation on movement, exact playback-speed restoration across release/cancel/multi-touch/lifecycle events, preview-then-commit horizontal seek, ±10s double-tap, 24dp edge-zone & controls exclusion, and boundary haptics.
 - **Bug Fix — Status Bar Overlap**: Preserved system-bar `WindowInsets` alongside TV overscan padding in `MainActivity` and re-applied insets and system bars across `onResume`, `onWindowFocusChanged`, `onConfigurationChanged`, and exiting `PlayerActivity`.

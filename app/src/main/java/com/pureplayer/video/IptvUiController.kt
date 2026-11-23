@@ -1527,7 +1527,7 @@ internal fun MainActivity.addBuiltInDemoIptvSource() {
         }
         syncIptvSourceWithProgress(
             existingSourceId = "demo_builtin_source",
-            name = "VEXO Player Demo",
+            name = "V Player Demo",
             type = IptvSourceType.M3U_FILE,
             serverOrM3uUrl = Uri.fromFile(demoFile).toString()
         )

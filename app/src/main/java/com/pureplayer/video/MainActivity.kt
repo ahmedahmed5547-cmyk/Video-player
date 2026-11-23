@@ -289,6 +289,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        AppIconManager.ensureSavedIconApplied(this)
         if (savedInstanceState != null) {
             val savedTab = savedInstanceState.getInt("STATE_MAIN_TAB", 0)
             // Security: Never restore Vault unlocked state across process recreation; require re-authentication
@@ -2378,7 +2379,7 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         binding.miniAudioPlayerBar.visibility = View.VISIBLE
                         binding.tvMiniAudioTitle.text = st.title
-                        binding.tvMiniAudioSubtitle.text = st.subtitle.ifBlank { "VEXO Player" }
+                        binding.tvMiniAudioSubtitle.text = st.subtitle.ifBlank { "V Player" }
                         binding.btnMiniPlayPause.setImageResource(
                             if (st.isPlaying) R.drawable.ic_pause_modern else R.drawable.ic_play_modern
                         )
@@ -2503,7 +2504,7 @@ class MainActivity : AppCompatActivity() {
                 showVexoAudioEffectsStudioDialog()
             }
         )
-        showPremiumMenuDialog("🎵", getString(R.string.tab_audio), "VEXO Audio Library • Android Auto Ready", items)
+        showPremiumMenuDialog("🎵", getString(R.string.tab_audio), "V Player Audio Library • Android Auto Ready", items)
     }
 
     private fun showAudioTracksListDialog(header: String, tracks: List<AudioTrackItem>) {

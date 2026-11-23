@@ -364,7 +364,7 @@ class PurePlayerUnitTests {
 
     @Test
     fun testResponsiveUiMetricsAcrossPhonesTabletsAndLargeScreens() {
-        assertEquals("VEXO Player", ResponsiveUiMetrics.APP_DISPLAY_NAME)
+        assertEquals("V Player", ResponsiveUiMetrics.APP_DISPLAY_NAME)
         assertEquals("IPTV and Video player", ResponsiveUiMetrics.APP_SUBTITLE_NAME)
         assertEquals(DeviceFormFactor.COMPACT_PHONE, ResponsiveUiMetrics.classifyDevice(320, 320))
         assertEquals(DeviceFormFactor.STANDARD_PHONE, ResponsiveUiMetrics.classifyDevice(390, 390))
@@ -755,5 +755,59 @@ class PurePlayerUnitTests {
         sm.onPointerEvent(PointerInput(PointerAction.DOWN, 800f, 240f, 3150L, 1, 1000f, 600f))
         sm.onPointerEvent(PointerInput(PointerAction.UP, 800f, 240f, 3190L, 1, 1000f, 600f))
         assertEquals(2, cb.doubleTapZones.size)
+    }
+
+    @Test
+    fun v9021_subtitleTimingClearingBilingualAndIconAliases() {
+        val orig = listOf(
+            SubtitleCue(1_000L, 3_500L, "Hello [music]"),
+            SubtitleCue(5_000L, 7_000L, "How are you?")
+        )
+        val merged = SubtitleAutoTranslator.mergeTranslatedTextsPreservingTiming(
+            orig,
+            listOf("مرحباً [music]", "كيف حالك؟"),
+            bilingual = false
+        )
+        assertEquals(2, merged.size)
+        assertEquals(1_000L, merged[0].startMs)
+        assertEquals(3_500L, merged[0].endMs)
+        assertEquals(5_000L, merged[1].startMs)
+        assertEquals(7_000L, merged[1].endMs)
+
+        val bi = SubtitleAutoTranslator.mergeTranslatedTextsPreservingTiming(
+            orig,
+            listOf("مرحباً [music]", "كيف حالك؟"),
+            bilingual = true
+        )
+        assertTrue(bi[0].text.contains("مرحباً [music]"))
+        assertTrue(bi[0].text.contains("Hello [music]"))
+        assertEquals(3_500L, bi[0].endMs)
+
+        assertNull(SubtitleAutoTranslator.resolveActiveCueAt(merged, 999L))
+        assertEquals("مرحباً [music]", SubtitleAutoTranslator.resolveActiveCueAt(merged, 1_000L)?.text)
+        assertEquals("مرحباً [music]", SubtitleAutoTranslator.resolveActiveCueAt(merged, 3_499L)?.text)
+        assertNull(SubtitleAutoTranslator.resolveActiveCueAt(merged, 3_500L))
+        assertNull(SubtitleAutoTranslator.resolveActiveCueAt(merged, 4_200L))
+        assertEquals("كيف حالك؟", SubtitleAutoTranslator.resolveActiveCueAt(merged, 5_000L)?.text)
+        assertNull(SubtitleAutoTranslator.resolveActiveCueAt(merged, 7_000L))
+
+        val prot = SubtitleAutoTranslator.protectInlineTags("♪ [music] Meet at 12:30 <i>now</i>")
+        assertFalse(prot.cleanText.contains("[music]"))
+        assertFalse(prot.cleanText.contains("♪"))
+        assertFalse(prot.cleanText.contains("12:30"))
+        assertEquals("♪ [music] Meet at 12:30 <i>now</i>", SubtitleAutoTranslator.restoreInlineTags(prot.cleanText, prot.tokens))
+
+        assertEquals("ar", SubtitleAutoTranslator.detectSourceLanguage(listOf(SubtitleCue(0, 1000, "مرحباً بكم في الفيلم"))))
+        assertEquals("en", SubtitleAutoTranslator.detectSourceLanguage(listOf(SubtitleCue(0, 1000, "What are you doing and where is the car?"))))
+
+        for (opt in AppIconManager.allOptions) {
+            val states = AppIconManager.computeAliasStates(opt.id)
+            assertEquals(AppIconManager.allAliasClassNames.size, states.size)
+            assertEquals(1, states.values.count { it })
+            assertTrue(states[opt.aliasClassName] == true)
+        }
+        val fallback = AppIconManager.computeAliasStates("nonexistent_style")
+        assertEquals(1, fallback.values.count { it })
+        assertTrue(fallback["com.pureplayer.video.LauncherAliasDefault"] == true)
     }
 }

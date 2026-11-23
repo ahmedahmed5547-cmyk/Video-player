@@ -20,7 +20,7 @@
     <path
         android:fillColor="#0A0A0F"
         android:pathData="M85,72l30,18 -30,18z" />
-    <!-- Stylized geometric VEXO bars on the right -->
+    <!-- Stylized geometric V Player emblem on the right -->
     <path
         android:fillColor="#FFFFFF"
         android:pathData="M155,70h12l12,32 12,-32h12l-18,44h-12z" />

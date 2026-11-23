@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Subtle tonal Material You inner squircle container inside safe zone -->
+    <path
+        android:fillColor="#BAE6FD"
+        android:pathData="M30,22h48c4.4,0 8,3.6 8,8v48c0,4.4 -3.6,8 -8,8h-48c-4.4,0 -8,-3.6 -8,-8v-48c0,-4.4 3.6,-8 8,-8z" />
+    <!-- Iconic V Player play triangle in deep Material tonal blue -->
+    <path
+        android:fillColor="#0369A1"
+        android:pathData="M41,33L75,54L41,75Z" />
+</vector>

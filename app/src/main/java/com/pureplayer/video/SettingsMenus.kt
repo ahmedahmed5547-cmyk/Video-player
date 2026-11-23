@@ -431,7 +431,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
         PremiumMenuItem(
             iconEmoji = "🚀",
             title = getString(R.string.settings_hub_updates_title),
-            subtitle = "v${BuildConfig.VERSION_NAME} • GitHub Release Auto-Updater",
+            subtitle = "GitHub Release Auto-Updater",
             sectionHeader = getString(R.string.settings_sec_system_updates),
             iconResId = R.drawable.ic_lux_update,
             onClick = {
@@ -453,7 +453,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
         PremiumMenuItem(
             iconEmoji = "ℹ️",
             title = getString(R.string.settings_hub_about_title),
-            subtitle = getString(R.string.settings_hub_about_sub, BuildConfig.VERSION_NAME),
+            subtitle = getString(R.string.settings_hub_about_sub),
             sectionHeader = if (!BuildConfig.ENABLE_IN_APP_UPDATER) getString(R.string.settings_sec_system_updates) else null,
             onClick = {
                 pushSettingsBackStack { showProSettingsDialog(false) }
@@ -465,7 +465,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
     showPremiumMenuDialog(
         headerIcon = "⚙️",
         title = getString(R.string.settings_header),
-        subtitle = "${getString(R.string.app_name)} v${BuildConfig.VERSION_NAME}",
+        subtitle = getString(R.string.app_name),
         items = items
     )
 }
@@ -638,6 +638,19 @@ internal fun MainActivity.showSettingsAppearanceDisplayPage() {
             onClick = {
                 pushSettingsBackStack { showSettingsAppearanceDisplayPage() }
                 showThemeSelectorDialog()
+            }
+        ),
+        PremiumMenuItem(
+            iconEmoji = "🎯",
+            title = getString(R.string.setting_app_icon_title),
+            subtitle = getString(
+                AppIconManager.allOptions.firstOrNull { it.id == PlaybackStore.getAppIconStyle(this) }?.titleResId
+                    ?: R.string.icon_style_default
+            ),
+            isAccentHighlighted = true,
+            onClick = {
+                pushSettingsBackStack { showSettingsAppearanceDisplayPage() }
+                showAppIconSelectorDialog()
             }
         ),
         PremiumMenuItem(
@@ -1059,12 +1072,11 @@ internal fun MainActivity.showGraphicEqualizerDialog() {
 }
 
 internal fun MainActivity.showAboutAppPage() {
-    val verName = BuildConfig.VERSION_NAME
     val items = listOf(
         PremiumMenuItem(
             iconEmoji = "📋",
             title = getString(R.string.about_changelog_title),
-            subtitle = getString(R.string.about_changelog_sub, verName),
+            subtitle = getString(R.string.about_changelog_sub),
             isAccentHighlighted = true,
             isInteractive = true,
             onClick = {
@@ -1102,7 +1114,7 @@ internal fun MainActivity.showAboutAppPage() {
     showPremiumMenuDialog(
         headerIcon = "ℹ️",
         title = getString(R.string.settings_hub_about_title),
-        subtitle = "${getString(R.string.app_name)} • ${getString(R.string.app_subtitle)} • v$verName",
+        subtitle = "${getString(R.string.app_name)} • ${getString(R.string.app_subtitle)}",
         items = items
     )
 }
@@ -1113,11 +1125,19 @@ internal fun MainActivity.showChangelogPage() {
     val allConfiguredReleases = listOf(
         ChangelogReleaseEntry(
             version = verName,
+            date = "2026-11-23",
+            iconEmoji = "🎯",
+            title = getString(R.string.changelog_v90_21_title, verName),
+            description = getString(R.string.changelog_v90_21_desc),
+            isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.20",
             date = "2026-11-22",
             iconEmoji = "✨",
-            title = getString(R.string.changelog_v90_20_title, verName),
+            title = getString(R.string.changelog_v90_20_title, "90.20"),
             description = getString(R.string.changelog_v90_20_desc),
-            isLatest = true
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.19",
@@ -2454,5 +2474,160 @@ internal fun MainActivity.showAutoTranslateApiKeyDialog() {
     container.addView(tvTitle)
     container.addView(input)
     container.addView(btnRow)
+    dialog.show()
+}
+
+
+internal fun MainActivity.showAppIconSelectorDialog() {
+    val hostActivity = this
+    val accent = PlaybackStore.getAccentColor(this)
+    val surface = PlaybackStore.getSurfaceColor(this)
+    val bg = PlaybackStore.getBackgroundColor(this)
+    val primaryText = PlaybackStore.getPrimaryTextColor(this)
+    val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+    val density = resources.displayMetrics.density
+    fun dpLocal(v: Int): Int = (v * density).toInt()
+
+    val selectedId = PlaybackStore.getAppIconStyle(this)
+
+    val container = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dpLocal(20), dpLocal(20), dpLocal(20), dpLocal(20))
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dpLocal(26).toFloat()
+            setColor(surface)
+            setStroke(dpLocal(1), Color.argb(105, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+    }
+
+    val tvTitle = TextView(this).apply {
+        text = "🎯  ${getString(R.string.setting_app_icon_title)}"
+        setTextColor(primaryText)
+        textSize = 18f
+        setTypeface(typeface, Typeface.BOLD)
+        setPadding(0, 0, 0, dpLocal(4))
+    }
+
+    val tvSub = TextView(this).apply {
+        text = getString(R.string.setting_app_icon_sub)
+        setTextColor(secondaryText)
+        textSize = 13f
+        setPadding(0, 0, 0, dpLocal(14))
+    }
+
+    container.addView(tvTitle)
+    container.addView(tvSub)
+
+    val dialog = AlertDialog.Builder(this).setView(container).create()
+    dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+    val options = AppIconManager.allOptions
+    for (rowStart in options.indices step 3) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dpLocal(10) }
+        }
+        for (col in 0 until 3) {
+            val idx = rowStart + col
+            if (idx >= options.size) break
+            val opt = options[idx]
+            val isSelected = (opt.id == selectedId)
+
+            val tile = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                isFocusable = true
+                isClickable = true
+                setPadding(dpLocal(8), dpLocal(12), dpLocal(8), dpLocal(10))
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpLocal(18).toFloat()
+                    setColor(if (isSelected) Color.argb(32, Color.red(accent), Color.green(accent), Color.blue(accent)) else bg)
+                    setStroke(
+                        dpLocal(if (isSelected) 2 else 1),
+                        if (isSelected) accent else Color.argb(50, Color.red(primaryText), Color.green(primaryText), Color.blue(primaryText))
+                    )
+                }
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    if (col > 0) marginStart = dpLocal(8)
+                }
+            }
+
+            val iconFrame = FrameLayout(this).apply {
+                layoutParams = LinearLayout.LayoutParams(dpLocal(56), dpLocal(56)).apply {
+                    bottomMargin = dpLocal(8)
+                }
+                clipToOutline = true
+                outlineProvider = object : android.view.ViewOutlineProvider() {
+                    override fun getOutline(view: View, outline: android.graphics.Outline) {
+                        outline.setRoundRect(0, 0, view.width, view.height, dpLocal(14).toFloat())
+                    }
+                }
+            }
+
+            val iv = ImageView(this).apply {
+                setImageResource(opt.mipmapResId)
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            }
+            iconFrame.addView(iv)
+
+            val tvLabel = TextView(this).apply {
+                text = (if (isSelected) "✓ " else "") + getString(opt.titleResId)
+                setTextColor(if (isSelected) accent else primaryText)
+                textSize = 12f
+                setTypeface(typeface, if (isSelected) Typeface.BOLD else Typeface.NORMAL)
+                gravity = Gravity.CENTER
+                maxLines = 2
+            }
+
+            tile.addView(iconFrame)
+            tile.addView(tvLabel)
+
+            tile.setOnClickListener {
+                AppIconManager.applyIconStyle(hostActivity, opt.id)
+                Toast.makeText(
+                    hostActivity,
+                    getString(R.string.app_icon_applied_toast, getString(opt.titleResId)),
+                    Toast.LENGTH_LONG
+                ).show()
+                dialog.dismiss()
+                popSettingsBackStack()
+            }
+            row.addView(tile)
+        }
+        container.addView(row)
+    }
+
+    val tvNote = TextView(this).apply {
+        text = getString(R.string.app_icon_launcher_refresh_note)
+        setTextColor(secondaryText)
+        textSize = 11.5f
+        gravity = Gravity.CENTER
+        setPadding(dpLocal(4), dpLocal(4), dpLocal(4), dpLocal(10))
+    }
+    container.addView(tvNote)
+
+    val btnClose = TextView(this).apply {
+        text = getString(R.string.ok)
+        setTextColor(accent)
+        textSize = 14f
+        setTypeface(typeface, Typeface.BOLD)
+        gravity = Gravity.END
+        setPadding(dpLocal(14), dpLocal(6), dpLocal(10), dpLocal(4))
+        setOnClickListener {
+            dialog.dismiss()
+            popSettingsBackStack()
+        }
+    }
+    container.addView(btnClose)
+    dialog.setOnCancelListener { popSettingsBackStack() }
     dialog.show()
 }

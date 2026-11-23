@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">VEXO Player</string>
+    <string name="app_name">V Player</string>
     <string name="app_subtitle">IPTV and Video player</string>
     <string name="folders_title">مجلدات الفيديو</string>
     <string name="back">رجوع</string>
@@ -186,13 +186,13 @@
     <string name="settings_cat_subtitles">💬 الترجمة والتنسيق</string>
     <string name="settings_cat_updates">🚀 التحديثات المباشرة من GITHUB</string>
     <string name="update_check_option_title">🔄 التحقق من وجود تحديث (Check for Update)</string>
-    <string name="update_check_option_sub">الإصدار الحالي: v%1$s • تنزيل وتثبيت أحدث نسخة من GitHub</string>
+    <string name="update_check_option_sub">الإصدار الحالي: تنزيل وتثبيت أحدث نسخة من GitHub</string>
     <string name="update_repo_setup_title">🚀 ربط مستودع GitHub الخاص بك</string>
     <string name="update_repo_setup_desc">اكتب اسم حسابك والمستودع (مثال: username/Video-player) أو الصق رابط مستودعك في GitHub لمرة واحدة فقط:</string>
     <string name="update_repo_invalid_toast">⚠️ يرجى كتابة اسم الحساب والمستودع بشكل صحيح</string>
     <string name="update_checking_toast">🔍 جاري فحص التحديثات في GitHub (%1$s)...</string>
     <string name="update_status_new_available">🎉 يتوفر تحديث جديد: v%1$s (النسخة الحالية: v%2$s)</string>
-    <string name="update_status_up_to_date">✅ لديك أحدث نسخة مثبتة بالفعل (v%1$s)</string>
+    <string name="update_status_up_to_date">✅ لديك أحدث نسخة مثبتة بالفعل</string>
     <string name="update_download_direct_btn">⬇️ تنزيل وتثبيت التحديث مباشرة الآن</string>
     <string name="update_open_actions_btn">🌐 فتح صفحة آخر بناء في GitHub Actions</string>
     <string name="update_change_repo_btn">⚙️ تعديل اسم مستودع GitHub (%1$s)</string>
@@ -297,7 +297,7 @@
     <string name="resume_mode_always_resume">الاستئناف تلقائياً دائماً من حيث توقفت دون سؤال</string>
     <string name="resume_mode_always_restart">البدء من الأول (00:00) تلقائياً دائماً دون سؤال</string>
     <string name="settings_cat_developer">👨‍💻 مطور التطبيق ومعلومات الإصدار</string>
-    <string name="developer_credit_subtitle">مطور التطبيق • VEXO Player — IPTV and Video player (v%1$s)</string>
+    <string name="developer_credit_subtitle">مطور التطبيق • V Player — IPTV and Video player</string>
     <string name="iptv_show_password_toggle">إظهار كلمة المرور للتأكد من صحتها</string>
     <string name="press_back_again_to_exit">اسحب للخلف مرة أخرى للخروج من التطبيق</string>
     <string name="iptv_subtab_all">📂 التصنيفات</string>
@@ -319,7 +319,7 @@
     <string name="settings_hub_subtitles_playback_title">الترجمة وإعدادات التشغيل</string>
     <string name="settings_hub_updates_title">التحديثات والمزامنة (GitHub)</string>
     <string name="settings_hub_about_title">حول التطبيق (About)</string>
-    <string name="settings_hub_about_sub">المطور: Ahmed M Moumen • الإصدار v%1$s • سجل التغييرات</string>
+    <string name="settings_hub_about_sub">المطور: Ahmed M Moumen • الإصدار سجل التغييرات</string>
     <string name="about_developer_label">مطور التطبيق (Developer)</string>
     <string name="about_version_label">رقم الإصدار (Version)</string>
     <string name="about_changelog_title">سجل التحديثات والتغييرات (Changelog)</string>
@@ -445,7 +445,7 @@
     <string name="about_privacy_policy_title">سياسة الخصوصية وأمان البيانات</string>
     <string name="about_privacy_policy_sub">معالجة محلية 100% على جهازك؛ يتم تشفير باسورد الخزنة (PBKDF2 بـ 100,000 تكرار) وبيانات IPTV (AES-256-GCM) عبر AndroidKeyStore مع استثنائها من النسخ السحابي، ولا يتم جمع أو مشاركة أي بيانات شخصية.</string>
     <string name="privacy_policy_sec1_title">1. عدم جمع أو مشاركة أي بيانات شخصية</string>
-    <string name="privacy_policy_sec1_desc">لا يقوم تطبيق VEXO Player (IPTV and Video player) بجمع أو إرسال أو بيع أو مشاركة أي بيانات شخصية أو سجل مشاهدة مع أي خوادم خارجية إطلاقاً.</string>
+    <string name="privacy_policy_sec1_desc">لا يقوم تطبيق V Player (IPTV and Video player) بجمع أو إرسال أو بيع أو مشاركة أي بيانات شخصية أو سجل مشاهدة مع أي خوادم خارجية إطلاقاً.</string>
     <string name="privacy_policy_sec2_title">2. الأذونات والوصول المحلي للملفات</string>
     <string name="privacy_policy_sec2_desc">تُستخدم صلاحية الفيديو (READ_MEDIA_VIDEO) محلياً فقط لعرض وتشغيل مجلدات الفيديو على جهازك، وتُستخدم صلاحية البصمة محلياً لفتح الخزنة الخاصة.</string>
     <string name="privacy_policy_sec3_title">3. التشفير العتادي واستثناء النسخ السحابي</string>
@@ -478,8 +478,8 @@
     <string name="changelog_v90_07_title">v90.07 (2026-11-18) — الجاهزية الكاملة للإطلاق على Google Play وتوحيد الهوية</string>
     <string name="changelog_v90_07_desc">• توحيد كامل لهوية التطبيق: اعتماد الاسم الرسمي IPTV and Video player في جميع مجلدات التحميل وجلسات الوسائط وسياسة الخصوصية وكافة شاشات التطبيق.
 • التحقق النهائي لمتجر Google Play: مراجعة شاملة للتوافق مع سياسات أمان البيانات والتشفير العتادي عبر AndroidKeyStore وبناء حزمة AAB الرسمية.</string>
-    <string name="changelog_v90_08_title">الإصدار v90.08 — إطلاق هوية VEXO Player (IPTV and Video player) لمتجر جوجل بلاي</string>
-    <string name="changelog_v90_08_desc">• الهوية الرسمية للمتجر: اعتماد الاسم الرئيسي VEXO Player والاسم الفرعي تحته IPTV and Video player في الشريط العلوي وقسم حول التطبيق ومتجر Google Play.
+    <string name="changelog_v90_08_title">الإصدار v90.08 — إطلاق هوية V Player (IPTV and Video player) لمتجر جوجل بلاي</string>
+    <string name="changelog_v90_08_desc">• الهوية الرسمية للمتجر: اعتماد الاسم الرئيسي V Player والاسم الفرعي تحته IPTV and Video player في الشريط العلوي وقسم حول التطبيق ومتجر Google Play.
 • توثيق بيانات التواصل والخصوصية: إدراج البريد الرسمي للمطور (AHMEDAHMED5547@GMAIL.COM) وروابط سياسة الخصوصية المعتمدة على GitHub.
 • سجل التغييرات الذكي (آخر 3 إصدارات): الاحتفاظ التلقائي بآخر 3 إصدارات فقط (v90.08 وv90.07 وv90.06).</string>
     <string name="changelog_v90_09_title">الإصدار v90.09 — الترقية إلى Android 16 (API 36) لقبول متجر Google Play</string>
@@ -608,7 +608,7 @@
     <string name="changelog_v90_15_title">الإصدار %1$s — وضع التحديد المتعدد، عمليات الخزنة، سلاسة IPTV وتوفير البطارية</string>
     <string name="changelog_v90_15_desc" formatted="false">• استبدال قوائم الضغط المطوّل بوضع تحديد متكامل (المكتبة الرئيسية والخزنة الخاصة): شريط سياقي، تحديد الكل، تحديد متعدد مختلط، التفاصيل، نسخ/نقل ذري مع معالجة التكرار.\n• حل مشكلة تكرار إذن الحذف عبر طلب حذف جماعي واحد (MediaStore.createDeleteRequest).\n• إزالة التقطيع واختفاء المجلدات بين الفيديو وIPTV عبر فصل قائمة IPTV في RecyclerView مستقل.\n• إضافة إعدادات توفير البطارية ومؤشر البطارية في المشغّل وتنبيهات 15%/5% وإيقاف المؤقتات الخلفية.</string>
     <string name="all_files_access_title">السماح بالوصول لجميع الملفات (مرة واحدة)</string>
-    <string name="all_files_access_message">امنح VEXO Player صلاحية الوصول للملفات مرة واحدة فقط حتى تتمكن من حذف ونسخ ونقل وإدارة فيديوهات الخزنة بسلاسة دون تكرار نافذة السماح في كل مرة.</string>
+    <string name="all_files_access_message">امنح V Player صلاحية الوصول للملفات مرة واحدة فقط حتى تتمكن من حذف ونسخ ونقل وإدارة فيديوهات الخزنة بسلاسة دون تكرار نافذة السماح في كل مرة.</string>
     <string name="all_files_access_grant_btn">السماح مرة واحدة</string>
     <string name="all_files_access_later_btn">ليس الآن</string>
     <string name="conflict_dialog_title">الملف موجود بالفعل</string>
@@ -666,4 +666,34 @@
 • تحميل وترجمة تلقائية للترجمات على دفعات (Google Cloud / DeepL / OpenAI LLM / المترجم المدمج) مع تنسيق عربي RTL وكاش محلي وشريط تقدم وإلغاء وتسمية واضحة.
 • إضافة أزرار مزامنة الترجمة السريعة (-0.5s / -0.1s / 0.0s / +0.1s / +0.5s)، تذكّر الترجمة لكل فيديو، وخيار إعادة الترجمة.</string>
     <string name="ok">موافق</string>
+    <!-- v90.21 هوية V Player، إصلاحات الترجمة، وأيقونات التطبيق التكيفية -->
+    <string name="sub_menu_translate_to_my_lang">ترجمة الترجمة إلى لغتي</string>
+    <string name="sub_menu_translate_to_my_lang_sub">ترجمة الملف الحالي إلى %1$s (مع الحفاظ التام على التوقيت)</string>
+    <string name="sub_menu_translate_need_sub">حمّل أو ابحث تلقائياً عن ترجمة أولاً</string>
+    <string name="sub_menu_bilingual">عرض ثنائي اللغة</string>
+    <string name="sub_bilingual_on_sub">عرض النص المترجم + الأصلي معاً</string>
+    <string name="sub_bilingual_off_sub">عرض النص المترجم فقط</string>
+    <string name="setting_app_icon_title">أيقونة التطبيق</string>
+    <string name="setting_app_icon_sub">اختر نمط أيقونة V Player على الشاشة الرئيسية</string>
+    <string name="icon_style_default">الافتراضية</string>
+    <string name="icon_style_default_sub">أيقونة V Player الأصلية</string>
+    <string name="icon_style_material_you">Material You</string>
+    <string name="icon_style_material_you_sub">تتكيّف مع ألوان الخلفية</string>
+    <string name="icon_style_glass_light">زجاجي فاتح</string>
+    <string name="icon_style_glass_light_sub">زجاج شفاف مصنفر</string>
+    <string name="icon_style_glass_dark">زجاجي داكن</string>
+    <string name="icon_style_glass_dark_sub">زجاج داكن مضيء</string>
+    <string name="icon_style_dark">داكن OLED</string>
+    <string name="icon_style_dark_sub">أسود مطفي أنيق</string>
+    <string name="icon_style_gradient">تدرّج أورورا</string>
+    <string name="icon_style_gradient_sub">تدرّج لوني عصري</string>
+    <string name="app_icon_applied_toast">تم تغيير أيقونة التطبيق إلى: %1$s</string>
+    <string name="app_icon_launcher_refresh_note">قد يستغرق مشغّل الشاشة الرئيسية بضع ثوانٍ لتحديث الأيقونة الجديدة.</string>
+    <string name="changelog_v90_21_title">الإصدار %1$s — هوية V Player، إصلاح تجمّد الترجمة، وأيقونات التطبيق</string>
+    <string name="changelog_v90_21_desc">• تغيير الاسم الظاهر للتطبيق إلى V Player مع الحفاظ التام على معرّف الحزمة لاستمرار التحديثات دون فقدان البيانات.
+• إصلاح تجمّد الترجمة المترجمة: تثبيت التوقيت الأصلي لكل سطر، مسح السطر فور انتهاء وقته أو الإيقاف المؤقت أو البحث، وإلغاء الطلبات القديمة.
+• ترقية جودة الترجمة بسياق الجمل المجاورة، حماية الوسوم والمؤثرات مثل [music]، الكشف التلقائي عن لغة المصدر، تنسيق RTL للعربية والعبرية، الكاش لكل سطر، والعرض ثنائي اللغة.
+• إعادة ترتيب قائمة الترجمة: البحث التلقائي أولاً (مع البحث بالاسم كبديل مدمج)، تليه مباشرة ترجمة الترجمة إلى لغتي.
+• إضافة 6 أنماط أيقونات تكيفية (الافتراضية، Material You، زجاجي فاتح، زجاجي داكن، داكن OLED، وتدرّج أورورا) في إعدادات المظهر.
+• حصر ظهور رقم الإصدار داخل سجل التغييرات فقط.</string>
 </resources>

@@ -1,4 +1,4 @@
-# VEXO Player — IPTV and Video player (`com.pureplayer.video`)
+# V Player — IPTV and Video player (`com.pureplayer.video`)
 
 Flagship 4K Cinema & Media Player for Android (`minSdk 24` / `targetSdk 36` / `compileSdk 36`), built with Kotlin, Room, and LibVLC (`arm64-v8a`).
 

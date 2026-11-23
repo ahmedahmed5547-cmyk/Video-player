@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">VEXO Player</string>
+    <string name="app_name">V Player</string>
     <string name="app_subtitle">IPTV and Video player</string>
     <string name="folders_title">Video Folders</string>
     <string name="back">Back</string>
@@ -186,13 +186,13 @@
     <string name="settings_cat_subtitles">💬 SUBTITLES &amp; STYLING</string>
     <string name="settings_cat_updates">🚀 UPDATES &amp; GITHUB AUTO-INSTALL</string>
     <string name="update_check_option_title">🔄 Check for Update (GitHub Direct Download)</string>
-    <string name="update_check_option_sub">Current Version: v%1$s • Tap to check &amp; install latest update</string>
+    <string name="update_check_option_sub">Current Version: Tap to check &amp; install latest update</string>
     <string name="update_repo_setup_title">🚀 Connect Your GitHub Repository</string>
     <string name="update_repo_setup_desc">Enter your GitHub username/repo (e.g. username/Video-player) or paste your GitHub repository link:</string>
     <string name="update_repo_invalid_toast">⚠️ Please enter a valid GitHub username/repository</string>
     <string name="update_checking_toast">🔍 Checking GitHub (%1$s) for updates...</string>
     <string name="update_status_new_available">🎉 New Update Available: v%1$s (Installed: v%2$s)</string>
-    <string name="update_status_up_to_date">✅ You have the latest version installed (v%1$s)</string>
+    <string name="update_status_up_to_date">✅ You have the latest version installed</string>
     <string name="update_download_direct_btn">⬇️ Download &amp; Install Latest APK Directly</string>
     <string name="update_open_actions_btn">🌐 Open Latest Build on GitHub Actions</string>
     <string name="update_change_repo_btn">⚙️ Change GitHub Repo (%1$s)</string>
@@ -297,7 +297,7 @@ Long-press any folder in Video Folders to lock &amp; move it here, or tap below 
     <string name="resume_mode_always_resume">Always Resume automatically from where I stopped</string>
     <string name="resume_mode_always_restart">Always Start from Beginning (00:00) automatically</string>
     <string name="settings_cat_developer">👨‍💻 DEVELOPER &amp; CREDITS</string>
-    <string name="developer_credit_subtitle">Developer • VEXO Player — IPTV and Video player (v%1$s)</string>
+    <string name="developer_credit_subtitle">Developer • V Player — IPTV and Video player</string>
     <string name="iptv_show_password_toggle">Show Password to verify characters</string>
     <string name="press_back_again_to_exit">Swipe back again to exit app</string>
     <string name="iptv_subtab_all">📂 Categories</string>
@@ -319,7 +319,7 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="settings_hub_subtitles_playback_title">Subtitles &amp; Playback</string>
     <string name="settings_hub_updates_title">Updates &amp; GitHub Sync</string>
     <string name="settings_hub_about_title">About App</string>
-    <string name="settings_hub_about_sub">Developer: Ahmed M Moumen • v%1$s • Changelog</string>
+    <string name="settings_hub_about_sub">Developer: Ahmed M Moumen  • Changelog</string>
     <string name="about_developer_label">Developer</string>
     <string name="about_version_label">App Version</string>
     <string name="about_changelog_title">Changelog (What\'s New)</string>
@@ -445,7 +445,7 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="about_privacy_policy_title">Privacy &amp; Data Security Policy</string>
     <string name="about_privacy_policy_sub">100% local processing. Vault PINs (PBKDF2 100,000+ iterations) &amp; IPTV credentials (AES-256-GCM) are encrypted on-device via AndroidKeyStore and excluded from cloud backups. No personal data is collected or shared.</string>
     <string name="privacy_policy_sec1_title">1. Zero Data Collection &amp; Sharing</string>
-    <string name="privacy_policy_sec1_desc">VEXO Player (IPTV and Video player) does not collect, transmit, sell, or share any personal data, device identifiers, or media history with external servers.</string>
+    <string name="privacy_policy_sec1_desc">V Player (IPTV and Video player) does not collect, transmit, sell, or share any personal data, device identifiers, or media history with external servers.</string>
     <string name="privacy_policy_sec2_title">2. Permissions &amp; Local Storage Access</string>
     <string name="privacy_policy_sec2_desc">Video permission (READ_MEDIA_VIDEO) is used strictly on-device to display and play your local video folders. Biometric permission is used locally for Private Vault unlock.</string>
     <string name="privacy_policy_sec3_title">3. Hardware KeyStore Encryption &amp; Backup Exclusion</string>
@@ -478,8 +478,8 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="changelog_v90_07_title">v90.07 (2026-11-18) — Google Play Launch Readiness &amp; Complete Branding</string>
     <string name="changelog_v90_07_desc">• Complete Application Branding: Unified all internal folders, media session tags, privacy disclosures, and store assets under the official name IPTV and Video player.
 • Google Play Policy Verification: Verified 100% compliance with Google Play Data Safety, hardware-backed AndroidKeyStore encryption, and isolated Play Store release bundle configuration.</string>
-    <string name="changelog_v90_08_title">v90.08 — VEXO Player (IPTV and Video player) Official Store Release</string>
-    <string name="changelog_v90_08_desc">• Official Brand Identity: Set primary title to VEXO Player with secondary title IPTV and Video player underneath across the top header, About section, and Google Play Store listing.
+    <string name="changelog_v90_08_title">v90.08 — V Player (IPTV and Video player) Official Store Release</string>
+    <string name="changelog_v90_08_desc">• Official Brand Identity: Set primary title to V Player with secondary title IPTV and Video player underneath across the top header, About section, and Google Play Store listing.
 • Privacy &amp; Contact Integration: Added official developer contact email (AHMEDAHMED5547@GMAIL.COM) and GitHub Privacy Policy URLs across all store and in-app disclosures.
 • Rolling 3-Version Changelog: Automatically retains only the latest 3 releases (v90.08, v90.07, and v90.06).</string>
     <string name="changelog_v90_09_title">v90.09 — Android 16 (API 36) Google Play Target SDK Upgrade</string>
@@ -496,7 +496,7 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="changelog_v90_11_desc">• Luxury Dark Redesign &amp; Luxury Gold Theme: Refreshed Player Settings and Playback UI with glass panels, thin-line vector icons, glowing SeekBar, monospace timers, and marquee titles.
 • Full Foldable &amp; Adaptive Support: Added Jetpack WindowManager (Tabletop, Book, Folded Cover, and Unfolded postures) with hinge-safe controls/subtitles and centered large-screen dialogs.
 • Playback &amp; First-Install Fixes: Rebuilt rotation controls in ConstraintLayout, ported VLC changeSurfaceLayout() to fix Fit-to-Stretch cropping, and added ViewModel + ContentObserver + MediaScanner fallback.
-• Android 15/16 &amp; Brand Alignment: Enabled edge-to-edge, 16 KB native library alignment (AGP 8.5.1 + LibVLC 3.6.5), unified VEXO Player branding, and 4-version Changelog display.</string>
+• Android 15/16 &amp; Brand Alignment: Enabled edge-to-edge, 16 KB native library alignment (AGP 8.5.1 + LibVLC 3.6.5), unified V Player branding, and 4-version Changelog display.</string>
     <string name="theme_luxury_gold">Luxury Gold (Champagne)</string>
     <string name="appearance_mode_material_you">System (Material You)</string>
     <string name="appearance_mode_luxury_dark">Luxury Dark</string>
@@ -608,7 +608,7 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="changelog_v90_15_title">v%1$s — Multi-Selection Mode, Vault Batch Ops, Zero-Lag IPTV &amp; Battery Saver</string>
     <string name="changelog_v90_15_desc" formatted="false">• Replaced long-press popups with a full Selection Mode (Main Library &amp; Private Vault): contextual top bar, Select All, mixed multi-select, Details, atomic Copy/Move with duplicate handling, and rotation persistence.\n• Fixed repeated delete permission prompts via unified batch MediaStore.createDeleteRequest (at most one prompt per batch).\n• Eliminated Video-to-IPTV lag &amp; folder flicker using a dedicated persistent IPTV RecyclerView.\n• Added Battery Saver settings, lifecycle-aware player battery indicator, low-battery 15%/5% notices, and stopped background UI tickers.</string>
     <string name="all_files_access_title">Allow All Files Access (One-Time)</string>
-    <string name="all_files_access_message">Grant VEXO Player All Files Access once so you can delete, copy, move, and manage Vault videos smoothly without repeated system confirmation popups.</string>
+    <string name="all_files_access_message">Grant V Player All Files Access once so you can delete, copy, move, and manage Vault videos smoothly without repeated system confirmation popups.</string>
     <string name="all_files_access_grant_btn">Allow once</string>
     <string name="all_files_access_later_btn">Not now</string>
     <string name="conflict_dialog_title">File already exists</string>
@@ -666,4 +666,34 @@ Any series, movie, or channel you play will appear here automatically so you can
 • Automatic subtitle download &amp; batched translation (Google Cloud, DeepL, OpenAI LLM, or built-in fallback) with Arabic RTL formatting, caching, progress/cancel, and clear translated labels.
 • Added Quick Subtitle Sync (-0.5s / -0.1s / 0.0s / +0.1s / +0.5s), per-video subtitle memory, and Retranslate option.</string>
     <string name="ok">OK</string>
+    <!-- v90.21 V Player Rebrand, Subtitle Menu/Translation Upgrades & App Icons -->
+    <string name="sub_menu_translate_to_my_lang">Translate subtitle to my language</string>
+    <string name="sub_menu_translate_to_my_lang_sub">Translate active subtitle to %1$s (preserves timing)</string>
+    <string name="sub_menu_translate_need_sub">Load or auto-search a subtitle first</string>
+    <string name="sub_menu_bilingual">Bilingual Subtitles</string>
+    <string name="sub_bilingual_on_sub">Showing translated + original text</string>
+    <string name="sub_bilingual_off_sub">Showing translated text only</string>
+    <string name="setting_app_icon_title">App Icon</string>
+    <string name="setting_app_icon_sub">Choose your V Player launcher icon style</string>
+    <string name="icon_style_default">Default</string>
+    <string name="icon_style_default_sub">Original V Player</string>
+    <string name="icon_style_material_you">Material You</string>
+    <string name="icon_style_material_you_sub">Themed wallpaper tint</string>
+    <string name="icon_style_glass_light">Glass Light</string>
+    <string name="icon_style_glass_light_sub">Frosted liquid glass</string>
+    <string name="icon_style_glass_dark">Glass Dark</string>
+    <string name="icon_style_glass_dark_sub">Dark frosted glass</string>
+    <string name="icon_style_dark">Obsidian Dark</string>
+    <string name="icon_style_dark_sub">OLED matte dark</string>
+    <string name="icon_style_gradient">Aurora</string>
+    <string name="icon_style_gradient_sub">Modern gradient</string>
+    <string name="app_icon_applied_toast">App icon switched to %1$s</string>
+    <string name="app_icon_launcher_refresh_note">Your launcher may take a few seconds to refresh the new icon.</string>
+    <string name="changelog_v90_21_title">v%1$s — V Player Identity, Subtitle Fixes &amp; Adaptive App Icons</string>
+    <string name="changelog_v90_21_desc">• Renamed user-visible app identity to V Player while keeping the exact same package ID for seamless updates.
+• Fixed frozen translated subtitles: cues strictly preserve original timing, clear immediately on end time / pause / seek, and cancel stale translation jobs.
+• Upgraded subtitle translation with context-aware batches, sound-effect/tag protection, auto source-language detection, RTL (Arabic &amp; Hebrew), per-cue caching, and bilingual mode.
+• Reordered subtitle menu: Auto search first (with Search by name inline fallback), followed directly by Translate subtitle to my language.
+• Added 6 adaptive launcher icon styles (Default, Material You, Glass Light, Glass Dark, Obsidian Dark, Aurora Gradient) in Appearance settings.
+• Version number now appears cleanly inside Changelog only.</string>
 </resources>

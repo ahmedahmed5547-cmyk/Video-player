@@ -125,6 +125,8 @@ object PlaybackStore {
     private const val KEY_AUTO_TRANSLATE_PROVIDER = "vexo_auto_translate_provider_v1"
     private const val KEY_AUTO_TRANSLATE_API_KEY = "vexo_auto_translate_api_key_v1"
     private const val KEY_AUTO_TRANSLATE_ARABIC_STYLE = "vexo_auto_translate_arabic_style_v1"
+    private const val KEY_SUB_BILINGUAL = "vexo_sub_bilingual_v1"
+    private const val KEY_APP_ICON_STYLE = "vexo_app_icon_style_v1"
     private const val KEY_LAST_ACTIVE_FOLDER = "last_active_folder_name_v1"
     private const val KEY_AUDIO_PRESET_MODE = "audio_eq_preset_mode_v1"
     private const val KEY_AUDIO_PREAMP_DB = "audio_eq_preamp_db_v1"
@@ -806,6 +808,20 @@ object PlaybackStore {
 
     fun setArabicTranslationStyle(context: Context, style: String) {
         prefs(context).edit().putString(KEY_AUTO_TRANSLATE_ARABIC_STYLE, style).apply()
+    }
+
+    fun isBilingualSubtitleEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_SUB_BILINGUAL, false)
+
+    fun setBilingualSubtitleEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_SUB_BILINGUAL, enabled).apply()
+    }
+
+    fun getAppIconStyle(context: Context): String =
+        prefs(context).getString(KEY_APP_ICON_STYLE, "default") ?: "default"
+
+    fun setAppIconStyle(context: Context, styleId: String) {
+        prefs(context).edit().putString(KEY_APP_ICON_STYLE, styleId).apply()
     }
 
     fun isFirstLibraryScanDone(context: Context): Boolean =

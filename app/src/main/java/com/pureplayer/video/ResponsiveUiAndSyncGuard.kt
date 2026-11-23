@@ -124,7 +124,7 @@ enum class DeviceFormFactor {
  */
 object ResponsiveUiMetrics {
 
-    const val APP_DISPLAY_NAME = "VEXO Player"
+    const val APP_DISPLAY_NAME = "V Player"
     const val APP_SUBTITLE_NAME = "IPTV and Video player"
 
     fun classifyDevice(screenWidthDp: Int, smallestScreenWidthDp: Int = screenWidthDp): DeviceFormFactor {

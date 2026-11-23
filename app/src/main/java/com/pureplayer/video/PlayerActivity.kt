@@ -201,6 +201,15 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     private var currentSubtitleSourceLang: String = "en"
     private var currentSubtitleDisplayLabel: String = ""
     private var activeTranslationJob: kotlinx.coroutines.Job? = null
+    private var originalSubtitleCues = listOf<SubtitleCue>()
+    private var lastTranslatedTexts = listOf<String>()
+    private val translationRequestId = java.util.concurrent.atomic.AtomicLong(0L)
+
+    private fun cancelActiveSubtitleTranslation() {
+        translationRequestId.incrementAndGet()
+        activeTranslationJob?.cancel()
+        activeTranslationJob = null
+    }
     private var isDraggingSubtitle = false
     private var isPinchingSubtitle = false
     private var dragStartRawX = 0f
@@ -265,21 +274,26 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
     private val updateProgressRunnable = object : Runnable {
         override fun run() {
-            if (::mediaPlayer.isInitialized && mediaPlayer.isPlaying && !isUserSeeking) {
-                val length = mediaPlayer.length
+            if (::mediaPlayer.isInitialized) {
                 val time = mediaPlayer.time
-                if (length > 0) {
-                    val progress = ((time.toDouble() / length.toDouble()) * 1000).toInt()
-                    binding.seekBar.progress = progress
-                    binding.tvCurrentTime.text = formatTime(time)
-                    binding.tvTotalTime.text = formatTime(length)
-                    currentVideoUri?.let { uri ->
-                        PlaybackStore.saveProgress(this@PlayerActivity, uri, currentVideoTitle, time, length)
+                if (mediaPlayer.isPlaying && !isUserSeeking) {
+                    val length = mediaPlayer.length
+                    if (length > 0) {
+                        val progress = ((time.toDouble() / length.toDouble()) * 1000).toInt()
+                        binding.seekBar.progress = progress
+                        binding.tvCurrentTime.text = formatTime(time)
+                        binding.tvTotalTime.text = formatTime(length)
+                        currentVideoUri?.let { uri ->
+                            PlaybackStore.saveProgress(this@PlayerActivity, uri, currentVideoTitle, time, length)
+                        }
                     }
                 }
-                updateDraggableSubtitleText(time)
+                // Strictly resolve or clear active cue from current playback position (even when paused/seeked)
+                if (!isUserSeeking) {
+                    updateDraggableSubtitleText(time)
+                }
             }
-            handler.postDelayed(this, 200)
+            handler.postDelayed(this, 100L)
         }
     }
 
@@ -1649,39 +1663,56 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         }
     }
 
-    private fun applyLoadedSubtitleCues(cues: List<SubtitleCue>) {
+    private fun applyLoadedSubtitleCues(cues: List<SubtitleCue>, isTranslated: Boolean = false) {
         externalSubtitleCues = cues
+        if (!isTranslated) {
+            originalSubtitleCues = cues
+            lastTranslatedTexts = emptyList()
+        }
         mediaPlayer.spuTrack = -1
-        binding.tvDraggableSubtitle.visibility = View.VISIBLE
         restoreSubtitlePositionFromPercentage()
-        updateDraggableSubtitleText(mediaPlayer.time)
+        updateDraggableSubtitleText(if (::mediaPlayer.isInitialized) mediaPlayer.time else 0L)
     }
 
     private fun updateDraggableSubtitleText(currentTimeMs: Long) {
-        if (externalSubtitleCues.isEmpty()) return
+        if (externalSubtitleCues.isEmpty()) {
+            if (binding.tvDraggableSubtitle.visibility != View.GONE || binding.tvDraggableSubtitle.text.isNotEmpty()) {
+                binding.tvDraggableSubtitle.text = ""
+                binding.tvDraggableSubtitle.visibility = View.GONE
+            }
+            return
+        }
         if (isDraggingSubtitle || isPinchingSubtitle) return
 
-        val adjustedTime = currentTimeMs - subtitleSyncOffsetMs
-        val activeCue = externalSubtitleCues.firstOrNull {
-            adjustedTime >= it.startMs && adjustedTime <= it.endMs
-        }
+        val activeCue = SubtitleAutoTranslator.resolveActiveCueAt(
+            cues = externalSubtitleCues,
+            playbackTimeMs = currentTimeMs,
+            syncOffsetMs = subtitleSyncOffsetMs
+        )
         if (activeCue != null) {
             val rawText = activeCue.text
-            val containsArabic = rawText.any { it in '\u0600'..'\u06FF' }
-            binding.tvDraggableSubtitle.textDirection = if (containsArabic) {
+            val containsRtl = rawText.any { it in '\u0600'..'\u06FF' || it in '\u0590'..'\u05FF' }
+            binding.tvDraggableSubtitle.textDirection = if (containsRtl) {
                 View.TEXT_DIRECTION_RTL
             } else {
                 View.TEXT_DIRECTION_LTR
             }
-            val formatted = if (containsArabic) {
+            val formatted = if (containsRtl) {
                 BidiFormatter.getInstance(true).unicodeWrap(rawText)
             } else {
                 rawText
             }
-            binding.tvDraggableSubtitle.text = formatted
-            binding.tvDraggableSubtitle.visibility = View.VISIBLE
+            if (binding.tvDraggableSubtitle.text.toString() != formatted) {
+                binding.tvDraggableSubtitle.text = formatted
+            }
+            if (binding.tvDraggableSubtitle.visibility != View.VISIBLE) {
+                binding.tvDraggableSubtitle.visibility = View.VISIBLE
+            }
         } else {
-            binding.tvDraggableSubtitle.visibility = View.GONE
+            if (binding.tvDraggableSubtitle.visibility != View.GONE || binding.tvDraggableSubtitle.text.isNotEmpty()) {
+                binding.tvDraggableSubtitle.text = ""
+                binding.tvDraggableSubtitle.visibility = View.GONE
+            }
         }
     }
 
@@ -2460,7 +2491,14 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         val subSize = PlaybackStore.getSubSizeSp(this).toInt()
         val subBgOpacity = PlaybackStore.getSubBgOpacityPct(this)
 
+        val targetLang = PlaybackStore.getAutoTranslateTargetLang(this)
+        val isArUi = Locale.getDefault().language.equals("ar", ignoreCase = true) ||
+            PlaybackStore.getAppLanguageTag(this).startsWith("ar", ignoreCase = true)
+        val targetLangName = SubtitleAutoTranslator.getLanguageDisplayName(targetLang, isArUi)
+        val bilingualOn = PlaybackStore.isBilingualSubtitleEnabled(this)
+
         val items = mutableListOf(
+            // 1. Auto search (with Search by name inline fallback if not found)
             PremiumMenuItem(
                 iconEmoji = "⚡",
                 title = getString(R.string.sub_menu_auto_search),
@@ -2468,17 +2506,43 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                 isAccentHighlighted = true,
                 onClick = { runAutomaticMultiSourceSubtitleSearch(customQuery = null) }
             ),
+            // 2. Translate subtitle to my language (right after Auto search)
             PremiumMenuItem(
-                iconEmoji = "🔍",
-                title = getString(R.string.sub_menu_web_search),
-                subtitle = preferredLangsStr,
-                onClick = { playerMenuBackStack.addLast { showSubtitlesDialog() }; showCustomTitleAutoSearchDialog() }
+                iconEmoji = "✨",
+                title = getString(R.string.sub_menu_translate_to_my_lang),
+                subtitle = if (externalSubtitleCues.isNotEmpty()) {
+                    getString(R.string.sub_menu_translate_to_my_lang_sub, targetLangName)
+                } else {
+                    getString(R.string.sub_menu_translate_need_sub)
+                },
+                isAccentHighlighted = true,
+                onClick = {
+                    val srcCues = originalSubtitleCues.ifEmpty { externalSubtitleCues }
+                    if (srcCues.isNotEmpty()) {
+                        startSubtitleAutoTranslation(
+                            sourceFile = currentSubtitleSourceFile,
+                            sourceCues = srcCues,
+                            sourceLang = currentSubtitleSourceLang.ifBlank { "auto" },
+                            targetLang = targetLang,
+                            forceRetranslate = lastTranslatedTexts.isNotEmpty()
+                        )
+                    } else {
+                        runAutomaticMultiSourceSubtitleSearch(customQuery = null)
+                    }
+                }
             ),
+            // 3. Remaining items in original relative order
             PremiumMenuItem(
                 iconEmoji = "📂",
                 title = getString(R.string.sub_menu_load_local),
                 subtitle = ".SRT • .ASS • .VTT",
                 onClick = { subtitlePickerLauncher.launch(arrayOf("*/*")) }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "⏱️",
+                title = getString(R.string.sub_menu_quick_sync),
+                subtitle = getString(R.string.sub_sync_offset_format, subtitleSyncOffsetMs),
+                onClick = { playerMenuBackStack.addLast { showSubtitlesDialog() }; showQuickSubtitleSyncDialog() }
             ),
             PremiumMenuItem(
                 iconEmoji = "🎨",
@@ -2493,10 +2557,21 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                 onClick = { playerMenuBackStack.addLast { showSubtitlesDialog() }; showPlayerSubtitleLanguagePicker() }
             ),
             PremiumMenuItem(
-                iconEmoji = "⏱️",
-                title = getString(R.string.sub_menu_quick_sync),
-                subtitle = getString(R.string.sub_sync_offset_format, subtitleSyncOffsetMs),
-                onClick = { playerMenuBackStack.addLast { showSubtitlesDialog() }; showQuickSubtitleSyncDialog() }
+                iconEmoji = if (bilingualOn) "🗣️" else "💬",
+                title = getString(R.string.sub_menu_bilingual),
+                subtitle = if (bilingualOn) getString(R.string.sub_bilingual_on_sub) else getString(R.string.sub_bilingual_off_sub),
+                isAccentHighlighted = bilingualOn,
+                onClick = {
+                    val nextBi = !PlaybackStore.isBilingualSubtitleEnabled(this)
+                    PlaybackStore.setBilingualSubtitleEnabled(this, nextBi)
+                    if (originalSubtitleCues.isNotEmpty() && lastTranslatedTexts.isNotEmpty()) {
+                        val updated = SubtitleAutoTranslator.mergeTranslatedTextsPreservingTiming(
+                            originalSubtitleCues, lastTranslatedTexts, bilingual = nextBi
+                        )
+                        applyLoadedSubtitleCues(updated, isTranslated = true)
+                    }
+                    showToastIndicator(if (nextBi) getString(R.string.sub_bilingual_on_sub) else getString(R.string.sub_bilingual_off_sub))
+                }
             ),
             PremiumMenuItem(
                 iconEmoji = if (PlaybackStore.isSubtitlePositionLocked(this)) "🔒" else "🔓",
@@ -2517,34 +2592,6 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             )
         )
 
-        if (externalSubtitleCues.isNotEmpty()) {
-            val targetLang = PlaybackStore.getAutoTranslateTargetLang(this)
-            val isAr = Locale.getDefault().language.equals("ar", ignoreCase = true) ||
-                PlaybackStore.getAppLanguageTag(this).startsWith("ar", ignoreCase = true)
-            val targetName = SubtitleAutoTranslator.getLanguageDisplayName(targetLang, isAr)
-            items.add(
-                PremiumMenuItem(
-                    iconEmoji = "✨",
-                    title = getString(R.string.sub_menu_retranslate),
-                    subtitle = getString(R.string.sub_menu_retranslate_sub, targetName),
-                    isAccentHighlighted = true,
-                    onClick = {
-                        val srcFile = currentSubtitleSourceFile
-                        val srcCues = externalSubtitleCues
-                        if (srcCues.isNotEmpty()) {
-                            startSubtitleAutoTranslation(
-                                sourceFile = srcFile,
-                                sourceCues = srcCues,
-                                sourceLang = currentSubtitleSourceLang.ifBlank { "auto" },
-                                targetLang = targetLang,
-                                forceRetranslate = true
-                            )
-                        }
-                    }
-                )
-            )
-        }
-
         if (externalSubtitleCues.isNotEmpty() || mediaPlayer.spuTrack != -1) {
             items.add(
                 PremiumMenuItem(
@@ -2553,7 +2600,11 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                     subtitle = null,
                     isDanger = true,
                     onClick = {
+                        cancelActiveSubtitleTranslation()
                         externalSubtitleCues = emptyList()
+                        originalSubtitleCues = emptyList()
+                        lastTranslatedTexts = emptyList()
+                        binding.tvDraggableSubtitle.text = ""
                         binding.tvDraggableSubtitle.visibility = View.GONE
                         mediaPlayer.spuTrack = -1
                     }
@@ -2931,6 +2982,10 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
         dialog.show()
 
+        val reqId = translationRequestId.incrementAndGet()
+        val currentPlayMs = if (::mediaPlayer.isInitialized) mediaPlayer.time else 0L
+        val bilingual = PlaybackStore.isBilingualSubtitleEnabled(this)
+
         activeTranslationJob = lifecycleScope.launch {
             val sourceBytes = withContext(Dispatchers.IO) {
                 try {
@@ -2949,9 +3004,21 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                     sourceLang = sourceLang,
                     targetLang = targetLang,
                     forceRetranslate = forceRetranslate,
+                    bilingual = bilingual,
+                    priorityPlaybackMs = currentPlayMs,
+                    onBatchReady = { partialCues ->
+                        if (reqId == translationRequestId.get()) {
+                            runOnUiThread {
+                                if (reqId == translationRequestId.get()) {
+                                    externalSubtitleCues = partialCues
+                                    updateDraggableSubtitleText(if (::mediaPlayer.isInitialized) mediaPlayer.time else 0L)
+                                }
+                            }
+                        }
+                    },
                     onProgress = { completed, total, _ ->
                         runOnUiThread {
-                            if (dialog.isShowing) {
+                            if (dialog.isShowing && reqId == translationRequestId.get()) {
                                 progressBar.max = total.coerceAtLeast(1)
                                 progressBar.progress = completed
                                 tvStatus.text = getString(R.string.sub_auto_translate_progress_detail, completed, total)
@@ -2966,18 +3033,20 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             }
 
             if (dialog.isShowing) dialog.dismiss()
+            if (reqId != translationRequestId.get()) return@launch
 
             if (result != null && result.cues.isNotEmpty()) {
+                originalSubtitleCues = result.originalCues
+                lastTranslatedTexts = result.translatedTexts
                 currentSubtitleDisplayLabel = result.displayLabel
                 currentVideoUri?.let { vUri ->
                     PlaybackStore.saveVideoSubtitleCachePath(this@PlayerActivity, vUri, result.translatedFile.absolutePath)
                     PlaybackStore.saveVideoSubtitleUri(this@PlayerActivity, vUri, result.translatedFile.absolutePath, result.displayLabel)
                 }
-                applyLoadedSubtitleCues(result.cues)
+                applyLoadedSubtitleCues(result.cues, isTranslated = true)
                 showToastIndicator(result.displayLabel)
             } else if (isActive) {
-                // Fallback gracefully to original subtitle if translation failed
-                applyLoadedSubtitleCues(sourceCues)
+                applyLoadedSubtitleCues(sourceCues, isTranslated = false)
                 showToastIndicator(getString(R.string.sub_auto_translate_failed_fallback))
             }
         }
@@ -4007,6 +4076,8 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         }
         hideSystemBars()
         applyThemeAndSubtitleStyle()
+        handler.removeCallbacks(updateProgressRunnable)
+        handler.post(updateProgressRunnable)
         binding.videoSurfaceFrame.post {
             if (!viewsAttached) {
                 attachVlcViewsSafely()
@@ -4040,6 +4111,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     override fun onStop() {
         super.onStop()
         cancelActivePlayerGesturesSafely()
+        cancelActiveSubtitleTranslation()
         if (batteryReceiverRegistered) {
             try { unregisterReceiver(batteryReceiver) } catch (_: Exception) {}
             batteryReceiverRegistered = false
@@ -4191,6 +4263,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
     override fun onDestroy() {
         cancelActivePlayerGesturesSafely()
+        cancelActiveSubtitleTranslation()
         if (pipReceiverRegistered) {
             try { unregisterReceiver(pipActionReceiver) } catch (_: Exception) {}
             pipReceiverRegistered = false
