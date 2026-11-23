@@ -625,4 +625,45 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="changelog_v90_17_desc" formatted="false">• Fixed narrow crushed Settings screen on tablets, foldables, and large landscape displays by removing double horizontal padding inside width-constrained menu containers (centered 600dp on Medium / 680dp on Expanded, full-width on phones).\n• Added live rotation and split-screen resize adaptation without losing Settings state.</string>
     <string name="changelog_v90_18_title">v%1$s — Instant IPTV Source Visibility Fix</string>
     <string name="changelog_v90_18_desc" formatted="false">• Fixed a bug where newly added IPTV playlists/movie libraries did not appear immediately after adding due to a stale in-memory cache; IPTV sources now sync instantly while keeping zero-lag tab switching.\n• Added full Android TV &amp; Large-Screen support: Leanback launcher &amp; TV banner, left-side Navigation Rail on TV/wide screens, TV overscan safe margins, glowing D-Pad focus navigation, and full TV remote playback controls (Center/Left/Right/Up/Down).</string>
+    <!-- v90.20 Status Bar, Smart Subtitle Touch & Auto-Translation -->
+    <string name="sub_menu_quick_sync">Quick Subtitle Sync</string>
+    <string name="setting_lock_sub_position">Lock Subtitle Position</string>
+    <string name="sub_pos_locked_on">Position locked (taps pass through)</string>
+    <string name="sub_pos_locked_off">Unlocked (drag &amp; pinch enabled)</string>
+    <string name="sub_menu_retranslate">Retranslate Current Subtitle</string>
+    <string name="sub_menu_retranslate_sub">Re-run translation to %1$s (bypass cache)</string>
+    <string name="sub_auto_translate_searching_fallback">Searching fallback languages to auto-translate…</string>
+    <string name="sub_auto_translate_ask_title">Auto-Translate Subtitle?</string>
+    <string name="sub_auto_translate_ask_msg">No %1$s subtitle found. Found %2$s subtitle — translate automatically?</string>
+    <string name="sub_auto_translate_action_now">Translate to %1$s</string>
+    <string name="sub_auto_translate_from_sub">Source language: %1$s</string>
+    <string name="sub_auto_translate_use_original">Use original (%1$s)</string>
+    <string name="sub_auto_translate_progress_title">Translating Subtitle…</string>
+    <string name="sub_auto_translate_progress_detail">Translated %1$d / %2$d lines</string>
+    <string name="sub_auto_translate_cancelled">Subtitle translation cancelled</string>
+    <string name="sub_auto_translate_failed_fallback">Translation unavailable — loaded original subtitle</string>
+    <string name="setting_sub_auto_translate_title">Auto-Translate Subtitles</string>
+    <string name="setting_sub_auto_translate_toggle">Auto-Translate Missing Subtitles</string>
+    <string name="setting_sub_auto_translate_ask">Ask Before Translating</string>
+    <string name="setting_sub_auto_translate_target">Target Translation Language</string>
+    <string name="setting_sub_auto_translate_provider">Translation Provider</string>
+    <string name="setting_sub_auto_translate_api_key">Provider API Key</string>
+    <string name="setting_sub_arabic_style">Arabic Translation Style</string>
+    <string name="sub_tr_provider_free">Built-in Translator (No Key)</string>
+    <string name="sub_tr_provider_free_sub">Works immediately with automatic fallback</string>
+    <string name="sub_tr_provider_google_cloud">Google Cloud Translation</string>
+    <string name="sub_tr_provider_deepl">DeepL API</string>
+    <string name="sub_tr_provider_openai">OpenAI / LLM (Context-Aware)</string>
+    <string name="sub_tr_provider_key_sub">Requires API key (falls back automatically if missing)</string>
+    <string name="sub_tr_provider_openai_sub">Best dialogue &amp; Arabic style quality (requires API key)</string>
+    <string name="sub_tr_api_key_not_set">Not set (using built-in fallback)</string>
+    <string name="sub_tr_api_key_hint">Paste your API key here…</string>
+    <string name="sub_tr_ar_style_msa">Modern Standard Arabic (Cinematic)</string>
+    <string name="sub_tr_ar_style_simple">Simple Everyday Arabic</string>
+    <string name="changelog_v90_20_title">v%1$s — Smart Subtitle Touch, Auto-Translate &amp; Status Bar Fix</string>
+    <string name="changelog_v90_20_desc">• Fixed status bar overlapping the top bar after exiting fullscreen player, rotation, or resuming the app.
+• Smart subtitle touch hit-testing: taps outside the actual text bounds and quick taps now reliably Play/Pause, plus a Lock Subtitle Position option.
+• Automatic subtitle download &amp; batched translation (Google Cloud, DeepL, OpenAI LLM, or built-in fallback) with Arabic RTL formatting, caching, progress/cancel, and clear translated labels.
+• Added Quick Subtitle Sync (-0.5s / -0.1s / 0.0s / +0.1s / +0.5s), per-video subtitle memory, and Retranslate option.</string>
+    <string name="ok">OK</string>
 </resources>

@@ -539,4 +539,50 @@ class PurePlayerUnitTests {
         assertEquals(Pair(36, 20), TvFocusHelper.getOverscanMarginsDp(isTv = true))
         assertEquals(Pair(0, 0), TvFocusHelper.getOverscanMarginsDp(isTv = false))
     }
+
+    @Test
+    fun subtitleAutoTranslator_tagsArabicCacheAndSrtRoundTrip() {
+        // 1. Inline tag protection & restoration
+        val raw = "<i>{\\an8}Hello world!</i>"
+        val protected = SubtitleAutoTranslator.protectInlineTags(raw)
+        assertFalse(protected.cleanText.contains("<i>"))
+        assertFalse(protected.cleanText.contains("{\\an8}"))
+        val restored = SubtitleAutoTranslator.restoreInlineTags(
+            protected.cleanText.replace("Hello world!", "مرحبا بالعالم!"),
+            protected.tokens
+        )
+        assertEquals("<i>{\\an8}مرحبا بالعالم!</i>", restored)
+
+        // 2. Arabic RTL & punctuation normalization
+        val arNormalized = SubtitleAutoTranslator.normalizeArabicSubtitleText("كيف حالك ?\nأنا بخير , شكرا ;")
+        assertTrue(arNormalized.contains("؟"))
+        assertTrue(arNormalized.contains("،"))
+        assertTrue(arNormalized.contains("؛"))
+        assertTrue(arNormalized.lines().all { it.startsWith("\u200F") })
+
+        // 3. SRT serialization round-trip with SubtitleParser
+        val cues = listOf(
+            SubtitleCue(1_500L, 4_250L, "Line one\nLine two"),
+            SubtitleCue(65_000L, 69_100L, "Second cue")
+        )
+        val srt = SubtitleAutoTranslator.serializeToSrt(cues)
+        assertTrue(srt.contains("00:00:01,500 --> 00:00:04,250"))
+        val parsed = SubtitleParser.parseSubtitleText(srt)
+        assertEquals(2, parsed.size)
+        assertEquals(1_500L, parsed[0].startMs)
+        assertEquals("Line one\nLine two", parsed[0].text)
+
+        // 4. Deterministic cache keys & provider fallback
+        val sampleBytes = srt.toByteArray(Charsets.UTF_8)
+        val k1 = SubtitleAutoTranslator.computeCacheKey(sampleBytes, "en", "ar", "free_google", "msa")
+        val k2 = SubtitleAutoTranslator.computeCacheKey(sampleBytes, "en", "ar", "free_google", "msa")
+        val k3 = SubtitleAutoTranslator.computeCacheKey(sampleBytes, "en", "fr", "free_google", "msa")
+        assertEquals(k1, k2)
+        assertFalse(k1 == k3)
+
+        assertEquals("free_google", SubtitleAutoTranslator.resolveEffectiveProvider("deepl", ""))
+        assertEquals("deepl", SubtitleAutoTranslator.resolveEffectiveProvider("deepl", "key-123:fx"))
+        assertEquals("Arabic (auto-translated from English)", SubtitleAutoTranslator.buildTranslatedLabel("ar", "en", arabicUi = false))
+        assertEquals("العربية (مترجمة تلقائياً من الإنجليزية)", SubtitleAutoTranslator.buildTranslatedLabel("ar", "en", arabicUi = true))
+    }
 }

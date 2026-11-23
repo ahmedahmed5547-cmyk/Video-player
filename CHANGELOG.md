@@ -1,3 +1,9 @@
+## v90.20 (2026-11-22)
+- **Bug Fix — Status Bar Overlap**: Preserved system-bar `WindowInsets` alongside TV overscan padding in `MainActivity` and re-applied insets and system bars across `onResume`, `onWindowFocusChanged`, `onConfigurationChanged`, and exiting `PlayerActivity`.
+- **Bug Fix — Smart Subtitle Touch Handling**: Restricted subtitle drag/pinch capture to the real rendered text bounds (`+12dp` pad); outside taps and quick taps (`<220ms`) pass through to toggle Play/Pause reliably; added **Lock Subtitle Position** toggle.
+- **Feature — Automatic Subtitle Download & Batch Translation**: Added `SubtitleAutoTranslator` with SRT/VTT/ASS timing & tag preservation, context-aware batch translation (Google Cloud, DeepL, OpenAI/LLM, and built-in fallback), Arabic RTL & punctuation normalization, disk caching, cancellable progress dialog, clear auto-translated labels, and full Settings UI.
+- **Feature — Subtitle Enhancements**: Added Quick Subtitle Sync (`-0.5s`, `-0.1s`, `0.0s`, `+0.1s`, `+0.5s`), per-video subtitle label & path memory, and **Retranslate** option.
+
 ## v90.19 (2026-11-22)
 - **IPTV Source Instant Sync Fix**: Fixed a stale in-memory cache bug where newly added IPTV playlists/movie libraries saved to Room but did not appear until restarting the app. Moved the sources cache directly into `IptvRepository` so every add/edit/delete updates immediately with zero-lag tab switching.
 

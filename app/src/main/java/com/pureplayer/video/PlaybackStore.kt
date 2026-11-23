@@ -117,6 +117,14 @@ object PlaybackStore {
     private const val KEY_APPEARANCE_MODE = "app_appearance_mode_v1"
     private const val KEY_APPEARANCE_MIGRATED_V2 = "app_appearance_migrated_v2"
     private const val KEY_FIRST_SCAN_DONE = "vexo_first_library_scan_done_v1"
+    private const val KEY_SUB_POS_LOCKED = "vexo_sub_position_locked_v1"
+    private const val PREFIX_SAVED_SUB_URI = "vexo_saved_sub_uri_"
+    private const val KEY_AUTO_TRANSLATE_ENABLED = "vexo_auto_translate_enabled_v1"
+    private const val KEY_AUTO_TRANSLATE_ASK = "vexo_auto_translate_ask_before_v1"
+    private const val KEY_AUTO_TRANSLATE_TARGET_LANG = "vexo_auto_translate_target_lang_v1"
+    private const val KEY_AUTO_TRANSLATE_PROVIDER = "vexo_auto_translate_provider_v1"
+    private const val KEY_AUTO_TRANSLATE_API_KEY = "vexo_auto_translate_api_key_v1"
+    private const val KEY_AUTO_TRANSLATE_ARABIC_STYLE = "vexo_auto_translate_arabic_style_v1"
     private const val KEY_LAST_ACTIVE_FOLDER = "last_active_folder_name_v1"
     private const val KEY_AUDIO_PRESET_MODE = "audio_eq_preset_mode_v1"
     private const val KEY_AUDIO_PREAMP_DB = "audio_eq_preamp_db_v1"
@@ -734,6 +742,72 @@ object PlaybackStore {
     }
 
     
+
+    fun isSubtitlePositionLocked(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_SUB_POS_LOCKED, false)
+
+    fun setSubtitlePositionLocked(context: Context, locked: Boolean) {
+        prefs(context).edit().putBoolean(KEY_SUB_POS_LOCKED, locked).apply()
+    }
+
+    fun saveVideoSubtitleUri(context: Context, videoUri: Uri, subUri: String, label: String = "") {
+        prefs(context).edit()
+            .putString(PREFIX_SAVED_SUB_URI + videoUri.toString().hashCode(), subUri)
+            .putString(PREFIX_SAVED_SUB_URI + "lbl_" + videoUri.toString().hashCode(), label)
+            .apply()
+    }
+
+    fun getVideoSubtitleUri(context: Context, videoUri: Uri): Pair<String, String>? {
+        val u = prefs(context).getString(PREFIX_SAVED_SUB_URI + videoUri.toString().hashCode(), null) ?: return null
+        if (u.isBlank()) return null
+        val lbl = prefs(context).getString(PREFIX_SAVED_SUB_URI + "lbl_" + videoUri.toString().hashCode(), "") ?: ""
+        return u to lbl
+    }
+
+    fun isAutoTranslateEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_AUTO_TRANSLATE_ENABLED, true)
+
+    fun setAutoTranslateEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_AUTO_TRANSLATE_ENABLED, enabled).apply()
+    }
+
+    fun isAskBeforeTranslating(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_AUTO_TRANSLATE_ASK, false)
+
+    fun setAskBeforeTranslating(context: Context, ask: Boolean) {
+        prefs(context).edit().putBoolean(KEY_AUTO_TRANSLATE_ASK, ask).apply()
+    }
+
+    fun getAutoTranslateTargetLang(context: Context): String =
+        prefs(context).getString(KEY_AUTO_TRANSLATE_TARGET_LANG, "ar") ?: "ar"
+
+    fun setAutoTranslateTargetLang(context: Context, langCode: String) {
+        prefs(context).edit().putString(KEY_AUTO_TRANSLATE_TARGET_LANG, langCode.lowercase().trim()).apply()
+    }
+
+    // Providers: "free_google", "google_cloud", "deepl", "openai_llm"
+    fun getAutoTranslateProvider(context: Context): String =
+        prefs(context).getString(KEY_AUTO_TRANSLATE_PROVIDER, "free_google") ?: "free_google"
+
+    fun setAutoTranslateProvider(context: Context, provider: String) {
+        prefs(context).edit().putString(KEY_AUTO_TRANSLATE_PROVIDER, provider).apply()
+    }
+
+    fun getAutoTranslateApiKey(context: Context): String =
+        prefs(context).getString(KEY_AUTO_TRANSLATE_API_KEY, "") ?: ""
+
+    fun setAutoTranslateApiKey(context: Context, apiKey: String) {
+        prefs(context).edit().putString(KEY_AUTO_TRANSLATE_API_KEY, apiKey.trim()).apply()
+    }
+
+    // "msa" (Modern Standard Arabic) or "simple"
+    fun getArabicTranslationStyle(context: Context): String =
+        prefs(context).getString(KEY_AUTO_TRANSLATE_ARABIC_STYLE, "msa") ?: "msa"
+
+    fun setArabicTranslationStyle(context: Context, style: String) {
+        prefs(context).edit().putString(KEY_AUTO_TRANSLATE_ARABIC_STYLE, style).apply()
+    }
+
     fun isFirstLibraryScanDone(context: Context): Boolean =
         prefs(context).getBoolean(KEY_FIRST_SCAN_DONE, false)
 

@@ -168,6 +168,55 @@ object SubtitleSearchEngine {
         SubtitleSearchOutcome.Error(SubtitleSearchOutcome.ErrorType.CORRUPTED_FILE)
     }
 
+    /**
+     * Searches across all providers using an explicit list of fallback languages (e.g. en, fr, es)
+     * and downloads the best available subtitle file so it can be auto-translated.
+     */
+    suspend fun searchAndDownloadWithLanguages(
+        context: Context,
+        videoUri: Uri,
+        rawTitle: String,
+        languages: List<String>,
+        customSearchQuery: String? = null
+    ): Triple<SubtitleResultItem, File, List<SubtitleCue>>? = withContext(Dispatchers.IO) {
+        if (!isNetworkAvailable(context)) return@withContext null
+        val request = buildSearchRequest(context, videoUri, rawTitle, languages, customSearchQuery)
+        val allResults = try {
+            withTimeout(14_000L) {
+                coroutineScope {
+                    providers.map { provider ->
+                        async {
+                            try {
+                                provider.search(request)
+                            } catch (_: Exception) {
+                                emptyList()
+                            }
+                        }
+                    }.awaitAll().flatten()
+                }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+        if (allResults.isEmpty()) return@withContext null
+
+        val ranked = allResults.sortedWith(
+            compareBy<SubtitleResultItem> {
+                val idx = languages.indexOf(it.languageCode)
+                if (idx == -1) 999 else idx
+            }.thenByDescending { it.matchQuality.scoreBoost }
+                .thenByDescending { it.rating }
+                .thenByDescending { it.downloadCount }
+        )
+        for (candidate in ranked.take(5)) {
+            val downloaded = downloadAndCacheSubtitle(context, candidate)
+            if (downloaded != null && downloaded.second.isNotEmpty()) {
+                return@withContext Triple(candidate, downloaded.first, downloaded.second)
+            }
+        }
+        null
+    }
+
     suspend fun downloadAndCacheSubtitle(
         context: Context,
         item: SubtitleResultItem

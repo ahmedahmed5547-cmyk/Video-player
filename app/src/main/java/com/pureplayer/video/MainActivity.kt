@@ -156,6 +156,10 @@ class MainActivity : AppCompatActivity() {
     internal var isInVaultTab = false
     internal var isInIptvTab = false
     private var isAudioTabHighlighted = false
+    private var lastSysBarLeft = 0
+    private var lastSysBarTop = 0
+    private var lastSysBarRight = 0
+    private var lastSysBarBottom = 0
     private val tabScrollStates = mutableMapOf<Int, Parcelable?>()
     private val tabSearchQueries = mutableMapOf<Int, String>()
     private var savedVideoFolder: VideoFolder? = null
@@ -304,18 +308,22 @@ class MainActivity : AppCompatActivity() {
         }
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        ViewCompat.setOnApplyWindowInsetsListener(binding.mainRoot) { view, windowInsets ->
+        ViewCompat.setOnApplyWindowInsetsListener(binding.mainRoot) { _, windowInsets ->
             val sysBars = windowInsets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
             val imeInsets = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
             val imeVisible = windowInsets.isVisible(WindowInsetsCompat.Type.ime()) && imeInsets.bottom > sysBars.bottom
-            val bottomInset = maxOf(sysBars.bottom, imeInsets.bottom)
-            view.setPadding(sysBars.left, sysBars.top, sysBars.right, bottomInset)
+            lastSysBarLeft = sysBars.left
+            lastSysBarTop = sysBars.top
+            lastSysBarRight = sysBars.right
+            lastSysBarBottom = maxOf(sysBars.bottom, imeInsets.bottom)
+            applyMainRootInsetsAndOverscan()
             val horizPad = dp(ResponsiveUiMetrics.getListHorizontalPaddingDp(resources.configuration.screenWidthDp))
             binding.recyclerView.setPadding(horizPad, dp(8), horizPad, if (imeVisible) dp(12) else dp(88))
             windowInsets
         }
+        ViewCompat.requestApplyInsets(binding.mainRoot)
 
         setupRecyclerView()
         setupListeners()
@@ -369,10 +377,40 @@ class MainActivity : AppCompatActivity() {
         applyUserTheme(animated = false)
         updateRecyclerLayoutManager()
         updateActiveFullScreenMenuLayoutForWindowSize()
+        restoreSystemBarsAndInsets()
+    }
+
+    
+    private fun applyMainRootInsetsAndOverscan() {
+        val isTvDevice = TvFocusHelper.isTelevisionDevice(this)
+        val (overscanH, overscanV) = TvFocusHelper.getOverscanMarginsDp(isTvDevice)
+        val l = lastSysBarLeft + dp(overscanH)
+        val t = lastSysBarTop + dp(overscanV)
+        val r = lastSysBarRight + dp(overscanH)
+        val b = lastSysBarBottom + dp(overscanV)
+        if (binding.mainRoot.paddingLeft != l || binding.mainRoot.paddingTop != t ||
+            binding.mainRoot.paddingRight != r || binding.mainRoot.paddingBottom != b
+        ) {
+            binding.mainRoot.setPadding(l, t, r, b)
+        }
+    }
+
+    private fun restoreSystemBarsAndInsets() {
+        WindowInsetsControllerCompat(window, binding.root).show(WindowInsetsCompat.Type.systemBars())
+        ViewCompat.requestApplyInsets(binding.mainRoot)
+        applyMainRootInsetsAndOverscan()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            restoreSystemBarsAndInsets()
+        }
     }
 
     override fun onResume() {
         super.onResume()
+        restoreSystemBarsAndInsets()
         applyUserTheme()
         if (currentMainTab == 2) {
             // In IPTV tab: refresh visible items without full list reset
@@ -716,12 +754,7 @@ class MainActivity : AppCompatActivity() {
         }
         val isTvDevice = TvFocusHelper.isTelevisionDevice(this)
         val useSideRail = TvFocusHelper.shouldUseSideNavigationRail(isTvDevice, cfg.screenWidthDp)
-        val (overscanH, overscanV) = TvFocusHelper.getOverscanMarginsDp(isTvDevice)
-        val overscanHPx = dp(overscanH)
-        val overscanVPx = dp(overscanV)
-        if (binding.mainRoot.paddingLeft != overscanHPx || binding.mainRoot.paddingTop != overscanVPx) {
-            binding.mainRoot.setPadding(overscanHPx, overscanVPx, overscanHPx, overscanVPx)
-        }
+        applyMainRootInsetsAndOverscan()
         binding.sideNavRail.visibility = if (useSideRail) View.VISIBLE else View.GONE
         binding.bottomNavBar.visibility = if (useSideRail) View.GONE else View.VISIBLE
         val contentStartMargin = if (useSideRail) dp(76) else 0

@@ -720,6 +720,32 @@ internal fun MainActivity.showSettingsSubtitlesPlaybackPage() {
             }
         ),
         PremiumMenuItem(
+            iconEmoji = "✨",
+            title = getString(R.string.setting_sub_auto_translate_title),
+            subtitle = if (PlaybackStore.isAutoTranslateEnabled(this)) {
+                "${getString(R.string.enabled_label)} • ${PlaybackStore.getAutoTranslateTargetLang(this).uppercase()} • ${getAutoTranslateProviderLabel(PlaybackStore.getAutoTranslateProvider(this))}"
+            } else {
+                getString(R.string.disabled_label)
+            },
+            isAccentHighlighted = PlaybackStore.isAutoTranslateEnabled(this),
+            onClick = {
+                pushSettingsBackStack { showSettingsSubtitlesPlaybackPage() }
+                showSubtitleAutoTranslateSettingsPage()
+            }
+        ),
+        PremiumMenuItem(
+            iconEmoji = if (PlaybackStore.isSubtitlePositionLocked(this)) "🔒" else "🔓",
+            title = getString(R.string.setting_lock_sub_position),
+            subtitle = if (PlaybackStore.isSubtitlePositionLocked(this)) getString(R.string.sub_pos_locked_on) else getString(R.string.sub_pos_locked_off),
+            isAccentHighlighted = PlaybackStore.isSubtitlePositionLocked(this),
+            onClick = {
+                val nextVal = !PlaybackStore.isSubtitlePositionLocked(this)
+                PlaybackStore.setSubtitlePositionLocked(this, nextVal)
+                Toast.makeText(this, if (nextVal) getString(R.string.sub_pos_locked_on) else getString(R.string.sub_pos_locked_off), Toast.LENGTH_SHORT).show()
+                showSettingsSubtitlesPlaybackPage()
+            }
+        ),
+        PremiumMenuItem(
             iconEmoji = "🎯",
             title = getString(R.string.setting_reset_sub_position),
             subtitle = getString(R.string.sub_position_reset_toast),
@@ -1088,10 +1114,18 @@ internal fun MainActivity.showChangelogPage() {
         ChangelogReleaseEntry(
             version = verName,
             date = "2026-11-22",
-            iconEmoji = "📺",
-            title = getString(R.string.changelog_v90_18_title, verName),
-            description = getString(R.string.changelog_v90_18_desc),
+            iconEmoji = "✨",
+            title = getString(R.string.changelog_v90_20_title, verName),
+            description = getString(R.string.changelog_v90_20_desc),
             isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.19",
+            date = "2026-11-22",
+            iconEmoji = "📺",
+            title = getString(R.string.changelog_v90_18_title, "90.19"),
+            description = getString(R.string.changelog_v90_18_desc),
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.17",
@@ -2191,4 +2225,234 @@ internal fun MainActivity.showBatterySaverSettingsDialog() {
         items = items,
         showHeaderVersionBadge = false
     )
+}
+
+
+internal fun MainActivity.getAutoTranslateProviderLabel(provider: String): String {
+    return when (provider) {
+        "google_cloud" -> getString(R.string.sub_tr_provider_google_cloud)
+        "deepl" -> getString(R.string.sub_tr_provider_deepl)
+        "openai_llm" -> getString(R.string.sub_tr_provider_openai)
+        else -> getString(R.string.sub_tr_provider_free)
+    }
+}
+
+internal fun MainActivity.showSubtitleAutoTranslateSettingsPage() {
+    val enabled = PlaybackStore.isAutoTranslateEnabled(this)
+    val askFirst = PlaybackStore.isAskBeforeTranslating(this)
+    val targetLang = PlaybackStore.getAutoTranslateTargetLang(this)
+    val provider = PlaybackStore.getAutoTranslateProvider(this)
+    val apiKey = PlaybackStore.getAutoTranslateApiKey(this)
+    val arStyle = PlaybackStore.getArabicTranslationStyle(this)
+    val isArUi = Locale.getDefault().language.equals("ar", ignoreCase = true) ||
+        PlaybackStore.getAppLanguageTag(this).startsWith("ar", ignoreCase = true)
+    val targetDisplay = SubtitleAutoTranslator.getLanguageDisplayName(targetLang, isArUi)
+    val keyPreview = if (apiKey.isBlank()) {
+        getString(R.string.sub_tr_api_key_not_set)
+    } else {
+        "••••••••" + apiKey.takeLast(4)
+    }
+
+    val items = listOf(
+        PremiumMenuItem(
+            iconEmoji = "✨",
+            title = getString(R.string.setting_sub_auto_translate_toggle),
+            subtitle = if (enabled) getString(R.string.enabled_label) else getString(R.string.disabled_label),
+            isAccentHighlighted = enabled,
+            onClick = {
+                PlaybackStore.setAutoTranslateEnabled(this, !enabled)
+                showSubtitleAutoTranslateSettingsPage()
+            }
+        ),
+        PremiumMenuItem(
+            iconEmoji = "❓",
+            title = getString(R.string.setting_sub_auto_translate_ask),
+            subtitle = if (askFirst) getString(R.string.enabled_label) else getString(R.string.disabled_label),
+            isAccentHighlighted = askFirst,
+            onClick = {
+                PlaybackStore.setAskBeforeTranslating(this, !askFirst)
+                showSubtitleAutoTranslateSettingsPage()
+            }
+        ),
+        PremiumMenuItem(
+            iconEmoji = "🌐",
+            title = getString(R.string.setting_sub_auto_translate_target),
+            subtitle = "$targetDisplay (${targetLang.uppercase()})",
+            onClick = {
+                pushSettingsBackStack { showSubtitleAutoTranslateSettingsPage() }
+                showAutoTranslateTargetLanguageDialog()
+            }
+        ),
+        PremiumMenuItem(
+            iconEmoji = "⚙️",
+            title = getString(R.string.setting_sub_auto_translate_provider),
+            subtitle = getAutoTranslateProviderLabel(provider),
+            onClick = {
+                pushSettingsBackStack { showSubtitleAutoTranslateSettingsPage() }
+                showAutoTranslateProviderDialog()
+            }
+        ),
+        PremiumMenuItem(
+            iconEmoji = "🔑",
+            title = getString(R.string.setting_sub_auto_translate_api_key),
+            subtitle = keyPreview,
+            onClick = { showAutoTranslateApiKeyDialog() }
+        ),
+        PremiumMenuItem(
+            iconEmoji = "📝",
+            title = getString(R.string.setting_sub_arabic_style),
+            subtitle = if (arStyle == "simple") getString(R.string.sub_tr_ar_style_simple) else getString(R.string.sub_tr_ar_style_msa),
+            onClick = {
+                val nextStyle = if (arStyle == "simple") "msa" else "simple"
+                PlaybackStore.setArabicTranslationStyle(this, nextStyle)
+                showSubtitleAutoTranslateSettingsPage()
+            }
+        )
+    )
+
+    showPremiumMenuDialog(
+        headerIcon = "✨",
+        title = getString(R.string.setting_sub_auto_translate_title),
+        subtitle = "$targetDisplay • ${getAutoTranslateProviderLabel(provider)}",
+        items = items
+    )
+}
+
+internal fun MainActivity.showAutoTranslateTargetLanguageDialog() {
+    val current = PlaybackStore.getAutoTranslateTargetLang(this)
+    val isArUi = Locale.getDefault().language.equals("ar", ignoreCase = true) ||
+        PlaybackStore.getAppLanguageTag(this).startsWith("ar", ignoreCase = true)
+    val langs = listOf("ar", "en", "fr", "es", "de", "tr", "ru", "pt", "it", "hi", "ur", "id", "zh", "ja", "ko")
+    val items = langs.map { code ->
+        val name = SubtitleAutoTranslator.getLanguageDisplayName(code, isArUi)
+        PremiumMenuItem(
+            iconEmoji = if (code == current) "✅" else "🌐",
+            title = name,
+            subtitle = code.uppercase(),
+            isAccentHighlighted = (code == current),
+            onClick = {
+                PlaybackStore.setAutoTranslateTargetLang(this, code)
+                popSettingsBackStack()
+            }
+        )
+    }
+    showPremiumMenuDialog(
+        headerIcon = "🌐",
+        title = getString(R.string.setting_sub_auto_translate_target),
+        subtitle = current.uppercase(),
+        items = items
+    )
+}
+
+internal fun MainActivity.showAutoTranslateProviderDialog() {
+    val current = PlaybackStore.getAutoTranslateProvider(this)
+    val providers = listOf(
+        Triple("free_google", getString(R.string.sub_tr_provider_free), getString(R.string.sub_tr_provider_free_sub)),
+        Triple("google_cloud", getString(R.string.sub_tr_provider_google_cloud), getString(R.string.sub_tr_provider_key_sub)),
+        Triple("deepl", getString(R.string.sub_tr_provider_deepl), getString(R.string.sub_tr_provider_key_sub)),
+        Triple("openai_llm", getString(R.string.sub_tr_provider_openai), getString(R.string.sub_tr_provider_openai_sub))
+    )
+    val items = providers.map { (id, title, sub) ->
+        PremiumMenuItem(
+            iconEmoji = if (id == current) "✅" else "⚙️",
+            title = title,
+            subtitle = sub,
+            isAccentHighlighted = (id == current),
+            onClick = {
+                PlaybackStore.setAutoTranslateProvider(this, id)
+                popSettingsBackStack()
+            }
+        )
+    }
+    showPremiumMenuDialog(
+        headerIcon = "⚙️",
+        title = getString(R.string.setting_sub_auto_translate_provider),
+        subtitle = getAutoTranslateProviderLabel(current),
+        items = items
+    )
+}
+
+internal fun MainActivity.showAutoTranslateApiKeyDialog() {
+    val accent = PlaybackStore.getAccentColor(this)
+    val surface = PlaybackStore.getSurfaceColor(this)
+    val bg = PlaybackStore.getBackgroundColor(this)
+    val primaryText = PlaybackStore.getPrimaryTextColor(this)
+    val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+    val density = resources.displayMetrics.density
+    fun dpLocal(v: Int): Int = (v * density).toInt()
+
+    val container = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dpLocal(22), dpLocal(20), dpLocal(22), dpLocal(18))
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dpLocal(24).toFloat()
+            setColor(surface)
+            setStroke(dpLocal(1), Color.argb(110, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+    }
+
+    val tvTitle = TextView(this).apply {
+        text = "🔑  ${getString(R.string.setting_sub_auto_translate_api_key)}"
+        setTextColor(primaryText)
+        textSize = 17f
+        setTypeface(typeface, Typeface.BOLD)
+        setPadding(0, 0, 0, dpLocal(10))
+    }
+
+    val input = android.widget.EditText(this).apply {
+        setText(PlaybackStore.getAutoTranslateApiKey(this@showAutoTranslateApiKeyDialog))
+        hint = getString(R.string.sub_tr_api_key_hint)
+        setTextColor(primaryText)
+        setHintTextColor(secondaryText)
+        setSingleLine(true)
+        setPadding(dpLocal(14), dpLocal(12), dpLocal(14), dpLocal(12))
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dpLocal(14).toFloat()
+            setColor(bg)
+            setStroke(dpLocal(1), Color.argb(115, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+    }
+
+    val btnRow = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.END
+        setPadding(0, dpLocal(14), 0, 0)
+    }
+
+    val dialog = AlertDialog.Builder(this).setView(container).create()
+    dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+    val btnClear = TextView(this).apply {
+        text = getString(R.string.cancel)
+        setTextColor(secondaryText)
+        textSize = 14f
+        setPadding(dpLocal(14), dpLocal(10), dpLocal(14), dpLocal(10))
+        setOnClickListener { dialog.dismiss() }
+    }
+
+    val btnSave = TextView(this).apply {
+        text = getString(R.string.ok)
+        setTextColor(Color.parseColor("#090D16"))
+        textSize = 14f
+        setTypeface(typeface, Typeface.BOLD)
+        setPadding(dpLocal(20), dpLocal(10), dpLocal(20), dpLocal(10))
+        background = GradientDrawable().apply {
+            cornerRadius = dpLocal(12).toFloat()
+            setColor(accent)
+        }
+        setOnClickListener {
+            PlaybackStore.setAutoTranslateApiKey(this@showAutoTranslateApiKeyDialog, input.text.toString().trim())
+            dialog.dismiss()
+            showSubtitleAutoTranslateSettingsPage()
+        }
+    }
+
+    btnRow.addView(btnClear)
+    btnRow.addView(btnSave)
+    container.addView(tvTitle)
+    container.addView(input)
+    container.addView(btnRow)
+    dialog.show()
 }

@@ -43,6 +43,7 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
+import android.view.ViewConfiguration
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -50,6 +51,7 @@ import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
@@ -211,6 +213,10 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
     private var externalSubtitleCues = listOf<SubtitleCue>()
     private var subtitleSyncOffsetMs = 0L
+    private var currentSubtitleSourceFile: File? = null
+    private var currentSubtitleSourceLang: String = "en"
+    private var currentSubtitleDisplayLabel: String = ""
+    private var activeTranslationJob: kotlinx.coroutines.Job? = null
     private var isDraggingSubtitle = false
     private var isPinchingSubtitle = false
     private var dragStartRawX = 0f
@@ -346,12 +352,15 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         currentVideoUri?.let { uri ->
             subtitleSyncOffsetMs = PlaybackStore.getVideoSubtitleSyncMs(this, uri)
             val cachedSubPath = PlaybackStore.getVideoSubtitleCachePath(this, uri)
+            val savedSubMeta = PlaybackStore.getVideoSubtitleUri(this, uri)
             if (!cachedSubPath.isNullOrEmpty()) {
                 val file = File(cachedSubPath)
                 if (file.exists()) {
                     val cues = SubtitleParser.parseFromFile(file)
                     if (cues.isNotEmpty()) {
                         externalSubtitleCues = cues
+                        currentSubtitleSourceFile = file
+                        currentSubtitleDisplayLabel = savedSubMeta?.second.orEmpty()
                     }
                 }
             }
@@ -1632,7 +1641,12 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                             val cacheDir = File(filesDir, "subtitles_cache").apply { mkdirs() }
                             val localCopy = File(cacheDir, "local_${vUri.hashCode()}.srt")
                             localCopy.writeBytes(bytes)
+                            val label = uri.lastPathSegment?.substringAfterLast('/') ?: "Local Subtitle"
                             PlaybackStore.saveVideoSubtitleCachePath(this@PlayerActivity, vUri, localCopy.absolutePath)
+                            PlaybackStore.saveVideoSubtitleUri(this@PlayerActivity, vUri, localCopy.absolutePath, label)
+                            currentSubtitleSourceFile = localCopy
+                            currentSubtitleSourceLang = "auto"
+                            currentSubtitleDisplayLabel = label
                         }
                     }
                     applyLoadedSubtitleCues(cues)
@@ -1706,31 +1720,86 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             }
         )
 
+        val touchSlopPx = ViewConfiguration.get(this).scaledTouchSlop.toFloat().coerceAtLeast(12f)
+        val hitPadPx = 12f * resources.displayMetrics.density
+        var subDownTimeMs = 0L
+        var subTouchTracking = false
+        var subDidScale = false
+
+        fun isPointOnRenderedSubtitleText(tv: TextView, x: Float, y: Float): Boolean {
+            if (tv.visibility != View.VISIBLE || tv.text.isNullOrBlank()) return false
+            val layout = tv.layout ?: return false
+            if (layout.lineCount <= 0) return false
+            var minLeft = Float.MAX_VALUE
+            var maxRight = 0f
+            for (line in 0 until layout.lineCount) {
+                minLeft = minOf(minLeft, layout.getLineLeft(line))
+                maxRight = maxOf(maxRight, layout.getLineRight(line))
+            }
+            val top = tv.totalPaddingTop + layout.getLineTop(0).toFloat()
+            val bottom = tv.totalPaddingTop + layout.getLineBottom(layout.lineCount - 1).toFloat()
+            val left = tv.totalPaddingLeft + minLeft
+            val right = tv.totalPaddingLeft + maxRight
+            return x in (left - hitPadPx)..(right + hitPadPx) && y in (top - hitPadPx)..(bottom + hitPadPx)
+        }
+
         binding.tvDraggableSubtitle.setOnTouchListener { view, event ->
-            if (isLocked) return@setOnTouchListener false
-            view.parent?.requestDisallowInterceptTouchEvent(true)
-            subtitleScaleDetector.onTouchEvent(event)
+            val tv = view as? TextView ?: return@setOnTouchListener false
+            if (isLocked || PlaybackStore.isSubtitlePositionLocked(this)) {
+                return@setOnTouchListener false
+            }
 
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    isDraggingSubtitle = true
+                    // Only intercept touches that actually land ON the rendered subtitle text bounds (+12dp pad)
+                    if (!isPointOnRenderedSubtitleText(tv, event.x, event.y)) {
+                        subTouchTracking = false
+                        isDraggingSubtitle = false
+                        return@setOnTouchListener false
+                    }
+                    subTouchTracking = true
+                    isDraggingSubtitle = false
+                    subDidScale = false
+                    subDownTimeMs = event.eventTime
                     dragStartRawX = event.rawX
                     dragStartRawY = event.rawY
                     dragStartTransX = view.translationX
                     dragStartTransY = view.translationY
-                    view.background = GradientDrawable().apply {
-                        cornerRadius = 18f
-                        setColor(Color.parseColor("#CC0284C7"))
-                    }
+                    subtitleScaleDetector.onTouchEvent(event)
+                    true
+                }
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    if (!subTouchTracking) return@setOnTouchListener false
+                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                    subDidScale = true
+                    subtitleScaleDetector.onTouchEvent(event)
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    if (!subTouchTracking) return@setOnTouchListener false
+                    if (event.pointerCount >= 2) {
+                        view.parent?.requestDisallowInterceptTouchEvent(true)
+                        subDidScale = true
+                        subtitleScaleDetector.onTouchEvent(event)
+                        return@setOnTouchListener true
+                    }
+                    val deltaX = event.rawX - dragStartRawX
+                    val deltaY = event.rawY - dragStartRawY
+                    val movedDist = kotlin.math.hypot(deltaX.toDouble(), deltaY.toDouble()).toFloat()
+                    val heldMs = event.eventTime - subDownTimeMs
+
+                    if (!isDraggingSubtitle && (movedDist >= touchSlopPx || heldMs >= 300L)) {
+                        isDraggingSubtitle = true
+                        view.parent?.requestDisallowInterceptTouchEvent(true)
+                        view.background = GradientDrawable().apply {
+                            cornerRadius = 18f
+                            setColor(Color.parseColor("#CC0284C7"))
+                        }
+                    }
+
                     if (!subtitleScaleDetector.isInProgress && isDraggingSubtitle && event.pointerCount == 1) {
                         val parentW = binding.playerRoot.width.toFloat().coerceAtLeast(1f)
                         val parentH = binding.playerRoot.height.toFloat().coerceAtLeast(1f)
-
-                        val deltaX = event.rawX - dragStartRawX
-                        val deltaY = event.rawY - dragStartRawY
 
                         val halfRemainingW = ((parentW - view.width) / 2f).coerceAtLeast(0f)
                         val minTransX = -halfRemainingW + 8f
@@ -1754,6 +1823,14 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (!subTouchTracking) return@setOnTouchListener false
+                    subTouchTracking = false
+                    subtitleScaleDetector.onTouchEvent(event)
+                    val elapsedMs = event.eventTime - subDownTimeMs
+                    val dx = event.rawX - dragStartRawX
+                    val dy = event.rawY - dragStartRawY
+                    val movedDist = kotlin.math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+
                     if (isDraggingSubtitle) {
                         isDraggingSubtitle = false
                         val parentW = binding.playerRoot.width.toFloat().coerceAtLeast(1f)
@@ -1769,10 +1846,25 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                                 ((1f + pctY) * 100).toInt()
                             )
                         )
+                    } else if (event.actionMasked == MotionEvent.ACTION_UP && !subDidScale && elapsedMs < 220L && movedDist < touchSlopPx) {
+                        // Quick tap on subtitle text -> toggle Play/Pause & show controls!
+                        if (::mediaPlayer.isInitialized) {
+                            if (mediaPlayer.isPlaying) {
+                                mediaPlayer.pause()
+                                binding.btnPlayPause.setImageResource(R.drawable.ic_play_modern)
+                                showToastIndicator("⏸")
+                            } else {
+                                mediaPlayer.play()
+                                binding.btnPlayPause.setImageResource(R.drawable.ic_pause_modern)
+                                showToastIndicator("▶")
+                            }
+                        }
+                        showControls()
+                        scheduleHideControls()
                     }
                     true
                 }
-                else -> true
+                else -> false
             }
         }
     }
@@ -2293,12 +2385,57 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                 onClick = { playerMenuBackStack.addLast { showSubtitlesDialog() }; showPlayerSubtitleLanguagePicker() }
             ),
             PremiumMenuItem(
+                iconEmoji = "⏱️",
+                title = getString(R.string.sub_menu_quick_sync),
+                subtitle = getString(R.string.sub_sync_offset_format, subtitleSyncOffsetMs),
+                onClick = { playerMenuBackStack.addLast { showSubtitlesDialog() }; showQuickSubtitleSyncDialog() }
+            ),
+            PremiumMenuItem(
+                iconEmoji = if (PlaybackStore.isSubtitlePositionLocked(this)) "🔒" else "🔓",
+                title = getString(R.string.setting_lock_sub_position),
+                subtitle = if (PlaybackStore.isSubtitlePositionLocked(this)) getString(R.string.sub_pos_locked_on) else getString(R.string.sub_pos_locked_off),
+                isAccentHighlighted = PlaybackStore.isSubtitlePositionLocked(this),
+                onClick = {
+                    val nextLocked = !PlaybackStore.isSubtitlePositionLocked(this)
+                    PlaybackStore.setSubtitlePositionLocked(this, nextLocked)
+                    showToastIndicator(if (nextLocked) getString(R.string.sub_pos_locked_on) else getString(R.string.sub_pos_locked_off))
+                }
+            ),
+            PremiumMenuItem(
                 iconEmoji = "🎯",
                 title = getString(R.string.sub_menu_reset_pos),
                 subtitle = getString(R.string.sub_position_reset_toast),
                 onClick = { resetSubtitlePositionNow() }
             )
         )
+
+        if (externalSubtitleCues.isNotEmpty()) {
+            val targetLang = PlaybackStore.getAutoTranslateTargetLang(this)
+            val isAr = Locale.getDefault().language.equals("ar", ignoreCase = true) ||
+                PlaybackStore.getAppLanguageTag(this).startsWith("ar", ignoreCase = true)
+            val targetName = SubtitleAutoTranslator.getLanguageDisplayName(targetLang, isAr)
+            items.add(
+                PremiumMenuItem(
+                    iconEmoji = "✨",
+                    title = getString(R.string.sub_menu_retranslate),
+                    subtitle = getString(R.string.sub_menu_retranslate_sub, targetName),
+                    isAccentHighlighted = true,
+                    onClick = {
+                        val srcFile = currentSubtitleSourceFile
+                        val srcCues = externalSubtitleCues
+                        if (srcCues.isNotEmpty()) {
+                            startSubtitleAutoTranslation(
+                                sourceFile = srcFile,
+                                sourceCues = srcCues,
+                                sourceLang = currentSubtitleSourceLang.ifBlank { "auto" },
+                                targetLang = targetLang,
+                                forceRetranslate = true
+                            )
+                        }
+                    }
+                )
+            )
+        }
 
         if (externalSubtitleCues.isNotEmpty() || mediaPlayer.spuTrack != -1) {
             items.add(
@@ -2333,10 +2470,15 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             )
         }
 
+        val headerSub = if (currentSubtitleDisplayLabel.isNotBlank() && externalSubtitleCues.isNotEmpty()) {
+            "$currentSubtitleDisplayLabel • $preferredLangsStr"
+        } else {
+            preferredLangsStr
+        }
         showPlayerPremiumMenu(
             headerIcon = "💬",
             title = getString(R.string.subtitles),
-            subtitle = preferredLangsStr,
+            subtitle = headerSub,
             items = items
         )
     }
@@ -2452,19 +2594,74 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             )
             binding.playerLoadingBar.visibility = View.GONE
 
+            val targetLang = PlaybackStore.getAutoTranslateTargetLang(this@PlayerActivity)
+            val autoTranslateOn = PlaybackStore.isAutoTranslateEnabled(this@PlayerActivity)
+
             when (outcome) {
                 is SubtitleSearchOutcome.Success -> {
-                    applyLoadedSubtitleCues(outcome.autoAppliedCues)
-                    showToastIndicator(
-                        getString(
-                            R.string.sub_auto_applied_format,
-                            outcome.bestItem.providerName,
-                            outcome.bestItem.languageCode.uppercase()
+                    val bestLang = outcome.bestItem.languageCode.lowercase(Locale.ROOT)
+                    val cachedPath = PlaybackStore.getVideoSubtitleCachePath(this@PlayerActivity, uri)
+                    val cachedFile = cachedPath?.let { File(it) }?.takeIf { it.exists() }
+                    currentSubtitleSourceFile = cachedFile
+                    currentSubtitleSourceLang = bestLang
+
+                    if (autoTranslateOn && bestLang != targetLang && targetLang.isNotBlank()) {
+                        // Downloaded subtitle is in another language -> offer or run auto-translation!
+                        offerOrRunAutoTranslation(
+                            sourceFile = cachedFile,
+                            sourceCues = outcome.autoAppliedCues,
+                            sourceLang = bestLang,
+                            targetLang = targetLang,
+                            fallbackResults = outcome.results
                         )
-                    )
-                    showManualSubtitleResultsDialog(outcome.results)
+                    } else {
+                        val isAr = Locale.getDefault().language.equals("ar", ignoreCase = true) ||
+                            PlaybackStore.getAppLanguageTag(this@PlayerActivity).startsWith("ar", ignoreCase = true)
+                        val lbl = "${SubtitleAutoTranslator.getLanguageDisplayName(bestLang, isAr)} (${outcome.bestItem.providerName})"
+                        currentSubtitleDisplayLabel = lbl
+                        cachedFile?.let { f ->
+                            PlaybackStore.saveVideoSubtitleUri(this@PlayerActivity, uri, f.absolutePath, lbl)
+                        }
+                        applyLoadedSubtitleCues(outcome.autoAppliedCues)
+                        showToastIndicator(
+                            getString(
+                                R.string.sub_auto_applied_format,
+                                outcome.bestItem.providerName,
+                                outcome.bestItem.languageCode.uppercase()
+                            )
+                        )
+                        showManualSubtitleResultsDialog(outcome.results)
+                    }
                 }
                 is SubtitleSearchOutcome.Error -> {
+                    // If target language not found and auto-translate is enabled, search fallback languages (en, fr, es, de)
+                    if (outcome.errorType == SubtitleSearchOutcome.ErrorType.NOT_FOUND && autoTranslateOn) {
+                        binding.playerLoadingBar.visibility = View.VISIBLE
+                        showToastIndicator(getString(R.string.sub_auto_translate_searching_fallback))
+                        val fallbackLangs = listOf("en", "fr", "es", "de", "tr").filter { it != targetLang }
+                        val fallback = SubtitleSearchEngine.searchAndDownloadWithLanguages(
+                            context = this@PlayerActivity,
+                            videoUri = uri,
+                            rawTitle = currentVideoTitle,
+                            languages = fallbackLangs,
+                            customSearchQuery = customQuery
+                        )
+                        binding.playerLoadingBar.visibility = View.GONE
+                        if (fallback != null) {
+                            val (fbItem, fbFile, fbCues) = fallback
+                            currentSubtitleSourceFile = fbFile
+                            currentSubtitleSourceLang = fbItem.languageCode.lowercase(Locale.ROOT)
+                            offerOrRunAutoTranslation(
+                                sourceFile = fbFile,
+                                sourceCues = fbCues,
+                                sourceLang = fbItem.languageCode.lowercase(Locale.ROOT),
+                                targetLang = targetLang,
+                                fallbackResults = emptyList()
+                            )
+                            return@launch
+                        }
+                    }
+
                     val msgRes = when (outcome.errorType) {
                         SubtitleSearchOutcome.ErrorType.NO_INTERNET -> R.string.sub_err_no_internet
                         SubtitleSearchOutcome.ErrorType.TIMEOUT -> R.string.sub_err_timeout
@@ -2489,6 +2686,297 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                 }
             }
         }
+    }
+
+    private fun offerOrRunAutoTranslation(
+        sourceFile: File?,
+        sourceCues: List<SubtitleCue>,
+        sourceLang: String,
+        targetLang: String,
+        fallbackResults: List<SubtitleResultItem>
+    ) {
+        if (!PlaybackStore.isAskBeforeTranslating(this)) {
+            startSubtitleAutoTranslation(
+                sourceFile = sourceFile,
+                sourceCues = sourceCues,
+                sourceLang = sourceLang,
+                targetLang = targetLang,
+                forceRetranslate = false
+            )
+            return
+        }
+
+        val isAr = Locale.getDefault().language.equals("ar", ignoreCase = true) ||
+            PlaybackStore.getAppLanguageTag(this).startsWith("ar", ignoreCase = true)
+        val srcName = SubtitleAutoTranslator.getLanguageDisplayName(sourceLang, isAr)
+        val tgtName = SubtitleAutoTranslator.getLanguageDisplayName(targetLang, isAr)
+
+        showPlayerPremiumMenu(
+            headerIcon = "🌐",
+            title = getString(R.string.sub_auto_translate_ask_title),
+            subtitle = getString(R.string.sub_auto_translate_ask_msg, tgtName, srcName),
+            items = listOf(
+                PremiumMenuItem(
+                    iconEmoji = "✨",
+                    title = getString(R.string.sub_auto_translate_action_now, tgtName),
+                    subtitle = getString(R.string.sub_auto_translate_from_sub, srcName),
+                    isAccentHighlighted = true,
+                    onClick = {
+                        startSubtitleAutoTranslation(
+                            sourceFile = sourceFile,
+                            sourceCues = sourceCues,
+                            sourceLang = sourceLang,
+                            targetLang = targetLang,
+                            forceRetranslate = false
+                        )
+                    }
+                ),
+                PremiumMenuItem(
+                    iconEmoji = "💬",
+                    title = getString(R.string.sub_auto_translate_use_original, srcName),
+                    subtitle = getString(R.string.sub_loaded_count_format, sourceCues.size),
+                    onClick = {
+                        currentSubtitleDisplayLabel = srcName
+                        applyLoadedSubtitleCues(sourceCues)
+                        showToastIndicator(getString(R.string.sub_loaded_count_format, sourceCues.size))
+                        if (fallbackResults.size > 1) showManualSubtitleResultsDialog(fallbackResults)
+                    }
+                )
+            )
+        )
+    }
+
+    private fun startSubtitleAutoTranslation(
+        sourceFile: File?,
+        sourceCues: List<SubtitleCue>,
+        sourceLang: String,
+        targetLang: String,
+        forceRetranslate: Boolean
+    ) {
+        activeTranslationJob?.cancel()
+
+        val accent = PlaybackStore.getAccentColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
+        val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(20), dp(22), dp(18))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(24).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(110, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+
+        val tvTitle = TextView(this).apply {
+            text = "✨  ${getString(R.string.sub_auto_translate_progress_title)}"
+            setTextColor(primaryText)
+            textSize = 16.5f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, 0, 0, dp(8))
+        }
+
+        val tvStatus = TextView(this).apply {
+            text = getString(R.string.sub_auto_translate_progress_detail, 0, sourceCues.size)
+            setTextColor(secondaryText)
+            textSize = 13.5f
+            setPadding(0, 0, 0, dp(12))
+        }
+
+        val progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = sourceCues.size.coerceAtLeast(1)
+            progress = 0
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(8)
+            ).apply { bottomMargin = dp(14) }
+        }
+
+        val btnCancel = TextView(this).apply {
+            text = getString(R.string.cancel)
+            setTextColor(accent)
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.END
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+        }
+
+        container.addView(tvTitle)
+        container.addView(tvStatus)
+        container.addView(progressBar)
+        container.addView(btnCancel)
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(container)
+            .setCancelable(false)
+            .create()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        btnCancel.setOnClickListener {
+            activeTranslationJob?.cancel()
+            dialog.dismiss()
+            showToastIndicator(getString(R.string.sub_auto_translate_cancelled))
+        }
+
+        dialog.show()
+
+        activeTranslationJob = lifecycleScope.launch {
+            val sourceBytes = withContext(Dispatchers.IO) {
+                try {
+                    sourceFile?.takeIf { it.exists() }?.readBytes()
+                        ?: SubtitleAutoTranslator.serializeToSrt(sourceCues).toByteArray(Charsets.UTF_8)
+                } catch (_: Exception) {
+                    SubtitleAutoTranslator.serializeToSrt(sourceCues).toByteArray(Charsets.UTF_8)
+                }
+            }
+
+            val result = try {
+                SubtitleAutoTranslator.translateSubtitleCues(
+                    context = this@PlayerActivity,
+                    sourceBytes = sourceBytes,
+                    sourceCues = sourceCues,
+                    sourceLang = sourceLang,
+                    targetLang = targetLang,
+                    forceRetranslate = forceRetranslate,
+                    onProgress = { completed, total, _ ->
+                        runOnUiThread {
+                            if (dialog.isShowing) {
+                                progressBar.max = total.coerceAtLeast(1)
+                                progressBar.progress = completed
+                                tvStatus.text = getString(R.string.sub_auto_translate_progress_detail, completed, total)
+                            }
+                        }
+                    }
+                )
+            } catch (_: kotlinx.coroutines.CancellationException) {
+                null
+            } catch (_: Exception) {
+                null
+            }
+
+            if (dialog.isShowing) dialog.dismiss()
+
+            if (result != null && result.cues.isNotEmpty()) {
+                currentSubtitleDisplayLabel = result.displayLabel
+                currentVideoUri?.let { vUri ->
+                    PlaybackStore.saveVideoSubtitleCachePath(this@PlayerActivity, vUri, result.translatedFile.absolutePath)
+                    PlaybackStore.saveVideoSubtitleUri(this@PlayerActivity, vUri, result.translatedFile.absolutePath, result.displayLabel)
+                }
+                applyLoadedSubtitleCues(result.cues)
+                showToastIndicator(result.displayLabel)
+            } else if (isActive) {
+                // Fallback gracefully to original subtitle if translation failed
+                applyLoadedSubtitleCues(sourceCues)
+                showToastIndicator(getString(R.string.sub_auto_translate_failed_fallback))
+            }
+        }
+    }
+
+    private fun showQuickSubtitleSyncDialog() {
+        val accent = PlaybackStore.getAccentColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val bg = PlaybackStore.getBackgroundColor(this)
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
+        val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(18), dp(20), dp(18))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(24).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(110, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+
+        val tvTitle = TextView(this).apply {
+            text = "⏱️  ${getString(R.string.sub_menu_quick_sync)}"
+            setTextColor(primaryText)
+            textSize = 17f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, 0, 0, dp(6))
+        }
+
+        val tvCurrent = TextView(this).apply {
+            text = getString(R.string.sub_sync_offset_format, subtitleSyncOffsetMs)
+            setTextColor(accent)
+            textSize = 15f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(4), 0, dp(14))
+        }
+
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+
+        val steps = listOf(
+            "-0.5s" to -500L,
+            "-0.1s" to -100L,
+            "0.0s" to 0L,
+            "+0.1s" to 100L,
+            "+0.5s" to 500L
+        )
+
+        for ((label, delta) in steps) {
+            val isReset = (delta == 0L)
+            val btn = TextView(this).apply {
+                text = label
+                textSize = 13f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(if (isReset) Color.parseColor("#090D16") else primaryText)
+                gravity = Gravity.CENTER
+                setPadding(dp(10), dp(10), dp(10), dp(10))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(12).toFloat()
+                    setColor(if (isReset) accent else bg)
+                    if (!isReset) setStroke(dp(1), Color.argb(90, Color.red(accent), Color.green(accent), Color.blue(accent)))
+                }
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginStart = dp(3)
+                    marginEnd = dp(3)
+                }
+                setOnClickListener {
+                    if (isReset) {
+                        subtitleSyncOffsetMs = 0L
+                        currentVideoUri?.let { PlaybackStore.saveVideoSubtitleSyncMs(this@PlayerActivity, it, 0L) }
+                        updateDraggableSubtitleText(mediaPlayer.time)
+                    } else {
+                        adjustSubtitleSyncBy(delta)
+                    }
+                    tvCurrent.text = getString(R.string.sub_sync_offset_format, subtitleSyncOffsetMs)
+                }
+            }
+            btnRow.addView(btn)
+        }
+
+        val btnDone = TextView(this).apply {
+            text = getString(R.string.ok)
+            setTextColor(secondaryText)
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.END
+            setPadding(dp(14), dp(14), dp(8), dp(4))
+        }
+
+        container.addView(tvTitle)
+        container.addView(tvCurrent)
+        container.addView(btnRow)
+        container.addView(btnDone)
+
+        val dialog = AlertDialog.Builder(this).setView(container).create()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        btnDone.setOnClickListener {
+            dialog.dismiss()
+            popPlayerMenuBackStack()
+        }
+        dialog.setOnCancelListener { popPlayerMenuBackStack() }
+        dialog.show()
     }
 
     private fun showManualSubtitleResultsDialog(results: List<SubtitleResultItem>) {
@@ -3571,6 +4059,14 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         )
         Toast.makeText(this, getString(R.string.audio_only_started_toast), Toast.LENGTH_SHORT).show()
         finish()
+    }
+
+    override fun finish() {
+        try {
+            androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
+                .show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        } catch (_: Exception) {}
+        super.finish()
     }
 
     override fun onDestroy() {

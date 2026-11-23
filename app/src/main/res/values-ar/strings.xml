@@ -625,4 +625,45 @@
     <string name="changelog_v90_17_desc" formatted="false">• إصلاح ظهور شاشة الإعدادات كشريط رفيع على التابلت والشاشات العريضة عبر إزالة الحشوة الأفقية المزدوجة داخل الحاوية المحدّدة العرض (600dp للشاشات المتوسطة و680dp للشاشات الكبيرة، مع بقاء الهاتف كما هو).\n• دعم التدوير وتغيير الحجم وتقسيم الشاشة فورياً بدون فقدان حالة الإعدادات.</string>
     <string name="changelog_v90_18_title">الإصدار %1$s — إصلاح ظهور مكتبات IPTV فور إضافتها</string>
     <string name="changelog_v90_18_desc" formatted="false">• إصلاح مشكلة عدم ظهور مكتبات الأفلام أو مصادر IPTV الجديدة مباشرةً بعد إضافتها بسبب كاش قديم في الذاكرة؛ الآن تظهر المصادر المضافة فوراً مع الحفاظ على سرعة التبديل بين التبويبات.\n• إضافة دعم كامل لـ Android TV والشاشات العريضة: أيقونة وبانر التلفاز (Leanback)، شريط تنقل جانبي على اليسار، هوامش أمان التلفاز (Overscan)، مؤشر تركيز مضيء لريموت D-Pad، وتحكم كامل بالتشغيل عبر أزرار الريموت.</string>
+    <!-- v90.20 إصلاح شريط الحالة، اللمس الذكي للترجمة، والترجمة التلقائية -->
+    <string name="sub_menu_quick_sync">مزامنة الترجمة السريعة</string>
+    <string name="setting_lock_sub_position">قفل موضع الترجمة</string>
+    <string name="sub_pos_locked_on">الموضع مقفل (النقرات تمر للفيديو)</string>
+    <string name="sub_pos_locked_off">مفتوح (السحب والتكبير مفعّلان)</string>
+    <string name="sub_menu_retranslate">إعادة ترجمة الترجمة الحالية</string>
+    <string name="sub_menu_retranslate_sub">إعادة الترجمة إلى %1$s (تجاوز الكاش)</string>
+    <string name="sub_auto_translate_searching_fallback">جاري البحث في اللغات البديلة للترجمة التلقائية…</string>
+    <string name="sub_auto_translate_ask_title">ترجمة تلقائية للترجمة؟</string>
+    <string name="sub_auto_translate_ask_msg">لم يتم العثور على ترجمة (%1$s). تم العثور على (%2$s) — هل تريد ترجمتها تلقائياً؟</string>
+    <string name="sub_auto_translate_action_now">ترجمة إلى %1$s</string>
+    <string name="sub_auto_translate_from_sub">لغة المصدر: %1$s</string>
+    <string name="sub_auto_translate_use_original">استخدام الأصلية (%1$s)</string>
+    <string name="sub_auto_translate_progress_title">جاري ترجمة ملف الترجمة…</string>
+    <string name="sub_auto_translate_progress_detail">تمت ترجمة %1$d / %2$d سطر</string>
+    <string name="sub_auto_translate_cancelled">تم إلغاء ترجمة الترجمة</string>
+    <string name="sub_auto_translate_failed_fallback">تعذّرت الترجمة — تم تحميل الترجمة الأصلية</string>
+    <string name="setting_sub_auto_translate_title">الترجمة التلقائية للترجمات</string>
+    <string name="setting_sub_auto_translate_toggle">تفعيل الترجمة التلقائية عند غياب اللغة</string>
+    <string name="setting_sub_auto_translate_ask">السؤال قبل بدء الترجمة</string>
+    <string name="setting_sub_auto_translate_target">اللغة المستهدفة للترجمة</string>
+    <string name="setting_sub_auto_translate_provider">مزود خدمة الترجمة</string>
+    <string name="setting_sub_auto_translate_api_key">مفتاح API لمزود الترجمة</string>
+    <string name="setting_sub_arabic_style">أسلوب الترجمة العربية</string>
+    <string name="sub_tr_provider_free">المترجم المدمج (بدون مفتاح)</string>
+    <string name="sub_tr_provider_free_sub">يعمل فوراً مع انتقال احتياطي تلقائي</string>
+    <string name="sub_tr_provider_google_cloud">Google Cloud Translation</string>
+    <string name="sub_tr_provider_deepl">DeepL API</string>
+    <string name="sub_tr_provider_openai">OpenAI / LLM (ترجمة ذكية بالسياق)</string>
+    <string name="sub_tr_provider_key_sub">يتطلب مفتاح API (يعود للمدمج تلقائياً عند غيابه)</string>
+    <string name="sub_tr_provider_openai_sub">أفضل جودة للحوار والأسلوب العربي (يتطلب مفتاح API)</string>
+    <string name="sub_tr_api_key_not_set">غير مضبوط (يستخدم المترجم المدمج)</string>
+    <string name="sub_tr_api_key_hint">الصق مفتاح API هنا…</string>
+    <string name="sub_tr_ar_style_msa">عربية فصحى سينمائية</string>
+    <string name="sub_tr_ar_style_simple">عربية مبسّطة وسلسة</string>
+    <string name="changelog_v90_20_title">الإصدار %1$s — إصلاح شريط الحالة، اللمس الذكي، والترجمة التلقائية</string>
+    <string name="changelog_v90_20_desc">• إصلاح تداخل شريط الحالة مع الشريط العلوي بعد الخروج من مشغل الفيديو أو التدوير أو استئناف التطبيق.
+• لمس ذكي للترجمة: النقرات خارج حدود النص الفعلي والنقرات السريعة تُشغّل وتُوقف الفيديو بسلاسة، مع خيار قفل موضع الترجمة.
+• تحميل وترجمة تلقائية للترجمات على دفعات (Google Cloud / DeepL / OpenAI LLM / المترجم المدمج) مع تنسيق عربي RTL وكاش محلي وشريط تقدم وإلغاء وتسمية واضحة.
+• إضافة أزرار مزامنة الترجمة السريعة (-0.5s / -0.1s / 0.0s / +0.1s / +0.5s)، تذكّر الترجمة لكل فيديو، وخيار إعادة الترجمة.</string>
+    <string name="ok">موافق</string>
 </resources>
