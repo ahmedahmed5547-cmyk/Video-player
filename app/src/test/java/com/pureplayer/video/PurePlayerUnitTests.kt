@@ -585,4 +585,175 @@ class PurePlayerUnitTests {
         assertEquals("Arabic (auto-translated from English)", SubtitleAutoTranslator.buildTranslatedLabel("ar", "en", arabicUi = false))
         assertEquals("العربية (مترجمة تلقائياً من الإنجليزية)", SubtitleAutoTranslator.buildTranslatedLabel("ar", "en", arabicUi = true))
     }
+
+    private class FakeGestureCallbacks(var activeSpeed: Float = 1.0f) : PlayerGestureStateMachine.Callbacks {
+        var scheduledLongPressToken: Long? = null
+        var longPressCancelledCount = 0
+        var scheduledSingleTapToken: Long? = null
+        var singleTapCancelledCount = 0
+        var longPressStartCount = 0
+        var longPressEndCount = 0
+        var brightnessEvents = mutableListOf<Float>()
+        var volumeEvents = mutableListOf<Float>()
+        var seekPreviews = mutableListOf<Long>()
+        var seekCommits = mutableListOf<Long>()
+        var seekCancelCount = 0
+        var doubleTapZones = mutableListOf<TapZone>()
+        var singleTapCount = 0
+        var multiTouchCancelCount = 0
+
+        override fun scheduleLongPress(delayMs: Long, token: Long) { scheduledLongPressToken = token }
+        override fun cancelLongPress() { scheduledLongPressToken = null; longPressCancelledCount++ }
+        override fun scheduleSingleTap(delayMs: Long, token: Long) { scheduledSingleTapToken = token }
+        override fun cancelSingleTap() { scheduledSingleTapToken = null; singleTapCancelledCount++ }
+        override fun getCurrentPlaybackSpeed(): Float = activeSpeed
+        override fun onLongPressSpeedStart(targetSpeed: Float, savedOriginalSpeed: Float) {
+            longPressStartCount++
+            activeSpeed = targetSpeed
+        }
+        override fun onLongPressSpeedEnd(restoredSpeed: Float) {
+            longPressEndCount++
+            activeSpeed = restoredSpeed
+        }
+        override fun onBrightnessDelta(deltaFraction: Float) { brightnessEvents.add(deltaFraction) }
+        override fun onVolumeDelta(deltaFraction: Float) { volumeEvents.add(deltaFraction) }
+        override fun onSeekPreview(deltaMs: Long) { seekPreviews.add(deltaMs) }
+        override fun onSeekCommit(deltaMs: Long) { seekCommits.add(deltaMs) }
+        override fun onSeekCancel() { seekCancelCount++ }
+        override fun onDoubleTap(zone: TapZone) { doubleTapZones.add(zone) }
+        override fun onSingleTapConfirmed() { singleTapCount++ }
+        override fun onMultiTouchCancel() { multiTouchCancelCount++ }
+    }
+
+    @Test
+    fun playerGestureStateMachine_classificationAndStrictAxisLocking() {
+        val cb = FakeGestureCallbacks(activeSpeed = 1.0f)
+        val sm = PlayerGestureStateMachine(touchSlopPx = 20f, edgeExclusionPx = 48f, callbacks = cb)
+
+        // 1. Edge zone & on-controls touches are ignored
+        assertFalse(sm.onPointerEvent(PointerInput(PointerAction.DOWN, 10f, 300f, 100L, 1, 1000f, 600f)))
+        assertEquals(PlayerGestureState.IDLE, sm.state)
+        assertFalse(sm.onPointerEvent(PointerInput(PointerAction.DOWN, 500f, 500f, 120L, 1, 1000f, 600f, isOnControls = true)))
+        assertEquals(PlayerGestureState.IDLE, sm.state)
+
+        // 2. Vertical drag on RIGHT half -> locks VOLUME; later huge horizontal drift MUST NOT seek
+        assertTrue(sm.onPointerEvent(PointerInput(PointerAction.DOWN, 750f, 300f, 200L, 1, 1000f, 600f)))
+        assertEquals(PlayerGestureState.PENDING, sm.state)
+        val lpToken = cb.scheduledLongPressToken!!
+        sm.onPointerEvent(PointerInput(PointerAction.MOVE, 752f, 250f, 240L, 1, 1000f, 600f))
+        assertEquals(PlayerGestureState.VOLUME, sm.state)
+        assertNull(cb.scheduledLongPressToken) // long-press cancelled permanently
+        sm.onLongPressTimeout(lpToken) // stale timer must be ignored
+        assertEquals(0, cb.longPressStartCount)
+        // Diagonal/horizontal drift mid-touch stays locked to VOLUME, never seeks
+        sm.onPointerEvent(PointerInput(PointerAction.MOVE, 300f, 240f, 280L, 1, 1000f, 600f))
+        assertEquals(PlayerGestureState.VOLUME, sm.state)
+        assertTrue(cb.seekPreviews.isEmpty())
+        assertTrue(cb.volumeEvents.isNotEmpty())
+        sm.onPointerEvent(PointerInput(PointerAction.UP, 300f, 240f, 320L, 1, 1000f, 600f))
+        assertEquals(PlayerGestureState.IDLE, sm.state)
+
+        // 3. Vertical drag on LEFT half -> locks BRIGHTNESS
+        sm.onPointerEvent(PointerInput(PointerAction.DOWN, 200f, 300f, 500L, 1, 1000f, 600f))
+        sm.onPointerEvent(PointerInput(PointerAction.MOVE, 205f, 240f, 540L, 1, 1000f, 600f))
+        assertEquals(PlayerGestureState.BRIGHTNESS, sm.state)
+        assertTrue(cb.brightnessEvents.isNotEmpty())
+        sm.onPointerEvent(PointerInput(PointerAction.UP, 205f, 240f, 580L, 1, 1000f, 600f))
+
+        // 4. Horizontal drag -> locks SEEK, previews only, commits on UP (and NOT on CANCEL)
+        sm.onPointerEvent(PointerInput(PointerAction.DOWN, 400f, 300f, 700L, 1, 1000f, 600f))
+        sm.onPointerEvent(PointerInput(PointerAction.MOVE, 500f, 305f, 740L, 1, 1000f, 600f))
+        assertEquals(PlayerGestureState.SEEK, sm.state)
+        assertTrue(cb.seekPreviews.isNotEmpty())
+        assertTrue(cb.seekCommits.isEmpty())
+        sm.onPointerEvent(PointerInput(PointerAction.UP, 500f, 305f, 780L, 1, 1000f, 600f))
+        assertEquals(1, cb.seekCommits.size)
+
+        // Horizontal drag cancelled -> never commits
+        sm.onPointerEvent(PointerInput(PointerAction.DOWN, 400f, 300f, 900L, 1, 1000f, 600f))
+        sm.onPointerEvent(PointerInput(PointerAction.MOVE, 550f, 300f, 940L, 1, 1000f, 600f))
+        sm.onPointerEvent(PointerInput(PointerAction.CANCEL, 550f, 300f, 960L, 1, 1000f, 600f))
+        assertEquals(1, cb.seekCommits.size)
+        assertEquals(1, cb.seekCancelCount)
+    }
+
+    @Test
+    fun playerGestureStateMachine_longPressSpeedRestoreNonDefaultAndMultiTouch() {
+        val cb = FakeGestureCallbacks(activeSpeed = 1.5f)
+        val sm = PlayerGestureStateMachine(touchSlopPx = 20f, edgeExclusionPx = 48f, callbacks = cb)
+
+        // 1. Long-press from 1.5x -> 2.0x -> ignores swipes while active -> restores EXACT 1.5x on UP
+        sm.onPointerEvent(PointerInput(PointerAction.DOWN, 600f, 300f, 100L, 1, 1000f, 600f))
+        val token1 = cb.scheduledLongPressToken!!
+        sm.onLongPressTimeout(token1)
+        assertEquals(PlayerGestureState.LONG_PRESS_SPEED, sm.state)
+        assertEquals(2.0f, cb.activeSpeed, 0.001f)
+
+        // Moving finger while LONG_PRESS_SPEED is active must NOT trigger volume/brightness/seek
+        sm.onPointerEvent(PointerInput(PointerAction.MOVE, 800f, 100f, 600L, 1, 1000f, 600f))
+        assertEquals(PlayerGestureState.LONG_PRESS_SPEED, sm.state)
+        assertTrue(cb.volumeEvents.isEmpty())
+        assertTrue(cb.seekPreviews.isEmpty())
+
+        sm.onPointerEvent(PointerInput(PointerAction.UP, 800f, 100f, 700L, 1, 1000f, 600f))
+        assertEquals(PlayerGestureState.IDLE, sm.state)
+        assertEquals(1.5f, cb.activeSpeed, 0.001f)
+
+        // 2. Multi-touch while LONG_PRESS_SPEED is active cancels & restores exact 1.5x
+        sm.onPointerEvent(PointerInput(PointerAction.DOWN, 600f, 300f, 1000L, 1, 1000f, 600f))
+        sm.onLongPressTimeout(cb.scheduledLongPressToken!!)
+        assertEquals(2.0f, cb.activeSpeed, 0.001f)
+        assertFalse(sm.onPointerEvent(PointerInput(PointerAction.POINTER_DOWN, 400f, 300f, 1500L, 2, 1000f, 600f)))
+        assertEquals(PlayerGestureState.IDLE, sm.state)
+        assertEquals(1.5f, cb.activeSpeed, 0.001f)
+        assertEquals(1, cb.multiTouchCancelCount)
+
+        // 3. Lifecycle cancelAll() restores exact 1.25x speed
+        cb.activeSpeed = 1.25f
+        sm.onPointerEvent(PointerInput(PointerAction.DOWN, 600f, 300f, 2000L, 1, 1000f, 600f))
+        sm.onLongPressTimeout(cb.scheduledLongPressToken!!)
+        assertEquals(2.0f, cb.activeSpeed, 0.001f)
+        sm.cancelAll()
+        assertEquals(PlayerGestureState.IDLE, sm.state)
+        assertEquals(1.25f, cb.activeSpeed, 0.001f)
+    }
+
+    @Test
+    fun playerGestureStateMachine_doubleTapAndSingleTapTiming() {
+        val cb = FakeGestureCallbacks(activeSpeed = 1.0f)
+        val sm = PlayerGestureStateMachine(touchSlopPx = 20f, edgeExclusionPx = 48f, callbacks = cb)
+
+        // 1. Single tap waits for double-tap window before firing
+        sm.onPointerEvent(PointerInput(PointerAction.DOWN, 500f, 300f, 100L, 1, 1000f, 600f))
+        sm.onPointerEvent(PointerInput(PointerAction.UP, 502f, 301f, 160L, 1, 1000f, 600f))
+        assertEquals(0, cb.singleTapCount)
+        val tapToken = cb.scheduledSingleTapToken!!
+        sm.onSingleTapTimeout(tapToken)
+        assertEquals(1, cb.singleTapCount)
+
+        // 2. Double-tap on RIGHT side cancels single tap and fires TapZone.RIGHT
+        sm.onPointerEvent(PointerInput(PointerAction.DOWN, 800f, 300f, 1000L, 1, 1000f, 600f))
+        sm.onPointerEvent(PointerInput(PointerAction.UP, 802f, 300f, 1050L, 1, 1000f, 600f))
+        val staleTapToken = cb.scheduledSingleTapToken!!
+        sm.onPointerEvent(PointerInput(PointerAction.DOWN, 805f, 302f, 1180L, 1, 1000f, 600f))
+        sm.onPointerEvent(PointerInput(PointerAction.UP, 805f, 302f, 1220L, 1, 1000f, 600f))
+        sm.onSingleTapTimeout(staleTapToken) // stale single tap must NOT fire
+        assertEquals(1, cb.singleTapCount)
+        assertEquals(listOf(TapZone.RIGHT), cb.doubleTapZones)
+
+        // 3. Double-tap on LEFT side fires TapZone.LEFT
+        sm.onPointerEvent(PointerInput(PointerAction.DOWN, 200f, 300f, 2000L, 1, 1000f, 600f))
+        sm.onPointerEvent(PointerInput(PointerAction.UP, 200f, 300f, 2040L, 1, 1000f, 600f))
+        sm.onPointerEvent(PointerInput(PointerAction.DOWN, 205f, 300f, 2140L, 1, 1000f, 600f))
+        sm.onPointerEvent(PointerInput(PointerAction.UP, 205f, 300f, 2180L, 1, 1000f, 600f))
+        assertEquals(listOf(TapZone.RIGHT, TapZone.LEFT), cb.doubleTapZones)
+
+        // 4. Tap immediately after a drag must NOT fire double-tap
+        sm.onPointerEvent(PointerInput(PointerAction.DOWN, 800f, 300f, 3000L, 1, 1000f, 600f))
+        sm.onPointerEvent(PointerInput(PointerAction.MOVE, 800f, 240f, 3040L, 1, 1000f, 600f))
+        sm.onPointerEvent(PointerInput(PointerAction.UP, 800f, 240f, 3080L, 1, 1000f, 600f))
+        sm.onPointerEvent(PointerInput(PointerAction.DOWN, 800f, 240f, 3150L, 1, 1000f, 600f))
+        sm.onPointerEvent(PointerInput(PointerAction.UP, 800f, 240f, 3190L, 1, 1000f, 600f))
+        assertEquals(2, cb.doubleTapZones.size)
+    }
 }

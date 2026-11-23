@@ -38,9 +38,9 @@ import android.text.BidiFormatter
 import android.util.Rational
 import android.util.TypedValue
 import android.widget.FrameLayout
-import android.view.GestureDetector
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.ViewConfiguration
@@ -72,6 +72,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.window.layout.WindowInfoTracker
 import com.pureplayer.video.databinding.ActivityPlayerBinding
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.videolan.libvlc.LibVLC
@@ -89,7 +90,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     private lateinit var libVLC: LibVLC
     private lateinit var mediaPlayer: MediaPlayer
     private lateinit var audioManager: AudioManager
-    private lateinit var gestureDetector: GestureDetector
+    private lateinit var gestureStateMachine: PlayerGestureStateMachine
     private lateinit var subtitleScaleDetector: ScaleGestureDetector
 
     private var activePfd: ParcelFileDescriptor? = null
@@ -99,32 +100,15 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     private var isControlsVisible = true
     private var isUserSeeking = false
     private var currentSpeed = 1.0f
-    private var isHoldSpeedActive = false
-    private var isHoldRewindActive = false
-    private var speedBeforeHold = 1.0f
+    private var longPressRunnable: Runnable? = null
+    private var singleTapRunnable: Runnable? = null
+    private var seekGestureStartTimeMs: Long = 0L
+    private var seekGestureActive: Boolean = false
+    private var lastVolumeEdgeHaptic: Int = -1
+    private var lastBrightnessEdgeHaptic: Int = -1
     private var mediaSession: MediaSession? = null
     private var audioFocusRequest: AudioFocusRequest? = null
     private var lastHeadsetHookTapMs = 0L
-
-    private val holdRewindRunnable = object : Runnable {
-        override fun run() {
-            if (!isHoldRewindActive || !::mediaPlayer.isInitialized) return
-            val cur = mediaPlayer.time
-            val nextTime = (cur - 2_000L).coerceAtLeast(0L)
-            mediaPlayer.time = nextTime
-            val length = mediaPlayer.length
-            if (length > 0) {
-                val progress = ((nextTime.toDouble() / length.toDouble()) * 1000).toInt()
-                binding.seekBar.progress = progress
-                binding.tvCurrentTime.text = formatTime(nextTime)
-            }
-            updateDraggableSubtitleText(nextTime)
-            showToastIndicator("⏪ ${getString(R.string.toast_rewind_hold)} • ${formatTime(nextTime)}")
-            if (nextTime > 0L) {
-                handler.postDelayed(this, 180L)
-            }
-        }
-    }
 
     private var currentVideoUri: Uri? = null
     private var currentVideoTitle = "Video"
@@ -532,6 +516,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     }
 
     private fun detachVlcViewsSafely() {
+        cancelActivePlayerGesturesSafely()
         if (!::mediaPlayer.isInitialized) return
         val vlcVout = mediaPlayer.vlcVout
         if (vlcVout.areViewsAttached()) {
@@ -717,6 +702,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        cancelActivePlayerGesturesSafely()
         val wasVisible = isControlsVisible
         hideSystemBars()
         applyResponsivePlayerControlsLayout()
@@ -1149,14 +1135,17 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
         binding.tvDraggableSubtitle.bringToFront()
         handler.removeCallbacks(hideVerticalSliderRunnable)
-        handler.postDelayed(hideVerticalSliderRunnable, 1200L)
+        handler.postDelayed(hideVerticalSliderRunnable, PlayerGestureConstants.INDICATOR_FADE_DELAY_MS)
     }
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         if (!::mediaPlayer.isInitialized) return@OnAudioFocusChangeListener
         when (focusChange) {
             AudioManager.AUDIOFOCUS_LOSS,
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                cancelActivePlayerGesturesSafely()
+                if (focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) return@OnAudioFocusChangeListener
                 if (mediaPlayer.isPlaying) {
                     saveCurrentPositionNow()
                     mediaPlayer.pause()
@@ -2208,141 +2197,260 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         })
     }
 
-    private fun setupTouchGestures() {
-        gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-
-            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                if (isLocked) {
-                    binding.btnUnlock.visibility =
-                        if (binding.btnUnlock.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-                    return true
-                }
-                if (isControlsVisible) {
-                    hideControls()
-                } else {
-                    showControls()
-                }
-                return true
-            }
-
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                if (isLocked) return true
-                val screenWidth = binding.playerRoot.width
-                val length = mediaPlayer.length
-                when {
-                    e.x > (screenWidth * 0.60f) -> {
-                        val newTime = (mediaPlayer.time + 15_000L).coerceAtMost(if (length > 0) length else Long.MAX_VALUE)
-                        mediaPlayer.time = newTime
-                        saveCurrentPositionNow()
-                        showToastIndicator(getString(R.string.toast_forward_15))
-                    }
-                    e.x < (screenWidth * 0.40f) -> {
-                        val newTime = (mediaPlayer.time - 15_000L).coerceAtLeast(0L)
-                        mediaPlayer.time = newTime
-                        saveCurrentPositionNow()
-                        showToastIndicator(getString(R.string.toast_rewind_15))
-                    }
-                    else -> {
-                        binding.btnPlayPause.performClick()
-                    }
-                }
-                return true
-            }
-
-            override fun onLongPress(e: MotionEvent) {
-                if (isLocked || isDraggingSubtitle || isPinchingSubtitle) return
-                val screenWidth = binding.playerRoot.width.toFloat().coerceAtLeast(1f)
-                if (e.x >= screenWidth * 0.5f) {
-                    // Right Half Long-Press -> Fast Forward (2.0x)
-                    if (mediaPlayer.isPlaying) {
-                        isHoldSpeedActive = true
-                        isHoldRewindActive = false
-                        speedBeforeHold = currentSpeed
-                        mediaPlayer.rate = 2.0f
-                        showToastIndicator(getString(R.string.toast_speed_hold))
-                    }
-                } else {
-                    // Left Half Long-Press -> Continuous Smooth Rewind
-                    isHoldRewindActive = true
-                    isHoldSpeedActive = false
-                    handler.removeCallbacks(holdRewindRunnable)
-                    handler.post(holdRewindRunnable)
-                }
-            }
-
-            override fun onScroll(
-                e1: MotionEvent?,
-                e2: MotionEvent,
-                distanceX: Float,
-                distanceY: Float
-            ): Boolean {
-                if (isLocked || isDraggingSubtitle || isPinchingSubtitle || isHoldSpeedActive || isHoldRewindActive || e1 == null) return false
-
-                val screenWidth = binding.playerRoot.width.toFloat().coerceAtLeast(1f)
-                val screenHeight = binding.playerRoot.height.toFloat().coerceAtLeast(1f)
-
-                if (abs(distanceY) >= abs(distanceX)) {
-                    val delta = distanceY / screenHeight
-                    if (e1.x > screenWidth / 2f) {
-                        adjustVolumeSmooth(delta)
-                    } else {
-                        adjustBrightnessSmooth(delta)
-                    }
-                } else {
-                    val seekDeltaMs = (-distanceX / screenWidth * 90_000L).toLong()
-                    val length = mediaPlayer.length
-                    if (length > 0) {
-                        val newTime = (mediaPlayer.time + seekDeltaMs).coerceIn(0L, length)
-                        mediaPlayer.time = newTime
-                        saveCurrentPositionNow()
-                        showToastIndicator("⏱️ ${formatTime(newTime)} / ${formatTime(length)}")
-                    }
-                }
-                return true
-            }
-        })
-
-        binding.playerRoot.setOnTouchListener { _, event ->
-            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                val curVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-                gestureVolumeAccumulator = if (maxVol > 0) curVol.toFloat() / maxVol.toFloat() else 0.5f
-            } else if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
-                if (isHoldSpeedActive) {
-                    isHoldSpeedActive = false
-                    mediaPlayer.rate = speedBeforeHold
-                    showToastIndicator(getString(R.string.toast_speed_normal, speedBeforeHold.toString()))
-                }
-                if (isHoldRewindActive) {
-                    isHoldRewindActive = false
-                    handler.removeCallbacks(holdRewindRunnable)
-                    saveCurrentPositionNow()
-                    showToastIndicator("▶️ ${formatTime(mediaPlayer.time)}")
-                }
-            }
-            gestureDetector.onTouchEvent(event)
-            true
+    private fun cancelActivePlayerGesturesSafely() {
+        longPressRunnable?.let { handler.removeCallbacks(it) }
+        longPressRunnable = null
+        singleTapRunnable?.let { handler.removeCallbacks(it) }
+        singleTapRunnable = null
+        seekGestureActive = false
+        if (::gestureStateMachine.isInitialized) {
+            gestureStateMachine.cancelAll(notifyMultiTouch = false)
         }
     }
 
-    private fun adjustVolumeSmooth(delta: Float) {
+    private fun isPointInsideViewInRoot(view: View, rootX: Float, rootY: Float): Boolean {
+        if (view.visibility != View.VISIBLE || view.width <= 0 || view.height <= 0) return false
+        val rootLoc = IntArray(2)
+        val viewLoc = IntArray(2)
+        binding.playerRoot.getLocationOnScreen(rootLoc)
+        view.getLocationOnScreen(viewLoc)
+        val left = (viewLoc[0] - rootLoc[0]).toFloat()
+        val top = (viewLoc[1] - rootLoc[1]).toFloat()
+        return rootX >= left && rootX <= left + view.width && rootY >= top && rootY <= top + view.height
+    }
+
+    private fun isTouchOnVisibleControls(x: Float, y: Float): Boolean {
+        if (binding.btnUnlock.visibility == View.VISIBLE && isPointInsideViewInRoot(binding.btnUnlock, x, y)) {
+            return true
+        }
+        if (binding.controlsContainer.visibility == View.VISIBLE) {
+            if (isPointInsideViewInRoot(binding.playerTopBar, x, y)) return true
+            if (isPointInsideViewInRoot(binding.playerBottomBar, x, y)) return true
+        }
+        return false
+    }
+
+    private fun setupTouchGestures() {
+        val density = resources.displayMetrics.density
+        val touchSlopPx = android.view.ViewConfiguration.get(this).scaledTouchSlop
+            .toFloat()
+            .coerceAtLeast(PlayerGestureConstants.DEFAULT_TOUCH_SLOP_DP * density)
+        val edgeExclusionPx = PlayerGestureConstants.EDGE_EXCLUSION_DP * density
+
+        gestureStateMachine = PlayerGestureStateMachine(
+            touchSlopPx = touchSlopPx,
+            edgeExclusionPx = edgeExclusionPx,
+            callbacks = object : PlayerGestureStateMachine.Callbacks {
+                override fun scheduleLongPress(delayMs: Long, token: Long) {
+                    cancelLongPress()
+                    val r = Runnable { gestureStateMachine.onLongPressTimeout(token) }
+                    longPressRunnable = r
+                    handler.postDelayed(r, delayMs)
+                }
+
+                override fun cancelLongPress() {
+                    longPressRunnable?.let { handler.removeCallbacks(it) }
+                    longPressRunnable = null
+                }
+
+                override fun scheduleSingleTap(delayMs: Long, token: Long) {
+                    cancelSingleTap()
+                    val r = Runnable { gestureStateMachine.onSingleTapTimeout(token) }
+                    singleTapRunnable = r
+                    handler.postDelayed(r, delayMs)
+                }
+
+                override fun cancelSingleTap() {
+                    singleTapRunnable?.let { handler.removeCallbacks(it) }
+                    singleTapRunnable = null
+                }
+
+                override fun getCurrentPlaybackSpeed(): Float {
+                    return if (::mediaPlayer.isInitialized && mediaPlayer.rate > 0f) {
+                        currentSpeed
+                    } else {
+                        currentSpeed
+                    }
+                }
+
+                override fun onLongPressSpeedStart(targetSpeed: Float, savedOriginalSpeed: Float) {
+                    if (isLocked || isDraggingSubtitle || isPinchingSubtitle || !::mediaPlayer.isInitialized) {
+                        gestureStateMachine.cancelAll()
+                        return
+                    }
+                    if (!mediaPlayer.isPlaying) {
+                        gestureStateMachine.cancelAll()
+                        return
+                    }
+                    mediaPlayer.rate = targetSpeed
+                    showToastIndicator(getString(R.string.toast_speed_hold))
+                }
+
+                override fun onLongPressSpeedEnd(restoredSpeed: Float) {
+                    currentSpeed = restoredSpeed
+                    if (::mediaPlayer.isInitialized) {
+                        runCatching { mediaPlayer.rate = restoredSpeed }
+                    }
+                    showToastIndicator(getString(R.string.toast_speed_normal, restoredSpeed.toString()))
+                }
+
+                override fun onBrightnessDelta(deltaFraction: Float) {
+                    if (isLocked || isDraggingSubtitle || isPinchingSubtitle) return
+                    adjustBrightnessSmooth(deltaFraction)
+                }
+
+                override fun onVolumeDelta(deltaFraction: Float) {
+                    if (isLocked || isDraggingSubtitle || isPinchingSubtitle) return
+                    adjustVolumeSmooth(deltaFraction)
+                }
+
+                override fun onSeekPreview(deltaMs: Long) {
+                    if (isLocked || isDraggingSubtitle || isPinchingSubtitle || !::mediaPlayer.isInitialized) return
+                    val length = mediaPlayer.length
+                    if (length <= 0L) return
+                    if (!seekGestureActive) {
+                        seekGestureActive = true
+                        seekGestureStartTimeMs = mediaPlayer.time.coerceIn(0L, length)
+                    }
+                    val targetMs = (seekGestureStartTimeMs + deltaMs).coerceIn(0L, length)
+                    val actualDeltaMs = targetMs - seekGestureStartTimeMs
+                    val sign = if (actualDeltaMs >= 0L) "+" else "-"
+                    val arrow = if (actualDeltaMs >= 0L) "⏩" else "⏪"
+                    showToastIndicator("$arrow ${formatTime(targetMs)} ($sign${formatTime(abs(actualDeltaMs))})")
+                }
+
+                override fun onSeekCommit(deltaMs: Long) {
+                    if (!seekGestureActive || !::mediaPlayer.isInitialized) {
+                        seekGestureActive = false
+                        return
+                    }
+                    seekGestureActive = false
+                    val length = mediaPlayer.length
+                    if (length > 0L) {
+                        val targetMs = (seekGestureStartTimeMs + deltaMs).coerceIn(0L, length)
+                        mediaPlayer.time = targetMs
+                        saveCurrentPositionNow()
+                        updateDraggableSubtitleText(targetMs)
+                        showToastIndicator("⏱️ ${formatTime(targetMs)} / ${formatTime(length)}")
+                    }
+                }
+
+                override fun onSeekCancel() {
+                    seekGestureActive = false
+                }
+
+                override fun onDoubleTap(zone: TapZone) {
+                    if (isLocked || !::mediaPlayer.isInitialized) return
+                    val length = mediaPlayer.length
+                    when (zone) {
+                        TapZone.RIGHT -> {
+                            val newTime = (mediaPlayer.time + PlayerGestureConstants.DOUBLE_TAP_SEEK_MS)
+                                .coerceAtMost(if (length > 0L) length else Long.MAX_VALUE)
+                            mediaPlayer.time = newTime
+                            saveCurrentPositionNow()
+                            updateDraggableSubtitleText(newTime)
+                            showToastIndicator("⏩ +10s • ${formatTime(newTime)}")
+                        }
+                        TapZone.LEFT -> {
+                            val newTime = (mediaPlayer.time - PlayerGestureConstants.DOUBLE_TAP_SEEK_MS)
+                                .coerceAtLeast(0L)
+                            mediaPlayer.time = newTime
+                            saveCurrentPositionNow()
+                            updateDraggableSubtitleText(newTime)
+                            showToastIndicator("⏪ -10s • ${formatTime(newTime)}")
+                        }
+                        TapZone.CENTER -> {
+                            binding.btnPlayPause.performClick()
+                        }
+                    }
+                }
+
+                override fun onSingleTapConfirmed() {
+                    if (isLocked) {
+                        binding.btnUnlock.visibility =
+                            if (binding.btnUnlock.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                        return
+                    }
+                    if (isControlsVisible) {
+                        hideControls()
+                    } else {
+                        showControls()
+                    }
+                }
+
+                override fun onMultiTouchCancel() {
+                    seekGestureActive = false
+                }
+            }
+        )
+
+        binding.playerRoot.setOnTouchListener { _, event ->
+            if (isDraggingSubtitle || isPinchingSubtitle) {
+                cancelActivePlayerGesturesSafely()
+                return@setOnTouchListener false
+            }
+
+            val action = when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                    val curVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                    gestureVolumeAccumulator = if (maxVol > 0) curVol.toFloat() / maxVol.toFloat() else 0.5f
+                    lastVolumeEdgeHaptic = -1
+                    lastBrightnessEdgeHaptic = -1
+                    PointerAction.DOWN
+                }
+                MotionEvent.ACTION_POINTER_DOWN -> PointerAction.POINTER_DOWN
+                MotionEvent.ACTION_MOVE -> PointerAction.MOVE
+                MotionEvent.ACTION_UP -> PointerAction.UP
+                MotionEvent.ACTION_CANCEL -> PointerAction.CANCEL
+                else -> return@setOnTouchListener false
+            }
+
+            val onControls = (action == PointerAction.DOWN) && isTouchOnVisibleControls(event.x, event.y)
+            val input = PointerInput(
+                action = action,
+                x = event.x,
+                y = event.y,
+                timeMs = event.eventTime,
+                pointerCount = event.pointerCount,
+                viewWidth = binding.playerRoot.width.toFloat().coerceAtLeast(1f),
+                viewHeight = binding.playerRoot.height.toFloat().coerceAtLeast(1f),
+                isOnControls = onControls
+            )
+            gestureStateMachine.onPointerEvent(input)
+        }
+    }
+
+    private fun adjustVolumeSmooth(deltaFraction: Float) {
         val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         if (maxVol <= 0) return
-        gestureVolumeAccumulator = (gestureVolumeAccumulator + delta * 1.4f).coerceIn(0f, 1f)
+        gestureVolumeAccumulator = (gestureVolumeAccumulator + deltaFraction * 1.15f).coerceIn(0f, 1f)
         val targetVol = (gestureVolumeAccumulator * maxVol).toInt().coerceIn(0, maxVol)
         audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
-        val percent = (gestureVolumeAccumulator * 100).toInt()
+        val percent = (gestureVolumeAccumulator * 100f).toInt().coerceIn(0, 100)
+        if ((percent == 0 || percent == 100) && lastVolumeEdgeHaptic != percent) {
+            lastVolumeEdgeHaptic = percent
+            binding.playerRoot.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        } else if (percent in 1..99) {
+            lastVolumeEdgeHaptic = -1
+        }
         showVerticalSliderIndicator(isVolume = true, percent = percent)
     }
 
-    private fun adjustBrightnessSmooth(delta: Float) {
+    private fun adjustBrightnessSmooth(deltaFraction: Float) {
         val layoutParams = window.attributes
         var brightness = layoutParams.screenBrightness
         if (brightness < 0f) brightness = 0.5f
-        brightness = (brightness + delta * 1.4f).coerceIn(0.02f, 1.0f)
+        brightness = (brightness + deltaFraction * 1.15f).coerceIn(0.02f, 1.0f)
         layoutParams.screenBrightness = brightness
         window.attributes = layoutParams
-        val percent = (brightness * 100).toInt()
+        val percent = (((brightness - 0.02f) / 0.98f) * 100f).toInt().coerceIn(0, 100)
+        if ((percent == 0 || percent == 100) && lastBrightnessEdgeHaptic != percent) {
+            lastBrightnessEdgeHaptic = percent
+            binding.playerRoot.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        } else if (percent in 1..99) {
+            lastBrightnessEdgeHaptic = -1
+        }
         showVerticalSliderIndicator(isVolume = false, percent = percent)
     }
 
@@ -3640,6 +3748,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        cancelActivePlayerGesturesSafely()
         binding.videoSurfaceFrame.post { changeSurfaceLayout() }
         if (isInPictureInPictureMode) {
             wasInPipMode = true
@@ -3908,8 +4017,18 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         }
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) {
+            cancelActivePlayerGesturesSafely()
+        } else {
+            hideSystemBars()
+        }
+    }
+
     override fun onPause() {
         super.onPause()
+        cancelActivePlayerGesturesSafely()
         saveCurrentPositionNow()
         val inPip = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) isInPictureInPictureMode else false
         if (!inPip && !isEnteringPipTransition && mediaPlayer.isPlaying) {
@@ -3920,6 +4039,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
     override fun onStop() {
         super.onStop()
+        cancelActivePlayerGesturesSafely()
         if (batteryReceiverRegistered) {
             try { unregisterReceiver(batteryReceiver) } catch (_: Exception) {}
             batteryReceiverRegistered = false
@@ -4070,6 +4190,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     }
 
     override fun onDestroy() {
+        cancelActivePlayerGesturesSafely()
         if (pipReceiverRegistered) {
             try { unregisterReceiver(pipActionReceiver) } catch (_: Exception) {}
             pipReceiverRegistered = false
