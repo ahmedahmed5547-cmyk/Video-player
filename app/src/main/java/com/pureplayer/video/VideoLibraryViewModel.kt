@@ -304,6 +304,7 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
         val seenIds = HashSet<Long>()
         val seenPaths = HashSet<String>()
         val unindexedPaths = mutableListOf<String>()
+        val nomediaCache = HashMap<String, Boolean>()
         val cr = appContext.contentResolver
 
         // Stage 1: Standard MediaStore.Video.Media table
@@ -365,7 +366,13 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
                             width = width,
                             height = height,
                             path = path,
-                            dateAddedSec = dateAddedSec
+                            dateAddedSec = dateAddedSec,
+                            isHidden = HiddenMediaAndPlaylistHelper.isHiddenMedia(
+                                path = path,
+                                folderName = folderName,
+                                title = title,
+                                hasNomediaAncestor = HiddenMediaAndPlaylistHelper.hasNomediaInParentChain(path, nomediaCache)
+                            )
                         )
                     )
                 }
@@ -455,7 +462,13 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
                             width = width,
                             height = height,
                             path = path,
-                            dateAddedSec = dateAddedSec
+                            dateAddedSec = dateAddedSec,
+                            isHidden = HiddenMediaAndPlaylistHelper.isHiddenMedia(
+                                path = path,
+                                folderName = folderName,
+                                title = rawTitle,
+                                hasNomediaAncestor = HiddenMediaAndPlaylistHelper.hasNomediaInParentChain(path, nomediaCache)
+                            )
                         )
                     )
                 }
@@ -485,7 +498,13 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
                         width = 0,
                         height = 0,
                         path = absPath,
-                        dateAddedSec = child.lastModified() / 1000L
+                        dateAddedSec = child.lastModified() / 1000L,
+                        isHidden = HiddenMediaAndPlaylistHelper.isHiddenMedia(
+                            path = absPath,
+                            folderName = folderName,
+                            title = child.name,
+                            hasNomediaAncestor = HiddenMediaAndPlaylistHelper.hasNomediaInParentChain(absPath, nomediaCache)
+                        )
                     )
                 )
             }
@@ -498,7 +517,7 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
         return videos
             .groupBy { it.folderName }
             .filter { (_, vids) -> vids.isNotEmpty() }
-            .map { (folderName, vids) -> VideoFolder(folderName, vids) }
+            .map { (folderName, vids) -> VideoFolder(folderName, vids, isHidden = folderName.startsWith(".") || vids.all { it.isHidden }) }
             .sortedByDescending { it.videos.size }
     }
 

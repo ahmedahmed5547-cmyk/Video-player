@@ -507,6 +507,20 @@
                 app:layout_constraintTop_toBottomOf="@id/seekBarRow">
 
                 <ImageButton
+                    android:id="@+id/btnPrevVideo"
+                    android:layout_width="@dimen/player_transport_btn_size"
+                    android:layout_height="@dimen/player_transport_btn_size"
+                    android:layout_marginEnd="6dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/player_prev_video"
+                    android:focusable="true"
+                    android:padding="6dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_prev_video_modern"
+                    android:tint="#FFFFFF"
+                    android:visibility="gone" />
+
+                <ImageButton
                     android:id="@+id/btnRewind"
                     android:layout_width="@dimen/player_transport_btn_size"
                     android:layout_height="@dimen/player_transport_btn_size"
@@ -519,8 +533,8 @@
                     android:id="@+id/btnPlayPause"
                     android:layout_width="@dimen/player_play_btn_size"
                     android:layout_height="@dimen/player_play_btn_size"
-                    android:layout_marginStart="16dp"
-                    android:layout_marginEnd="16dp"
+                    android:layout_marginStart="12dp"
+                    android:layout_marginEnd="12dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/play_pause"
                     android:padding="12dp"
@@ -536,6 +550,20 @@
                     android:contentDescription="@string/forward_15"
                     android:src="@drawable/ic_forward_10_modern"
                     android:tint="#FFFFFF" />
+
+                <ImageButton
+                    android:id="@+id/btnNextVideo"
+                    android:layout_width="@dimen/player_transport_btn_size"
+                    android:layout_height="@dimen/player_transport_btn_size"
+                    android:layout_marginStart="6dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/player_next_video"
+                    android:focusable="true"
+                    android:padding="6dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_next_video_modern"
+                    android:tint="#FFFFFF"
+                    android:visibility="gone" />
             </LinearLayout>
 
             <!-- End Secondary Tools Group: Speed, Aspect Ratio -->

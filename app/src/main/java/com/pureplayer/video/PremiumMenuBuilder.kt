@@ -110,6 +110,8 @@ data class PremiumMenuItem(
     val isInteractive: Boolean = true,
     val iconResId: Int = 0,
     val statusChip: String? = null,
+    val toggleChecked: Boolean? = null,
+    val onToggleChanged: ((Boolean) -> Unit)? = null,
     val onClick: () -> Unit = {}
 )
 
@@ -594,7 +596,30 @@ internal fun MainActivity.showPremiumMenuDialog(
             rowCard.addView(chipView)
         }
 
-        if (item.isInteractive) {
+        if (item.toggleChecked != null) {
+            val sw = androidx.appcompat.widget.SwitchCompat(this).apply {
+                isChecked = item.toggleChecked
+                thumbTintList = ColorStateList(
+                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                    intArrayOf(accent, Color.parseColor("#CBD5E1"))
+                )
+                trackTintList = ColorStateList(
+                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                    intArrayOf(Color.argb(110, Color.red(accent), Color.green(accent), Color.blue(accent)), Color.argb(65, 148, 163, 184))
+                )
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { marginStart = dp(8) }
+            }
+            sw.setOnCheckedChangeListener { _, checked ->
+                item.onToggleChanged?.invoke(checked)
+            }
+            rowCard.addView(sw)
+            rowCard.setOnClickListener {
+                sw.isChecked = !sw.isChecked
+            }
+        } else if (item.isInteractive) {
             val ivChevron = ImageView(this).apply {
                 setImageResource(R.drawable.ic_lux_chevron)
                 imageTintList = ColorStateList.valueOf(

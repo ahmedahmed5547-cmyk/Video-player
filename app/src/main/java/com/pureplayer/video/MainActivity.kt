@@ -578,7 +578,11 @@ class MainActivity : AppCompatActivity() {
         if (lastVideo != null) {
             val (uri, title, positionMs) = lastVideo
             val matchingItem = allDiscoveredVideos.find { it.uri == uri }
-            if (matchingItem != null && PlaybackStore.isFolderLocked(this, matchingItem.folderName)) {
+            if (matchingItem != null && (
+                    PlaybackStore.isFolderLocked(this, matchingItem.folderName) ||
+                    (matchingItem.isHidden && !PlaybackStore.isShowHiddenFolders(this))
+                )
+            ) {
                 binding.fabResumeLast.visibility = View.GONE
                 return
             }
@@ -1910,8 +1914,11 @@ class MainActivity : AppCompatActivity() {
         vaultFoldersOnly = sortFoldersList(rawVaultFolders, sortMode)
         vaultVideosFlat = sortVideosList(allDiscoveredVideos.filter { it.folderName in lockedSet }, sortMode)
 
-        // 2. Public (unhidden) folders for Tab 1 (Video Folders)
-        val unlockedDiscovered = allDiscoveredFolders.filter { it.name !in lockedSet }
+        // 2. Public folders for Tab 1 (respects Hidden folders toggle!)
+        val showHidden = PlaybackStore.isShowHiddenFolders(this)
+        val hiddenFilteredFolders = HiddenMediaAndPlaylistHelper.filterFoldersByHiddenPreference(allDiscoveredFolders, showHidden)
+        val hiddenFilteredVideos = HiddenMediaAndPlaylistHelper.filterVideosByHiddenPreference(allDiscoveredVideos, showHidden)
+        val unlockedDiscovered = hiddenFilteredFolders.filter { it.name !in lockedSet }
         val filteredBySelection = if (mode == 1 && allowedSet.isNotEmpty()) {
             unlockedDiscovered.filter { it.name in allowedSet }
         } else {
@@ -1925,7 +1932,7 @@ class MainActivity : AppCompatActivity() {
         }
         publicFoldersOnly = sortFoldersList(basePublicFolders, sortMode)
         val visiblePublicNames = publicFoldersOnly.map { it.name }.toSet()
-        publicVideosFlat = sortVideosList(allDiscoveredVideos.filter { it.folderName in visiblePublicNames }, sortMode)
+        publicVideosFlat = sortVideosList(hiddenFilteredVideos.filter { it.folderName in visiblePublicNames }, sortMode)
 
         val activeFoldersList = if (isInVaultTab) vaultFoldersOnly else publicFoldersOnly
 
@@ -2540,10 +2547,41 @@ class MainActivity : AppCompatActivity() {
             PlaybackStore.setLastPlayedVideoInFolder(this, matchedFolder, uri)
             PlaybackStore.setLastActiveFolderName(this, matchedFolder)
         }
+        val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: ""
+        val isStream = scheme == "http" || scheme == "https" || scheme == "rtsp" || scheme == "rtmp" || scheme == "mms"
+        val sortMode = PlaybackStore.getSortOrderMode(this)
+        val playlistSource: List<VideoItem> = if (isStream) {
+            emptyList()
+        } else {
+            val activePool = when {
+                isInVaultTab && currentOpenedFolder != null -> currentOpenedFolder!!.videos
+                isInVaultTab -> vaultVideosFlat
+                isShowingFolderVideos && currentOpenedFolder != null -> currentOpenedFolder!!.videos
+                !matchedFolder.isNullOrBlank() -> {
+                    publicFoldersOnly.find { it.name == matchedFolder }?.videos ?: publicVideosFlat
+                }
+                else -> publicVideosFlat
+            }
+            sortVideosList(activePool, sortMode)
+        }
+        val playlistIndex = playlistSource.indexOfFirst { it.uri == uri }
+
         val intent = Intent(this, PlayerActivity::class.java).apply {
             data = uri
             putExtra("VIDEO_TITLE", title)
             putExtra("START_POSITION_MS", startPositionMs)
+            putExtra(PlayerActivity.EXTRA_IS_STREAM, isStream)
+            if (!isStream && playlistSource.size > 1 && playlistIndex >= 0) {
+                putStringArrayListExtra(
+                    PlayerActivity.EXTRA_PLAYLIST_URIS,
+                    ArrayList(playlistSource.map { it.uri.toString() })
+                )
+                putStringArrayListExtra(
+                    PlayerActivity.EXTRA_PLAYLIST_TITLES,
+                    ArrayList(playlistSource.map { it.title })
+                )
+                putExtra(PlayerActivity.EXTRA_PLAYLIST_INDEX, playlistIndex)
+            }
             if (httpUserAgent.isNotBlank()) putExtra("user-agent", httpUserAgent)
             if (httpReferrer.isNotBlank()) putExtra("referer", httpReferrer)
         }

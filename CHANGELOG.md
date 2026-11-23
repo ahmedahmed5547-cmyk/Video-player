@@ -1,3 +1,7 @@
+## v90.22 (2026-11-23)
+- **Feature — Hidden Folders Toggle in Top ☰ Menu**: Added an inline `SwitchCompat` for **Hidden folders** (default: ON) directly inside the top ☰ menu (`showSortAndLayoutDialog`). Controls display of dot-prefixed folders/files, `.nomedia` directories, `.trashed-*` files, and `Android/data` hidden paths across folders, search, and Continue Watching with subtle visual markers and scroll-position preservation.
+- **Feature — Previous / Next Video Buttons**: Added Previous & Next transport buttons in `activity_player.xml` (`PlayerActivity.kt`), wired to the active folder/list sort order, MediaSession lock-screen/notification controls, and Picture-in-Picture actions, with 450ms tap debouncing, automatic hiding on single files & IPTV streams, dimmed boundary states, and full playback state + lifecycle preservation.
+
 ## v90.21 (2026-11-23)
 - **Brand Identity — V Player**: Renamed all user-visible labels to **V Player** while keeping `applicationId = "com.pureplayer.video"`, package structure, signing config, preferences, and databases completely unchanged for seamless in-place updates.
 - **Subtitle Menu Simplified**: Reordered player subtitle menu to **1. Auto search** (with **Search by name** as inline fallback only) and **2. Translate subtitle to my language**, followed by existing items in order.

@@ -696,4 +696,15 @@ Any series, movie, or channel you play will appear here automatically so you can
 • Reordered subtitle menu: Auto search first (with Search by name inline fallback), followed directly by Translate subtitle to my language.
 • Added 6 adaptive launcher icon styles (Default, Material You, Glass Light, Glass Dark, Obsidian Dark, Aurora Gradient) in Appearance settings.
 • Version number now appears cleanly inside Changelog only.</string>
+    <!-- v90.22 Hidden Folders Toggle & Player Previous/Next -->
+    <string name="section_visibility">Visibility</string>
+    <string name="menu_hidden_folders_title">Hidden folders</string>
+    <string name="menu_hidden_folders_sub">Show dot-folders &amp; .nomedia hidden videos</string>
+    <string name="hidden_item_badge">Hidden</string>
+    <string name="player_prev_video">Previous video</string>
+    <string name="player_next_video">Next video</string>
+    <string name="changelog_v90_22_title">v%1$s — Hidden Folders Toggle &amp; Previous/Next Player Controls</string>
+    <string name="changelog_v90_22_desc">• Added a Hidden folders switch directly inside the top ☰ menu to instantly show or hide dot-folders, .nomedia folders, and hidden videos across folders, search, and Continue Watching.
+• Hidden folders and videos are subtly marked so they are easy to distinguish without modifying any files.
+• Added Previous &amp; Next video buttons to the player controls, MediaSession/lock-screen, and Picture-in-Picture, synced with your folder sort order, with tap debouncing and full playback state preservation.</string>
 </resources>

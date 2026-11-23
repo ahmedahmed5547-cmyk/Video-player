@@ -565,8 +565,10 @@ class MediaAdapter(
                     binding.tvDurationBadge.visibility = View.VISIBLE
                     thumbJob = VideoThumbnailLoader.loadFolderCollageThumbnail(ctx, item, binding.ivIcon, accentColor)
 
-                    binding.tvTitle.text = if (isVaultMode) "🛡️ ${item.name}" else item.name
-                    binding.tvSubtitle.text = ctx.getString(R.string.videos_count_format, item.videos.size)
+                    val hiddenPrefix = if (item.isHidden) "👁️‍🗨️ " else ""
+                    binding.tvTitle.text = if (isVaultMode) "🛡️ ${item.name}" else "$hiddenPrefix${item.name}"
+                    val hiddenTag = if (item.isHidden) "  •  " + ctx.getString(R.string.hidden_item_badge) else ""
+                    binding.tvSubtitle.text = ctx.getString(R.string.videos_count_format, item.videos.size) + hiddenTag
                     val folderKey = SelectionViewModel.keyForFolder(item)
                     val isFolderSelected = isSelectionMode && selectedItemKeys.contains(folderKey)
                     applySelectionVisual(ctx, isFolderSelected, accentColor)
@@ -577,7 +579,7 @@ class MediaAdapter(
                     }
                 }
                 is VideoItem -> {
-                    binding.tvTitle.text = item.title
+                    binding.tvTitle.text = if (item.isHidden) "👁️‍🗨️ ${item.title}" else item.title
                     val durationStr = formatDuration(item.duration)
                     binding.tvDurationBadge.text = durationStr
                     binding.tvDurationBadge.visibility = View.VISIBLE
@@ -612,7 +614,8 @@ class MediaAdapter(
                     } else {
                         ""
                     }
-                    binding.tvSubtitle.text = "$sizeMb$resShort$resumeBadge"
+                    val hiddenVidTag = if (item.isHidden) "  •  " + ctx.getString(R.string.hidden_item_badge) else ""
+                    binding.tvSubtitle.text = "$sizeMb$resShort$resumeBadge$hiddenVidTag"
 
                     thumbJob = VideoThumbnailLoader.loadVideoThumbnail(ctx, item, binding.ivIcon, accentColor)
                     val videoKey = SelectionViewModel.keyForVideo(item)

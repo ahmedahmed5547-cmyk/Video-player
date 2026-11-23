@@ -117,9 +117,21 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     private var hasAppliedInitialEqualizer = false
     private var currentDecoderIndex = 0
     private var isEnteringPipTransition = false
+    private var playlistUris: MutableList<String> = mutableListOf()
+    private var playlistTitles: MutableList<String> = mutableListOf()
+    private var currentPlaylistIndex: Int = -1
+    private var isStreamOrIptv: Boolean = false
+    private var lastVideoSwitchTimeMs: Long = 0L
+
     companion object {
         const val ACTION_PIP_AUDIO_ONLY = "com.pureplayer.video.ACTION_PIP_AUDIO_ONLY"
         const val ACTION_PIP_PLAY_PAUSE = "com.pureplayer.video.ACTION_PIP_PLAY_PAUSE"
+        const val ACTION_PIP_PREV = "com.pureplayer.video.ACTION_PIP_PREV"
+        const val ACTION_PIP_NEXT = "com.pureplayer.video.ACTION_PIP_NEXT"
+        const val EXTRA_PLAYLIST_URIS = "EXTRA_PLAYLIST_URIS"
+        const val EXTRA_PLAYLIST_TITLES = "EXTRA_PLAYLIST_TITLES"
+        const val EXTRA_PLAYLIST_INDEX = "EXTRA_PLAYLIST_INDEX"
+        const val EXTRA_IS_STREAM = "EXTRA_IS_STREAM"
     }
 
     private var batteryReceiverRegistered = false
@@ -169,6 +181,8 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 ACTION_PIP_AUDIO_ONLY -> switchToBackgroundAudioOnlyMode()
+                ACTION_PIP_PREV -> switchToAdjacentVideo(-1)
+                ACTION_PIP_NEXT -> switchToAdjacentVideo(+1)
                 ACTION_PIP_PLAY_PAUSE -> {
                     if (::mediaPlayer.isInitialized) {
                         if (mediaPlayer.isPlaying) {
@@ -320,6 +334,8 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             val pipFilter = IntentFilter().apply {
                 addAction(ACTION_PIP_AUDIO_ONLY)
                 addAction(ACTION_PIP_PLAY_PAUSE)
+                addAction(ACTION_PIP_PREV)
+                addAction(ACTION_PIP_NEXT)
             }
             ContextCompat.registerReceiver(this, pipActionReceiver, pipFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
             pipReceiverRegistered = true
@@ -346,6 +362,19 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         binding.btnDecoder.text = getDecoderShortBadge(currentDecoderIndex)
 
         extractIntentData(intent)
+        if (savedInstanceState != null) {
+            val savedUris = savedInstanceState.getStringArrayList(EXTRA_PLAYLIST_URIS)
+            val savedTitles = savedInstanceState.getStringArrayList(EXTRA_PLAYLIST_TITLES)
+            val savedIdx = savedInstanceState.getInt(EXTRA_PLAYLIST_INDEX, -1)
+            if (!savedUris.isNullOrEmpty() && savedIdx in savedUris.indices) {
+                playlistUris = savedUris.toMutableList()
+                playlistTitles = savedTitles?.toMutableList() ?: MutableList(savedUris.size) { "Video" }
+                currentPlaylistIndex = savedIdx
+                currentVideoUri = Uri.parse(playlistUris[savedIdx])
+                currentVideoTitle = playlistTitles.getOrElse(savedIdx) { currentVideoTitle }
+                binding.tvVideoTitle.text = currentVideoTitle
+            }
+        }
 
         currentVideoUri?.let { uri ->
             subtitleSyncOffsetMs = PlaybackStore.getVideoSubtitleSyncMs(this, uri)
@@ -1317,11 +1346,19 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                 }
 
                 override fun onSkipToNext() {
-                    seekByHeadsetDelta(15_000L)
+                    if (hasActiveVideoPlaylist()) {
+                        runOnUiThread { switchToAdjacentVideo(+1) }
+                    } else {
+                        seekByHeadsetDelta(15_000L)
+                    }
                 }
 
                 override fun onSkipToPrevious() {
-                    seekByHeadsetDelta(-15_000L)
+                    if (hasActiveVideoPlaylist()) {
+                        runOnUiThread { switchToAdjacentVideo(-1) }
+                    } else {
+                        seekByHeadsetDelta(-15_000L)
+                    }
                 }
 
                 override fun onFastForward() {
@@ -1473,6 +1510,22 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             if (!extraUrl.isNullOrBlank()) {
                 resolvedUri = Uri.parse(extraUrl.trim())
             }
+        }
+
+        val incomingUris = incomingIntent.getStringArrayListExtra(EXTRA_PLAYLIST_URIS)
+        val incomingTitles = incomingIntent.getStringArrayListExtra(EXTRA_PLAYLIST_TITLES)
+        val incomingIdx = incomingIntent.getIntExtra(EXTRA_PLAYLIST_INDEX, -1)
+        val uriScheme = resolvedUri?.scheme?.lowercase(Locale.ROOT) ?: ""
+        isStreamOrIptv = incomingIntent.getBooleanExtra(EXTRA_IS_STREAM, false) ||
+            uriScheme == "http" || uriScheme == "https" || uriScheme == "rtsp" || uriScheme == "rtmp" || uriScheme == "mms"
+        if (!isStreamOrIptv && !incomingUris.isNullOrEmpty() && incomingIdx in incomingUris.indices) {
+            playlistUris = incomingUris.toMutableList()
+            playlistTitles = incomingTitles?.toMutableList() ?: MutableList(incomingUris.size) { "Video" }
+            currentPlaylistIndex = incomingIdx
+        } else {
+            playlistUris = mutableListOf()
+            playlistTitles = mutableListOf()
+            currentPlaylistIndex = -1
         }
 
         val rawStr = resolvedUri?.toString() ?: ""
@@ -2027,6 +2080,88 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         showToastIndicator(getString(R.string.sub_sync_offset_format, subtitleSyncOffsetMs))
     }
 
+    private fun hasActiveVideoPlaylist(): Boolean {
+        return !isStreamOrIptv && playlistUris.size > 1 && currentPlaylistIndex in playlistUris.indices
+    }
+
+    private fun updatePrevNextButtonsState() {
+        val showArrows = hasActiveVideoPlaylist()
+        binding.btnPrevVideo.visibility = if (showArrows) View.VISIBLE else View.GONE
+        binding.btnNextVideo.visibility = if (showArrows) View.VISIBLE else View.GONE
+        if (!showArrows) return
+
+        val canPrev = HiddenMediaAndPlaylistHelper.canGoPrevious(currentPlaylistIndex, playlistUris.size)
+        val canNext = HiddenMediaAndPlaylistHelper.canGoNext(currentPlaylistIndex, playlistUris.size)
+        binding.btnPrevVideo.isEnabled = canPrev
+        binding.btnPrevVideo.alpha = if (canPrev) 1.0f else 0.32f
+        binding.btnNextVideo.isEnabled = canNext
+        binding.btnNextVideo.alpha = if (canNext) 1.0f else 0.32f
+    }
+
+    private fun switchToAdjacentVideo(delta: Int) {
+        if (!hasActiveVideoPlaylist()) return
+        val nowMs = android.os.SystemClock.elapsedRealtime()
+        if (!HiddenMediaAndPlaylistHelper.shouldAcceptSwitch(nowMs, lastVideoSwitchTimeMs)) return
+
+        val targetIdx = if (delta < 0) {
+            HiddenMediaAndPlaylistHelper.computePreviousIndex(currentPlaylistIndex, playlistUris.size)
+        } else {
+            HiddenMediaAndPlaylistHelper.computeNextIndex(currentPlaylistIndex, playlistUris.size)
+        } ?: return
+
+        lastVideoSwitchTimeMs = nowMs
+
+        // Cancel pending gestures & async subtitle translation for previous item
+        cancelActivePlayerGesturesSafely()
+        cancelActiveSubtitleTranslation()
+        saveCurrentPositionNow()
+
+        currentPlaylistIndex = targetIdx
+        val nextUri = Uri.parse(playlistUris[targetIdx])
+        val nextTitle = playlistTitles.getOrElse(targetIdx) { "Video" }
+        currentVideoUri = nextUri
+        currentVideoTitle = nextTitle
+        PlaybackStore.markVideoOpened(this, nextUri)
+
+        // Restore saved resume position for the new video (if any)
+        val savedPos = PlaybackStore.getSavedPosition(this, nextUri)
+        pendingStartPositionMs = if (savedPos > 3_000L) savedPos else 0L
+        hasAppliedInitialSeek = false
+
+        // Restore per-video subtitle & sync offset (or clear old cues cleanly)
+        subtitleSyncOffsetMs = PlaybackStore.getVideoSubtitleSyncMs(this, nextUri)
+        val cachedSubPath = PlaybackStore.getVideoSubtitleCachePath(this, nextUri)
+        val savedSubMeta = PlaybackStore.getVideoSubtitleUri(this, nextUri)
+        val loadedCues = if (!cachedSubPath.isNullOrEmpty()) {
+            val f = File(cachedSubPath)
+            if (f.exists()) SubtitleParser.parseFromFile(f) else emptyList()
+        } else emptyList()
+        externalSubtitleCues = loadedCues
+        originalSubtitleCues = loadedCues
+        lastTranslatedTexts = emptyList()
+        currentSubtitleSourceFile = cachedSubPath?.let { File(it) }?.takeIf { it.exists() }
+        currentSubtitleDisplayLabel = savedSubMeta?.second.orEmpty()
+        binding.tvDraggableSubtitle.text = ""
+        binding.tvDraggableSubtitle.visibility = View.GONE
+
+        // Update UI & launch smoothly on existing mediaPlayer (preserves speed, volume, brightness, aspect ratio)
+        binding.tvVideoTitle.text = nextTitle
+        binding.seekBar.progress = 0
+        binding.tvCurrentTime.text = formatTime(pendingStartPositionMs)
+        updatePrevNextButtonsState()
+
+        if (::mediaPlayer.isInitialized) {
+            runCatching { mediaPlayer.stop() }
+        }
+        startVideoPlaybackSafely(nextUri)
+        if (::mediaPlayer.isInitialized && currentSpeed != 1.0f) {
+            runCatching { mediaPlayer.rate = currentSpeed }
+        }
+        updateMediaSessionPlaybackState(isPlaying = true)
+        updateAutoPipParams(isPlaying = true)
+        showToastIndicator((if (delta < 0) "⏮ " else "⏭ ") + nextTitle)
+    }
+
     private fun setupControls() {
         attachSpringPressAnimation(
             binding.btnClosePlayer,
@@ -2044,9 +2179,11 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             binding.btnUnlock,
             binding.btnSubtitles,
             binding.btnAudioTrack,
+            binding.btnPrevVideo,
             binding.btnRewind,
             binding.btnPlayPause,
             binding.btnForward,
+            binding.btnNextVideo,
             binding.btnSpeed,
             binding.btnAspectRatio
         )
@@ -2108,6 +2245,18 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             resetSubtitlePositionNow()
             scheduleHideControls()
         }
+
+        binding.btnPrevVideo.setOnClickListener {
+            switchToAdjacentVideo(-1)
+            scheduleHideControls()
+        }
+
+        binding.btnNextVideo.setOnClickListener {
+            switchToAdjacentVideo(+1)
+            scheduleHideControls()
+        }
+
+        updatePrevNextButtonsState()
 
         binding.btnRewind.setOnClickListener {
             val newTime = (mediaPlayer.time - 15_000L).coerceAtLeast(0L)
@@ -3751,9 +3900,41 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                 if (isPlaying) "Pause" else "Play",
                 playPausePending
             )
+            val pipActions = mutableListOf<RemoteAction>()
+            if (hasActiveVideoPlaylist() && HiddenMediaAndPlaylistHelper.canGoPrevious(currentPlaylistIndex, playlistUris.size)) {
+                val prevPending = PendingIntent.getBroadcast(
+                    this, 203, Intent(ACTION_PIP_PREV).setPackage(packageName),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                pipActions.add(
+                    RemoteAction(
+                        Icon.createWithResource(this, R.drawable.ic_prev_video_modern),
+                        getString(R.string.player_prev_video),
+                        getString(R.string.player_prev_video),
+                        prevPending
+                    )
+                )
+            } else {
+                pipActions.add(audioOnlyAction)
+            }
+            pipActions.add(playPauseAction)
+            if (hasActiveVideoPlaylist() && HiddenMediaAndPlaylistHelper.canGoNext(currentPlaylistIndex, playlistUris.size)) {
+                val nextPending = PendingIntent.getBroadcast(
+                    this, 204, Intent(ACTION_PIP_NEXT).setPackage(packageName),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                pipActions.add(
+                    RemoteAction(
+                        Icon.createWithResource(this, R.drawable.ic_next_video_modern),
+                        getString(R.string.player_next_video),
+                        getString(R.string.player_next_video),
+                        nextPending
+                    )
+                )
+            }
             val builder = PictureInPictureParams.Builder()
                 .setAspectRatio(Rational(16, 9))
-                .setActions(listOf(audioOnlyAction, playPauseAction))
+                .setActions(pipActions)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 builder.setAutoEnterEnabled(PlaybackStore.isAutoPipEnabled(this) && isPlaying)
                 builder.setSeamlessResizeEnabled(true)
@@ -4054,6 +4235,15 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
         } else {
             String.format(Locale.US, "%02d:%02d", minutes, seconds)
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        if (playlistUris.isNotEmpty() && currentPlaylistIndex in playlistUris.indices) {
+            outState.putStringArrayList(EXTRA_PLAYLIST_URIS, ArrayList(playlistUris))
+            outState.putStringArrayList(EXTRA_PLAYLIST_TITLES, ArrayList(playlistTitles))
+            outState.putInt(EXTRA_PLAYLIST_INDEX, currentPlaylistIndex)
         }
     }
 

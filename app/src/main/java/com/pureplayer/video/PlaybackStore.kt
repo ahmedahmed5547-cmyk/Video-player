@@ -127,6 +127,7 @@ object PlaybackStore {
     private const val KEY_AUTO_TRANSLATE_ARABIC_STYLE = "vexo_auto_translate_arabic_style_v1"
     private const val KEY_SUB_BILINGUAL = "vexo_sub_bilingual_v1"
     private const val KEY_APP_ICON_STYLE = "vexo_app_icon_style_v1"
+    private const val KEY_SHOW_HIDDEN_FOLDERS = "vexo_show_hidden_folders_v1"
     private const val KEY_LAST_ACTIVE_FOLDER = "last_active_folder_name_v1"
     private const val KEY_AUDIO_PRESET_MODE = "audio_eq_preset_mode_v1"
     private const val KEY_AUDIO_PREAMP_DB = "audio_eq_preamp_db_v1"
@@ -822,6 +823,13 @@ object PlaybackStore {
 
     fun setAppIconStyle(context: Context, styleId: String) {
         prefs(context).edit().putString(KEY_APP_ICON_STYLE, styleId).apply()
+    }
+
+    fun isShowHiddenFolders(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_SHOW_HIDDEN_FOLDERS, HiddenMediaAndPlaylistHelper.DEFAULT_SHOW_HIDDEN_FOLDERS)
+
+    fun setShowHiddenFolders(context: Context, show: Boolean) {
+        prefs(context).edit().putBoolean(KEY_SHOW_HIDDEN_FOLDERS, show).apply()
     }
 
     fun isFirstLibraryScanDone(context: Context): Boolean =

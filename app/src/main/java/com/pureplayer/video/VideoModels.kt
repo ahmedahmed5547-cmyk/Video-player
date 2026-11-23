@@ -12,7 +12,8 @@ data class VideoItem(
     val width: Int = 0,
     val height: Int = 0,
     val path: String = "",
-    val dateAddedSec: Long = 0L
+    val dateAddedSec: Long = 0L,
+    val isHidden: Boolean = false
 ) {
     fun getResolutionLabel(): String {
         if (width <= 0 || height <= 0) return "HD"
@@ -32,7 +33,8 @@ data class VideoItem(
 
 data class VideoFolder(
     val name: String,
-    val videos: List<VideoItem>
+    val videos: List<VideoItem>,
+    val isHidden: Boolean = false
 )
 
 data class SubtitleCue(

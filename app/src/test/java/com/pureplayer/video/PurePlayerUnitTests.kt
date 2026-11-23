@@ -810,4 +810,57 @@ class PurePlayerUnitTests {
         assertEquals(1, fallback.values.count { it })
         assertTrue(fallback["com.pureplayer.video.LauncherAliasDefault"] == true)
     }
+
+    @Test
+    fun v9022_hiddenFilteringPlaylistNavigationAndDebounce() {
+        // 1. Hidden media classification
+        assertTrue(HiddenMediaAndPlaylistHelper.isHiddenMedia("/storage/emulated/0/WhatsApp/Media/.Statuses/a.mp4", ".Statuses"))
+        assertTrue(HiddenMediaAndPlaylistHelper.isHiddenMedia("/storage/emulated/0/Movies/Private/a.mp4", "Private", hasNomediaAncestor = true))
+        assertTrue(HiddenMediaAndPlaylistHelper.isHiddenMedia("/storage/emulated/0/Android/data/com.app/files/v.mp4", "files"))
+        assertTrue(HiddenMediaAndPlaylistHelper.isHiddenMedia("/storage/emulated/0/Movies/.trashed-123-clip.mp4", "Movies", ".trashed-123-clip.mp4"))
+        assertFalse(HiddenMediaAndPlaylistHelper.isHiddenMedia("/storage/emulated/0/Movies/Action/hero.mp4", "Action", "hero.mp4"))
+
+        // 2. Hidden folder & video filtering (ON vs OFF)
+        val dummyUri = android.net.Uri.EMPTY
+        val pubVid = VideoItem(1L, "movie.mp4", dummyUri, 60_000L, 10_000L, "Movies", isHidden = false)
+        val hidVid = VideoItem(2L, "secret.mp4", dummyUri, 60_000L, 10_000L, ".Hidden", isHidden = true)
+        val folders = listOf(
+            VideoFolder("Movies", listOf(pubVid), isHidden = false),
+            VideoFolder(".Hidden", listOf(hidVid), isHidden = true)
+        )
+        assertEquals(2, HiddenMediaAndPlaylistHelper.filterFoldersByHiddenPreference(folders, showHidden = true).size)
+        val filteredFolders = HiddenMediaAndPlaylistHelper.filterFoldersByHiddenPreference(folders, showHidden = false)
+        assertEquals(1, filteredFolders.size)
+        assertEquals("Movies", filteredFolders[0].name)
+        assertEquals(1, HiddenMediaAndPlaylistHelper.filterVideosByHiddenPreference(listOf(pubVid, hidVid), showHidden = false).size)
+        assertTrue(HiddenMediaAndPlaylistHelper.DEFAULT_SHOW_HIDDEN_FOLDERS)
+
+        // 3. Previous / Next index calculation at boundaries (first, middle, last, single-item)
+        assertFalse(HiddenMediaAndPlaylistHelper.canGoPrevious(0, 3))
+        assertTrue(HiddenMediaAndPlaylistHelper.canGoNext(0, 3))
+        assertNull(HiddenMediaAndPlaylistHelper.computePreviousIndex(0, 3))
+        assertEquals(1, HiddenMediaAndPlaylistHelper.computeNextIndex(0, 3))
+
+        assertTrue(HiddenMediaAndPlaylistHelper.canGoPrevious(1, 3))
+        assertTrue(HiddenMediaAndPlaylistHelper.canGoNext(1, 3))
+        assertEquals(0, HiddenMediaAndPlaylistHelper.computePreviousIndex(1, 3))
+        assertEquals(2, HiddenMediaAndPlaylistHelper.computeNextIndex(1, 3))
+
+        assertTrue(HiddenMediaAndPlaylistHelper.canGoPrevious(2, 3))
+        assertFalse(HiddenMediaAndPlaylistHelper.canGoNext(2, 3))
+        assertNull(HiddenMediaAndPlaylistHelper.computeNextIndex(2, 3))
+
+        // Single video -> both disabled
+        assertFalse(HiddenMediaAndPlaylistHelper.canGoPrevious(0, 1))
+        assertFalse(HiddenMediaAndPlaylistHelper.canGoNext(0, 1))
+
+        // Repeat-all wraps around cleanly
+        assertEquals(2, HiddenMediaAndPlaylistHelper.computePreviousIndex(0, 3, repeatAll = true))
+        assertEquals(0, HiddenMediaAndPlaylistHelper.computeNextIndex(2, 3, repeatAll = true))
+
+        // 4. Switch tap debounce
+        assertTrue(HiddenMediaAndPlaylistHelper.shouldAcceptSwitch(nowMs = 1000L, lastSwitchMs = 0L))
+        assertFalse(HiddenMediaAndPlaylistHelper.shouldAcceptSwitch(nowMs = 1200L, lastSwitchMs = 1000L))
+        assertTrue(HiddenMediaAndPlaylistHelper.shouldAcceptSwitch(nowMs = 1500L, lastSwitchMs = 1000L))
+    }
 }
