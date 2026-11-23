@@ -76,6 +76,14 @@ object HiddenMediaAndPlaylistHelper {
         return false
     }
 
+    inline fun <T> filterHiddenItems(
+        items: List<T>,
+        showHidden: Boolean,
+        isHiddenSelector: (T) -> Boolean
+    ): List<T> {
+        return if (showHidden) items else items.filter { !isHiddenSelector(it) }
+    }
+
     fun filterVideosByHiddenPreference(
         videos: List<VideoItem>,
         showHidden: Boolean

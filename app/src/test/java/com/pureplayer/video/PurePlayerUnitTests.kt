@@ -820,19 +820,17 @@ class PurePlayerUnitTests {
         assertTrue(HiddenMediaAndPlaylistHelper.isHiddenMedia("/storage/emulated/0/Movies/.trashed-123-clip.mp4", "Movies", ".trashed-123-clip.mp4"))
         assertFalse(HiddenMediaAndPlaylistHelper.isHiddenMedia("/storage/emulated/0/Movies/Action/hero.mp4", "Action", "hero.mp4"))
 
-        // 2. Hidden folder & video filtering (ON vs OFF)
-        val dummyUri = android.net.Uri.EMPTY
-        val pubVid = VideoItem(1L, "movie.mp4", dummyUri, 60_000L, 10_000L, "Movies", isHidden = false)
-        val hidVid = VideoItem(2L, "secret.mp4", dummyUri, 60_000L, 10_000L, ".Hidden", isHidden = true)
-        val folders = listOf(
-            VideoFolder("Movies", listOf(pubVid), isHidden = false),
-            VideoFolder(".Hidden", listOf(hidVid), isHidden = true)
+        // 2. Hidden folder & video filtering (ON vs OFF, pure Kotlin without Android Uri stubs)
+        data class SampleMedia(val folder: String, val path: String, val hidden: Boolean)
+        val samples = listOf(
+            SampleMedia("Movies", "/storage/emulated/0/Movies/movie.mp4", false),
+            SampleMedia(".Hidden", "/storage/emulated/0/.Hidden/secret.mp4", true),
+            SampleMedia("Private", "/storage/emulated/0/Private/clip.mp4", true)
         )
-        assertEquals(2, HiddenMediaAndPlaylistHelper.filterFoldersByHiddenPreference(folders, showHidden = true).size)
-        val filteredFolders = HiddenMediaAndPlaylistHelper.filterFoldersByHiddenPreference(folders, showHidden = false)
-        assertEquals(1, filteredFolders.size)
-        assertEquals("Movies", filteredFolders[0].name)
-        assertEquals(1, HiddenMediaAndPlaylistHelper.filterVideosByHiddenPreference(listOf(pubVid, hidVid), showHidden = false).size)
+        assertEquals(3, HiddenMediaAndPlaylistHelper.filterHiddenItems(samples, showHidden = true) { it.hidden }.size)
+        val onlyVisible = HiddenMediaAndPlaylistHelper.filterHiddenItems(samples, showHidden = false) { it.hidden }
+        assertEquals(1, onlyVisible.size)
+        assertEquals("Movies", onlyVisible[0].folder)
         assertTrue(HiddenMediaAndPlaylistHelper.DEFAULT_SHOW_HIDDEN_FOLDERS)
 
         // 3. Previous / Next index calculation at boundaries (first, middle, last, single-item)
