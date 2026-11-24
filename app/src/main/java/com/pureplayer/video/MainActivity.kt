@@ -111,6 +111,7 @@ import javax.crypto.SecretKey
  */
 
 class MainActivity : AppCompatActivity() {
+    private var activeTopDropdownPopup: PopupWindow? = null
 
     internal lateinit var binding: ActivityMainBinding
     internal lateinit var adapter: MediaAdapter

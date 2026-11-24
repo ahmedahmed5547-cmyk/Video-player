@@ -765,7 +765,7 @@ object PlaybackStore {
         val savedMeta = getVideoSubtitleUri(context, videoUri)
         if (savedPath == deletedPath || savedMeta?.first == deletedPath) {
             prefs(context).edit()
-                .remove(PREFIX_SUB_CACHE + videoUri.toString().hashCode())
+                .remove(PREFIX_SUB_PATH + uriKey)
                 .remove(PREFIX_SAVED_SUB_URI + videoUri.toString().hashCode())
                 .remove(PREFIX_SAVED_SUB_URI + "lbl_" + videoUri.toString().hashCode())
                 .apply()
