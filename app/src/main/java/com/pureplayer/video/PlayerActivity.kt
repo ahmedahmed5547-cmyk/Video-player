@@ -267,6 +267,10 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     private var mVideoSarNum = 1
     private var mVideoSarDen = 1
     private var lastInsetLeft = 0
+    private var lastCutoutLeft = 0
+    private var lastCutoutTop = 0
+    private var lastCutoutRight = 0
+    private var lastCutoutBottom = 0
     private var lastInsetTop = 0
     private var lastInsetRight = 0
     private var lastInsetBottom = 0
@@ -367,6 +371,8 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         binding.btnOrientation.text = getOrientationLabel(playerOrientationMode)
         currentDecoderIndex = PlaybackStore.getDecoderModeIndex(this)
         binding.btnDecoder.text = getDecoderShortBadge(currentDecoderIndex)
+        currentScaleIndex = 0
+        binding.btnAspectRatio.text = getScaleLabel(currentScaleIndex)
 
         extractIntentData(intent)
         if (savedInstanceState != null) {
@@ -528,11 +534,17 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             val cutoutAndBars = windowInsets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
+            val cutoutOnly = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
             lastInsetLeft = cutoutAndBars.left
             lastInsetTop = cutoutAndBars.top
             lastInsetRight = cutoutAndBars.right
             lastInsetBottom = cutoutAndBars.bottom
+            lastCutoutLeft = cutoutOnly.left
+            lastCutoutTop = cutoutOnly.top
+            lastCutoutRight = cutoutOnly.right
+            lastCutoutBottom = cutoutOnly.bottom
             applyPlayerBarInsets()
+            binding.videoSurfaceFrame.post { changeSurfaceLayout() }
             windowInsets
         }
         ViewCompat.requestApplyInsets(binding.playerRoot)
@@ -639,8 +651,21 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                 sh = rootH
             }
             else -> {
-                sw = rootW
-                sh = rootH
+                val activeMode = aspectModes[currentScaleIndex.coerceIn(0, aspectModes.lastIndex)]
+                if (activeMode == VlcAspectMode.SURFACE_BEST_FIT) {
+                    // Keep video inside display-cutout safe area so notch/punch-hole never crops any edge or subtitle
+                    val safePadH = maxOf(lastCutoutLeft, lastCutoutRight)
+                    val safePadV = maxOf(lastCutoutTop, lastCutoutBottom)
+                    binding.videoSurfaceFrame.setPadding(lastCutoutLeft, lastCutoutTop, lastCutoutRight, lastCutoutBottom)
+                    sw = (rootW - lastCutoutLeft - lastCutoutRight).coerceAtLeast(1)
+                    sh = (rootH - lastCutoutTop - lastCutoutBottom).coerceAtLeast(1)
+                    // Symmetric check unused var avoided
+                    if (safePadH < 0 && safePadV < 0) { /* no-op */ }
+                } else {
+                    binding.videoSurfaceFrame.setPadding(0, 0, 0, 0)
+                    sw = rootW
+                    sh = rootH
+                }
             }
         }
 

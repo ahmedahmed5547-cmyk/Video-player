@@ -1,3 +1,7 @@
+## v90.26 (2026-11-24)
+- **Bug Fix — Show Hidden Files / Folders**: Added Stage 4 background filesystem scanning (`collectHiddenFilesystemVideoPaths`) for dot-prefixed folders/files and `.nomedia` directories, removed the dot-file exclusion when hidden mode is enabled, triggered immediate background refresh on toggle, and added a clear Android 11+ All Files Access prompt instead of silently returning empty.
+- **Cutout-Safe Full-Screen Fit**: Enforced `SURFACE_BEST_FIT` as the default mode on video open and computed the display-cutout safe bounding box inside `changeSurfaceLayout()` so no edge, corner, or burned-in subtitle is cropped behind a camera notch or punch-hole.
+
 ## v90.25 (2026-11-24)
 - **Smart Auto-Orientation**: Automatically detects each video's true display orientation (including 90°/270° rotation metadata and anamorphic pixel aspect ratios) using early cached/`MediaMetadataRetriever` metadata + LibVLC `onNewVideoLayout` confirmation. Uses `SCREEN_ORIENTATION_SENSOR_LANDSCAPE` / `SCREEN_ORIENTATION_SENSOR_PORTRAIT`, keeps current orientation for square videos (±5% of 1:1), PiP, multi-window, and large screens, adds 4 Player Orientation modes in Settings, supports per-video manual rotate override, and restores normal orientation on player exit.
 

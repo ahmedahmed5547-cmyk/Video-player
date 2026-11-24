@@ -777,4 +777,11 @@ Any series, movie, or channel you play will appear here automatically so you can
 • Keeps current orientation for square/near-square videos (within 5% of 1:1), PiP, split-screen, tablets/foldables, and streams with unknown dimensions.
 • Added 4 Player Orientation modes in Settings and quick rotate override inside the player (applies to current video only, then returns to Auto on next/previous).
 • Restores normal app orientation immediately when leaving the player.</string>
+    <!-- v90.26 Hidden Files Filesystem Scan Fix & Cutout-Safe Best Fit -->
+    <string name="hidden_perm_title">Allow Access to Hidden Folders</string>
+    <string name="hidden_perm_msg">On Android 11+, Android hides dot-folders and .nomedia videos from MediaStore. Grant All Files Access so V Player can display them when Hidden folders is turned on.</string>
+    <string name="hidden_perm_grant_btn">Open Settings</string>
+    <string name="changelog_v90_26_title">v%1$s — Hidden Files Scan Fix &amp; Cutout-Safe Full-Screen Fit</string>
+    <string name="changelog_v90_26_desc">• Fixed "Hidden folders" toggle: added a dedicated background filesystem scan for dot-prefixed folders/files and .nomedia directories, instant refresh when toggled, and a clear Android 11+ All Files Access prompt instead of failing silently.
+• Improved default video Fit mode: every video opens centered and scaled to maximum size with zero cropped edges, respecting display cutouts/notches and re-fitting automatically on rotation, split-screen, and next/previous switches.</string>
 </resources>

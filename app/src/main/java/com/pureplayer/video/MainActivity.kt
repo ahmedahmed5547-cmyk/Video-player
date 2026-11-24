@@ -1381,6 +1381,87 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+
+    private fun showHiddenFoldersPermissionPromptDialog() {
+        val accent = PlaybackStore.getAccentColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
+        val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(20), dp(22), dp(18))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(24).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(110, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+        val tvTitle = TextView(this).apply {
+            text = "👁️  ${getString(R.string.hidden_perm_title)}"
+            setTextColor(primaryText)
+            textSize = 17f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, 0, 0, dp(8))
+        }
+        val tvMsg = TextView(this).apply {
+            text = getString(R.string.hidden_perm_msg)
+            setTextColor(secondaryText)
+            textSize = 14f
+            setPadding(0, 0, 0, dp(16))
+        }
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+        }
+        val dlg = AlertDialog.Builder(this).setView(container).create()
+        dlg.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        val btnLater = TextView(this).apply {
+            text = getString(R.string.cancel)
+            setTextColor(secondaryText)
+            textSize = 14f
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            setOnClickListener {
+                dlg.dismiss()
+                videoLibraryViewModel.refreshLibrary(force = true, showLoadingIfEmpty = false, isUserPullRefresh = true)
+            }
+        }
+        val btnGrant = TextView(this).apply {
+            text = getString(R.string.hidden_perm_grant_btn)
+            setTextColor(Color.parseColor("#090D16"))
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(20), dp(10), dp(20), dp(10))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(accent)
+            }
+            setOnClickListener {
+                dlg.dismiss()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    try {
+                        val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                            data = Uri.parse("package:$packageName")
+                        }
+                        startActivity(intent)
+                    } catch (_: Exception) {
+                        runCatching {
+                            startActivity(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                        }
+                    }
+                }
+            }
+        }
+        btnRow.addView(btnLater)
+        btnRow.addView(btnGrant)
+        container.addView(tvTitle)
+        container.addView(tvMsg)
+        container.addView(btnRow)
+        dlg.show()
+    }
+
     private fun showTopHamburgerPopupMenu(anchor: View) {
         activeTopDropdownPopup?.dismiss()
 
@@ -1549,6 +1630,14 @@ class MainActivity : AppCompatActivity() {
             if (savedScroll != null) {
                 binding.recyclerView.post {
                     binding.recyclerView.layoutManager?.onRestoreInstanceState(savedScroll)
+                }
+            }
+            if (checked) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
+                    popup.dismiss()
+                    showHiddenFoldersPermissionPromptDialog()
+                } else {
+                    videoLibraryViewModel.refreshLibrary(force = true, showLoadingIfEmpty = false, isUserPullRefresh = true)
                 }
             }
         }

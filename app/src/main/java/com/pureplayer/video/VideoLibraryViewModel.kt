@@ -282,9 +282,67 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
         return paths
     }
 
-    private fun isRecognizedVideoFile(fileName: String, mimeType: String? = null, sizeBytes: Long = 0L): Boolean {
+    /**
+     * Scans external storage for hidden videos (dot-prefixed folders/files and .nomedia folders)
+     * off the main thread. Requires All Files Access on Android 11+ to read outside MediaStore.
+     */
+    private fun collectHiddenFilesystemVideoPaths(nomediaCache: MutableMap<String, Boolean>): List<String> {
+        val out = mutableListOf<String>()
+        val extRoot = runCatching { Environment.getExternalStorageDirectory() }.getOrNull() ?: return out
+        if (!extRoot.exists() || !extRoot.canRead()) return out
+
+        val skippedSystemDirs = setOf("data", "obb", "cache", "lost+found")
+
+        fun walkHidden(dir: File, depth: Int, insideHiddenAncestor: Boolean) {
+            if (depth > 4 || out.size >= 400 || !dir.exists() || !dir.isDirectory || !dir.canRead()) return
+            val dirName = dir.name
+            val isDotDir = dirName.startsWith(".") && dirName != "." && dirName != ".."
+            val dirKey = dir.absolutePath
+            val hasNomediaHere = nomediaCache.getOrPut(dirKey) {
+                runCatching { File(dir, ".nomedia").exists() }.getOrDefault(false)
+            }
+            val nowHidden = insideHiddenAncestor || isDotDir || hasNomediaHere
+
+            val children = dir.listFiles() ?: return
+            for (child in children) {
+                if (out.size >= 400) return
+                val cName = child.name
+                if (child.isDirectory) {
+                    if (depth == 0 && cName.equals("Android", ignoreCase = true)) {
+                        // Specifically allow Android/media (e.g., WhatsApp .Statuses) while skipping Android/data & obb
+                        val mediaDir = File(child, "media")
+                        if (mediaDir.exists() && mediaDir.canRead()) {
+                            walkHidden(mediaDir, depth + 1, nowHidden)
+                        }
+                        continue
+                    }
+                    if (cName.lowercase(Locale.ROOT) in skippedSystemDirs) continue
+                    // Descend if already in a hidden branch, if this is a dot-dir, or within top 2 levels to find .nomedia/.dot subfolders
+                    if (nowHidden || cName.startsWith(".") || depth < 2) {
+                        walkHidden(child, depth + 1, nowHidden)
+                    }
+                } else if (child.isFile && child.length() > 0L) {
+                    val isHiddenFile = nowHidden || cName.startsWith(".")
+                    if (isHiddenFile && isRecognizedVideoFile(cName, null, child.length(), allowHiddenDotName = true)) {
+                        out.add(child.absolutePath)
+                    }
+                }
+            }
+        }
+
+        walkHidden(extRoot, 0, false)
+        return out
+    }
+
+    private fun isRecognizedVideoFile(
+        fileName: String,
+        mimeType: String? = null,
+        sizeBytes: Long = 0L,
+        allowHiddenDotName: Boolean = false
+    ): Boolean {
         val cleanName = fileName.trim()
-        if (cleanName.isEmpty() || cleanName.startsWith(".")) return false
+        if (cleanName.isEmpty()) return false
+        if (cleanName.startsWith(".") && !allowHiddenDotName) return false
         val ext = cleanName.substringAfterLast('.', "").lowercase(Locale.ROOT)
         if (ext in supportedVideoExtensions) return true
         val mime = mimeType?.lowercase(Locale.ROOT) ?: ""
@@ -507,6 +565,37 @@ class VideoLibraryViewModel(application: Application) : AndroidViewModel(applica
                         )
                     )
                 )
+            }
+        }
+
+        // Stage 4: Dedicated Hidden Folders & .nomedia Filesystem Scan (only when Hidden folders is ON)
+        if (PlaybackStore.isShowHiddenFolders(appContext)) {
+            runCatching {
+                val hiddenPaths = collectHiddenFilesystemVideoPaths(nomediaCache)
+                for (absPath in hiddenPaths) {
+                    val normPath = absPath.lowercase(Locale.ROOT)
+                    if (normPath in seenPaths) continue
+                    val child = File(absPath)
+                    if (!child.exists() || !child.isFile || child.length() <= 0L) continue
+                    seenPaths.add(normPath)
+                    val syntheticId = (absPath.hashCode().toLong() and 0x7FFFFFFFL) + 950_000_000L
+                    val folderName = child.parentFile?.name?.ifBlank { ".Hidden" } ?: ".Hidden"
+                    list.add(
+                        VideoItem(
+                            id = syntheticId,
+                            title = child.name,
+                            uri = Uri.fromFile(child),
+                            duration = 0L,
+                            size = child.length(),
+                            folderName = folderName,
+                            width = 0,
+                            height = 0,
+                            path = absPath,
+                            dateAddedSec = child.lastModified() / 1000L,
+                            isHidden = true
+                        )
+                    )
+                }
             }
         }
 
