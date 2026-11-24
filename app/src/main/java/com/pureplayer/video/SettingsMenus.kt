@@ -474,8 +474,9 @@ internal fun MainActivity.showSettingsPlaybackEnginePage() {
     val decoderSub = getDecoderModeDisplayName(PlaybackStore.getDecoderModeIndex(this))
     val orientIdx = PlaybackStore.getDefaultOrientationIndex(this)
     val orientSub = when (orientIdx) {
-        0 -> getString(R.string.orientation_auto)
-        2 -> getString(R.string.orientation_portrait)
+        PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO -> getString(R.string.orientation_auto_video)
+        PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE -> getString(R.string.orientation_follow_device)
+        PlaybackStore.ORIENTATION_MODE_PORTRAIT -> getString(R.string.orientation_portrait)
         else -> getString(R.string.orientation_landscape)
     }
     val autoPipOn = PlaybackStore.isAutoPipEnabled(this)
@@ -1135,10 +1136,18 @@ internal fun MainActivity.showChangelogPage() {
         ChangelogReleaseEntry(
             version = verName,
             date = "2026-11-24",
-            iconEmoji = "⚡",
-            title = getString(R.string.changelog_v90_24_title, verName),
-            description = getString(R.string.changelog_v90_24_desc),
+            iconEmoji = "📐",
+            title = getString(R.string.changelog_v90_25_title, verName),
+            description = getString(R.string.changelog_v90_25_desc),
             isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.24",
+            date = "2026-11-24",
+            iconEmoji = "⚡",
+            title = getString(R.string.changelog_v90_24_title, "90.24"),
+            description = getString(R.string.changelog_v90_24_desc),
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.23",
@@ -1957,17 +1966,36 @@ internal fun MainActivity.showSubtitleStyleDialog() {
 internal fun MainActivity.showDefaultOrientationDialog() {
     val current = PlaybackStore.getDefaultOrientationIndex(this)
     val items = listOf(
-        PremiumMenuItem("🔄", getString(R.string.orientation_auto), null, current == 0) {
-            PlaybackStore.setDefaultOrientationIndex(this, 0); popSettingsBackStack()
-        },
-        PremiumMenuItem("↔️", getString(R.string.orientation_landscape), null, current == 1) {
-            PlaybackStore.setDefaultOrientationIndex(this, 1); popSettingsBackStack()
-        },
-        PremiumMenuItem("↕️", getString(R.string.orientation_portrait), null, current == 2) {
-            PlaybackStore.setDefaultOrientationIndex(this, 2); popSettingsBackStack()
-        }
+        PremiumMenuItem(
+            iconEmoji = if (current == PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO) "✅" else "🎬",
+            title = getString(R.string.orientation_auto_video),
+            subtitle = getString(R.string.orientation_auto_video_sub),
+            isAccentHighlighted = (current == PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO),
+            onClick = { PlaybackStore.setDefaultOrientationIndex(this, PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO); popSettingsBackStack() }
+        ),
+        PremiumMenuItem(
+            iconEmoji = if (current == PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE) "✅" else "🔄",
+            title = getString(R.string.orientation_follow_device),
+            subtitle = getString(R.string.orientation_follow_device_sub),
+            isAccentHighlighted = (current == PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE),
+            onClick = { PlaybackStore.setDefaultOrientationIndex(this, PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE); popSettingsBackStack() }
+        ),
+        PremiumMenuItem(
+            iconEmoji = if (current == PlaybackStore.ORIENTATION_MODE_LANDSCAPE) "✅" else "↔️",
+            title = getString(R.string.orientation_landscape),
+            subtitle = null,
+            isAccentHighlighted = (current == PlaybackStore.ORIENTATION_MODE_LANDSCAPE),
+            onClick = { PlaybackStore.setDefaultOrientationIndex(this, PlaybackStore.ORIENTATION_MODE_LANDSCAPE); popSettingsBackStack() }
+        ),
+        PremiumMenuItem(
+            iconEmoji = if (current == PlaybackStore.ORIENTATION_MODE_PORTRAIT) "✅" else "↕️",
+            title = getString(R.string.orientation_portrait),
+            subtitle = null,
+            isAccentHighlighted = (current == PlaybackStore.ORIENTATION_MODE_PORTRAIT),
+            onClick = { PlaybackStore.setDefaultOrientationIndex(this, PlaybackStore.ORIENTATION_MODE_PORTRAIT); popSettingsBackStack() }
+        )
     )
-    showPremiumMenuDialog("🔄", getString(R.string.setting_default_orientation), null, items)
+    showPremiumMenuDialog("🔄", getString(R.string.setting_default_orientation), null, items, showHeaderVersionBadge = false)
 }
 
 

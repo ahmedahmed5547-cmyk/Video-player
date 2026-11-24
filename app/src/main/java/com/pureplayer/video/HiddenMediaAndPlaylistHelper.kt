@@ -222,4 +222,66 @@ object HiddenMediaAndPlaylistHelper {
             else -> isLeavingVaultSection || isLeavingApp
         }
     }
+
+
+    // =========================================================================
+    // Smart Auto-Orientation Based on Video Shape (Pure Kotlin, Unit-Testable)
+    // =========================================================================
+
+    const val SQUARE_ASPECT_TOLERANCE = 0.05f
+    const val LARGE_SCREEN_MIN_SW_DP = 600
+
+    enum class VideoOrientationDecision {
+        LANDSCAPE,
+        PORTRAIT,
+        KEEP_CURRENT
+    }
+
+    fun computeDisplayDimensions(
+        rawWidth: Int,
+        rawHeight: Int,
+        rotationDegrees: Int = 0,
+        pixelWidthHeightRatio: Float = 1f
+    ): Pair<Float, Float> {
+        if (rawWidth <= 0 || rawHeight <= 0) return Pair(0f, 0f)
+        val par = if (pixelWidthHeightRatio > 0f && pixelWidthHeightRatio.isFinite()) pixelWidthHeightRatio else 1f
+        val anamorphicW = rawWidth.toFloat() * par
+        val anamorphicH = rawHeight.toFloat()
+        val normRot = ((rotationDegrees % 360) + 360) % 360
+        return if (normRot == 90 || normRot == 270) {
+            Pair(anamorphicH, anamorphicW)
+        } else {
+            Pair(anamorphicW, anamorphicH)
+        }
+    }
+
+    fun decideSmartVideoOrientation(
+        rawWidth: Int,
+        rawHeight: Int,
+        rotationDegrees: Int = 0,
+        pixelWidthHeightRatio: Float = 1f,
+        isInPip: Boolean = false,
+        isInMultiWindow: Boolean = false,
+        smallestScreenWidthDp: Int = 360
+    ): VideoOrientationDecision {
+        if (isInPip || isInMultiWindow) return VideoOrientationDecision.KEEP_CURRENT
+        val (dispW, dispH) = computeDisplayDimensions(rawWidth, rawHeight, rotationDegrees, pixelWidthHeightRatio)
+        if (dispW <= 0f || dispH <= 0f) return VideoOrientationDecision.KEEP_CURRENT
+
+        val ratio = dispW / dispH
+        // Square or nearly square (within ~5% of 1:1) -> keep current orientation
+        if (ratio >= (1f - SQUARE_ASPECT_TOLERANCE) && ratio <= (1f + SQUARE_ASPECT_TOLERANCE)) {
+            return VideoOrientationDecision.KEEP_CURRENT
+        }
+        return if (dispW > dispH) {
+            VideoOrientationDecision.LANDSCAPE
+        } else {
+            // Do not force portrait on tablets / unfolded foldables
+            if (smallestScreenWidthDp >= LARGE_SCREEN_MIN_SW_DP) {
+                VideoOrientationDecision.KEEP_CURRENT
+            } else {
+                VideoOrientationDecision.PORTRAIT
+            }
+        }
+    }
 }

@@ -2811,6 +2811,11 @@ class MainActivity : AppCompatActivity() {
             putExtra("VIDEO_TITLE", title)
             putExtra("START_POSITION_MS", startPositionMs)
             putExtra(PlayerActivity.EXTRA_IS_STREAM, isStream)
+            val matchedVideoObj = allDiscoveredVideos.find { it.uri == uri }
+            if (matchedVideoObj != null && matchedVideoObj.width > 0 && matchedVideoObj.height > 0) {
+                putExtra(PlayerActivity.EXTRA_VIDEO_WIDTH, matchedVideoObj.width)
+                putExtra(PlayerActivity.EXTRA_VIDEO_HEIGHT, matchedVideoObj.height)
+            }
             putExtra(PlayerActivity.EXTRA_IS_VAULT_VIDEO, isInVaultTab)
             if (isInVaultTab) isLaunchingVaultPlayer = true
             if (!isStream && playlistSource.size > 1 && playlistIndex >= 0) {

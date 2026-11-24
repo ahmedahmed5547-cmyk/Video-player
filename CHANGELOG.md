@@ -1,3 +1,6 @@
+## v90.25 (2026-11-24)
+- **Smart Auto-Orientation**: Automatically detects each video's true display orientation (including 90°/270° rotation metadata and anamorphic pixel aspect ratios) using early cached/`MediaMetadataRetriever` metadata + LibVLC `onNewVideoLayout` confirmation. Uses `SCREEN_ORIENTATION_SENSOR_LANDSCAPE` / `SCREEN_ORIENTATION_SENSOR_PORTRAIT`, keeps current orientation for square videos (±5% of 1:1), PiP, multi-window, and large screens, adds 4 Player Orientation modes in Settings, supports per-video manual rotate override, and restores normal orientation on player exit.
+
 ## v90.24 (2026-11-24)
 - **Selection Mode ⋮ Dropdown**: Replaced the full-screen selection overflow dialog with a compact, theme-aware `PopupWindow` dropdown anchored directly under the ⋮ button (RTL-safe, error-colored Delete, smooth animation).
 - **Video Navigation Performance & Stability**: Moved LibVLC `stop()`/`release()`/`libVLC.release()` and cached subtitle disk parsing off the Main Thread with monotonic `videoSwitchGeneration` cancellation + enabled log-only `StrictMode` in debug builds.

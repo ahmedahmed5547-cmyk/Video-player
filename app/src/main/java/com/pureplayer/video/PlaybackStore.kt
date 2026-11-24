@@ -158,6 +158,13 @@ object PlaybackStore {
     private const val KEY_SUB_POS_PCT_X = "sub_pos_pct_x"
     private const val KEY_SUB_POS_PCT_Y = "sub_pos_pct_y"
     private const val KEY_DEFAULT_ORIENTATION = "default_orientation_idx"
+    private const val KEY_PLAYER_ORIENTATION_MODE_V2 = "vexo_player_orientation_mode_v2"
+    private const val PREFIX_VIDEO_DIM_META = "vexo_video_dim_meta_"
+
+    const val ORIENTATION_MODE_AUTO_VIDEO = 0
+    const val ORIENTATION_MODE_FOLLOW_DEVICE = 1
+    const val ORIENTATION_MODE_LANDSCAPE = 2
+    const val ORIENTATION_MODE_PORTRAIT = 3
     private const val KEY_HDR_MODE_IDX = "hdr_mode_idx"
     private const val KEY_PRIVACY_PIN = "privacy_pin_code"
     private const val KEY_PIN_FAILED_ATTEMPTS = "privacy_pin_failed_attempts_v1"
@@ -620,11 +627,33 @@ object PlaybackStore {
             .apply()
     }
 
-    fun getDefaultOrientationIndex(context: Context): Int =
-        prefs(context).getInt(KEY_DEFAULT_ORIENTATION, 1).coerceIn(0, 2)
+    fun getDefaultOrientationIndex(context: Context): Int {
+        val p = prefs(context)
+        if (p.contains(KEY_PLAYER_ORIENTATION_MODE_V2)) {
+            return p.getInt(KEY_PLAYER_ORIENTATION_MODE_V2, ORIENTATION_MODE_AUTO_VIDEO).coerceIn(0, 3)
+        }
+        return ORIENTATION_MODE_AUTO_VIDEO
+    }
 
     fun setDefaultOrientationIndex(context: Context, idx: Int) {
-        prefs(context).edit().putInt(KEY_DEFAULT_ORIENTATION, idx.coerceIn(0, 2)).apply()
+        prefs(context).edit().putInt(KEY_PLAYER_ORIENTATION_MODE_V2, idx.coerceIn(0, 3)).apply()
+    }
+
+    fun saveVideoDimensionsMeta(context: Context, videoUri: Uri, width: Int, height: Int, rotationDeg: Int) {
+        if (width <= 0 || height <= 0) return
+        val key = PREFIX_VIDEO_DIM_META + videoUri.toString().hashCode()
+        prefs(context).edit().putString(key, "$width,$height,$rotationDeg").apply()
+    }
+
+    fun getVideoDimensionsMeta(context: Context, videoUri: Uri): Triple<Int, Int, Int>? {
+        val key = PREFIX_VIDEO_DIM_META + videoUri.toString().hashCode()
+        val raw = prefs(context).getString(key, null) ?: return null
+        val parts = raw.split(',')
+        if (parts.size != 3) return null
+        val w = parts[0].toIntOrNull() ?: return null
+        val h = parts[1].toIntOrNull() ?: return null
+        val rot = parts[2].toIntOrNull() ?: 0
+        return if (w > 0 && h > 0) Triple(w, h, rot) else null
     }
 
     fun hasPrivacyPin(context: Context): Boolean =

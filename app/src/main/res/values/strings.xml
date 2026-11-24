@@ -765,4 +765,16 @@ Any series, movie, or channel you play will appear here automatically so you can
 • Added Don\'t ask me again checkbox, Undo snackbar, and a Settings toggle for downloaded subtitle deletion.
 • Added Vault Auto-Lock options (Immediately on leaving Vault, On leaving app, or Custom delay) while keeping Vault unlocked during active playback.
 • Removed developer credit from the main Settings screen (kept inside About only).</string>
+    <!-- v90.25 Smart Auto-Orientation Based on Video Shape -->
+    <string name="orientation_auto_video">Auto (match the video)</string>
+    <string name="orientation_auto_video_short">Auto</string>
+    <string name="orientation_auto_video_sub">Landscape for wide videos, portrait for vertical clips (Default)</string>
+    <string name="orientation_follow_device">Follow device rotation</string>
+    <string name="orientation_follow_device_short">Device</string>
+    <string name="orientation_follow_device_sub">Honors system auto-rotate lock</string>
+    <string name="changelog_v90_25_title">v%1$s — Smart Auto-Orientation Based on Video Shape</string>
+    <string name="changelog_v90_25_desc">• Added Smart Auto-Orientation (default): detects video dimensions, rotation tags (90°/270°), and anamorphic pixel aspect ratios to open wide movies in sensor landscape and vertical clips in sensor portrait.
+• Keeps current orientation for square/near-square videos (within 5% of 1:1), PiP, split-screen, tablets/foldables, and streams with unknown dimensions.
+• Added 4 Player Orientation modes in Settings and quick rotate override inside the player (applies to current video only, then returns to Auto on next/previous).
+• Restores normal app orientation immediately when leaving the player.</string>
 </resources>

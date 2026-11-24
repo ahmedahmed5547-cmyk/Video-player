@@ -946,4 +946,58 @@ class PurePlayerUnitTests {
             delaySeconds = 30, isVaultMediaPlaying = false, isLeavingApp = false, isLeavingVaultSection = false, isConfigChangeOrBiometric = false
         ))
     }
+
+    @Test
+    fun v9025_smartVideoOrientationMathAndEdgeCases() {
+        // 1. Standard 16:9 landscape movie -> LANDSCAPE
+        assertEquals(
+            HiddenMediaAndPlaylistHelper.VideoOrientationDecision.LANDSCAPE,
+            HiddenMediaAndPlaylistHelper.decideSmartVideoOrientation(1920, 1080, rotationDegrees = 0)
+        )
+        // 2. Portrait phone recording (1080x1920) -> PORTRAIT
+        assertEquals(
+            HiddenMediaAndPlaylistHelper.VideoOrientationDecision.PORTRAIT,
+            HiddenMediaAndPlaylistHelper.decideSmartVideoOrientation(1080, 1920, rotationDegrees = 0)
+        )
+        // 3. Stored 1920x1080 but rotated 90° or 270° -> PORTRAIT!
+        assertEquals(
+            HiddenMediaAndPlaylistHelper.VideoOrientationDecision.PORTRAIT,
+            HiddenMediaAndPlaylistHelper.decideSmartVideoOrientation(1920, 1080, rotationDegrees = 90)
+        )
+        assertEquals(
+            HiddenMediaAndPlaylistHelper.VideoOrientationDecision.PORTRAIT,
+            HiddenMediaAndPlaylistHelper.decideSmartVideoOrientation(1920, 1080, rotationDegrees = 270)
+        )
+        // 4. Anamorphic video (720x576 with 1.422 PAR -> ~1024x576) -> LANDSCAPE
+        assertEquals(
+            HiddenMediaAndPlaylistHelper.VideoOrientationDecision.LANDSCAPE,
+            HiddenMediaAndPlaylistHelper.decideSmartVideoOrientation(720, 576, rotationDegrees = 0, pixelWidthHeightRatio = 1.422f)
+        )
+        // 5. Square / nearly square (within ~5% of 1:1) -> KEEP_CURRENT
+        assertEquals(
+            HiddenMediaAndPlaylistHelper.VideoOrientationDecision.KEEP_CURRENT,
+            HiddenMediaAndPlaylistHelper.decideSmartVideoOrientation(1080, 1080)
+        )
+        assertEquals(
+            HiddenMediaAndPlaylistHelper.VideoOrientationDecision.KEEP_CURRENT,
+            HiddenMediaAndPlaylistHelper.decideSmartVideoOrientation(1040, 1000)
+        )
+        // 6. Edge cases: PiP, multi-window, tablet portrait, unknown dimensions -> KEEP_CURRENT
+        assertEquals(
+            HiddenMediaAndPlaylistHelper.VideoOrientationDecision.KEEP_CURRENT,
+            HiddenMediaAndPlaylistHelper.decideSmartVideoOrientation(1920, 1080, isInPip = true)
+        )
+        assertEquals(
+            HiddenMediaAndPlaylistHelper.VideoOrientationDecision.KEEP_CURRENT,
+            HiddenMediaAndPlaylistHelper.decideSmartVideoOrientation(1920, 1080, isInMultiWindow = true)
+        )
+        assertEquals(
+            HiddenMediaAndPlaylistHelper.VideoOrientationDecision.KEEP_CURRENT,
+            HiddenMediaAndPlaylistHelper.decideSmartVideoOrientation(1080, 1920, smallestScreenWidthDp = 720)
+        )
+        assertEquals(
+            HiddenMediaAndPlaylistHelper.VideoOrientationDecision.KEEP_CURRENT,
+            HiddenMediaAndPlaylistHelper.decideSmartVideoOrientation(0, 0)
+        )
+    }
 }

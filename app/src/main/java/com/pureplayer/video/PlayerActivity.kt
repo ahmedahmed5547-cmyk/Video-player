@@ -136,6 +136,8 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         const val EXTRA_PLAYLIST_INDEX = "EXTRA_PLAYLIST_INDEX"
         const val EXTRA_IS_STREAM = "EXTRA_IS_STREAM"
         const val EXTRA_IS_VAULT_VIDEO = "EXTRA_IS_VAULT_VIDEO"
+        const val EXTRA_VIDEO_WIDTH = "EXTRA_VIDEO_WIDTH"
+        const val EXTRA_VIDEO_HEIGHT = "EXTRA_VIDEO_HEIGHT"
         @Volatile
         var isVaultVideoActivelyPlaying: Boolean = false
     }
@@ -240,12 +242,12 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     private var gestureVolumeAccumulator = 0f
     private val springOvershoot = OvershootInterpolator(1.6f)
 
-    private val orientationModes = intArrayOf(
-        ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR,
-        ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
-        ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-    )
-    private var currentOrientationIndex = 1
+    private var playerOrientationMode = PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO
+    private var manualOrientationOverrideForCurrentVideo = false
+    private var currentManualRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+    private var initialHintWidth = 0
+    private var initialHintHeight = 0
+    private var orientationProbeJob: kotlinx.coroutines.Job? = null
 
     private val aspectModes = arrayOf(
         VlcAspectMode.SURFACE_BEST_FIT,
@@ -361,9 +363,8 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         }
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-        currentOrientationIndex = PlaybackStore.getDefaultOrientationIndex(this)
-        requestedOrientation = orientationModes[currentOrientationIndex]
-        binding.btnOrientation.text = getOrientationLabel(currentOrientationIndex)
+        playerOrientationMode = PlaybackStore.getDefaultOrientationIndex(this)
+        binding.btnOrientation.text = getOrientationLabel(playerOrientationMode)
         currentDecoderIndex = PlaybackStore.getDecoderModeIndex(this)
         binding.btnDecoder.text = getDecoderShortBadge(currentDecoderIndex)
 
@@ -408,6 +409,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             }
         }
 
+        applyEarlyOrientationForCurrentVideo()
         applyThemeAndSubtitleStyle()
         setupFluidDraggableAndPinchSubtitle()
 
@@ -598,6 +600,15 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         mVideoVisibleHeight = visibleHeight
         mVideoSarNum = sarNum
         mVideoSarDen = sarDen
+        val effW = if (visibleWidth > 0) visibleWidth else width
+        val effH = if (visibleHeight > 0) visibleHeight else height
+        val par = if (sarNum > 0 && sarDen > 0) sarNum.toFloat() / sarDen.toFloat() else 1f
+        if (effW > 0 && effH > 0) {
+            currentVideoUri?.let { uri ->
+                PlaybackStore.saveVideoDimensionsMeta(this, uri, effW, effH, 0)
+            }
+            applySmartOrientationForDimensions(effW, effH, rotationDeg = 0, pixelAspectRatio = par)
+        }
         changeSurfaceLayout()
     }
 
@@ -1561,6 +1572,8 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         val incomingIdx = incomingIntent.getIntExtra(EXTRA_PLAYLIST_INDEX, -1)
         val uriScheme = resolvedUri?.scheme?.lowercase(Locale.ROOT) ?: ""
         isCurrentVideoFromVault = incomingIntent.getBooleanExtra(EXTRA_IS_VAULT_VIDEO, false)
+        initialHintWidth = incomingIntent.getIntExtra(EXTRA_VIDEO_WIDTH, 0)
+        initialHintHeight = incomingIntent.getIntExtra(EXTRA_VIDEO_HEIGHT, 0)
         if (isCurrentVideoFromVault) isVaultVideoActivelyPlaying = true
         isStreamOrIptv = incomingIntent.getBooleanExtra(EXTRA_IS_STREAM, false) ||
             uriScheme == "http" || uriScheme == "https" || uriScheme == "rtsp" || uriScheme == "rtmp" || uriScheme == "mms"
@@ -1627,12 +1640,183 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         return true
     }
 
-    private fun getOrientationLabel(index: Int): String {
-        return when (index) {
-            0 -> getString(R.string.orientation_auto)
-            1 -> getString(R.string.orientation_landscape)
+    private fun getOrientationLabel(mode: Int): String {
+        return when (mode) {
+            PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO -> {
+                if (manualOrientationOverrideForCurrentVideo) {
+                    if (currentManualRequestedOrientation == ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT) {
+                        getString(R.string.orientation_portrait)
+                    } else {
+                        getString(R.string.orientation_landscape)
+                    }
+                } else {
+                    getString(R.string.orientation_auto_video_short)
+                }
+            }
+            PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE -> getString(R.string.orientation_follow_device_short)
+            PlaybackStore.ORIENTATION_MODE_LANDSCAPE -> getString(R.string.orientation_landscape)
             else -> getString(R.string.orientation_portrait)
         }
+    }
+
+    private fun applyRequestedOrientationIfDifferent(targetOrientation: Int) {
+        val inPip = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) isInPictureInPictureMode else false
+        val inMultiWin = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) isInMultiWindowMode else false
+        if (inPip || inMultiWin) return
+        if (requestedOrientation != targetOrientation) {
+            requestedOrientation = targetOrientation
+        }
+    }
+
+    private fun applySmartOrientationForDimensions(
+        rawW: Int,
+        rawH: Int,
+        rotationDeg: Int,
+        pixelAspectRatio: Float
+    ) {
+        if (playerOrientationMode != PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO) return
+        if (manualOrientationOverrideForCurrentVideo) return
+
+        val inPip = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) isInPictureInPictureMode else false
+        val inMultiWin = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) isInMultiWindowMode else false
+        val swDp = resources.configuration.smallestScreenWidthDp
+
+        val decision = HiddenMediaAndPlaylistHelper.decideSmartVideoOrientation(
+            rawWidth = rawW,
+            rawHeight = rawH,
+            rotationDegrees = rotationDeg,
+            pixelWidthHeightRatio = pixelAspectRatio,
+            isInPip = inPip,
+            isInMultiWindow = inMultiWin,
+            smallestScreenWidthDp = swDp
+        )
+        when (decision) {
+            HiddenMediaAndPlaylistHelper.VideoOrientationDecision.LANDSCAPE ->
+                applyRequestedOrientationIfDifferent(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE)
+            HiddenMediaAndPlaylistHelper.VideoOrientationDecision.PORTRAIT ->
+                applyRequestedOrientationIfDifferent(ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT)
+            HiddenMediaAndPlaylistHelper.VideoOrientationDecision.KEEP_CURRENT -> {
+                // Keep current orientation (square video, large screen portrait, PiP, multi-window, or unknown size)
+            }
+        }
+    }
+
+    private fun applyEarlyOrientationForCurrentVideo() {
+        orientationProbeJob?.cancel()
+        binding.btnOrientation.text = getOrientationLabel(playerOrientationMode)
+
+        when (playerOrientationMode) {
+            PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE -> {
+                // SCREEN_ORIENTATION_USER honors system auto-rotate lock
+                applyRequestedOrientationIfDifferent(ActivityInfo.SCREEN_ORIENTATION_USER)
+                return
+            }
+            PlaybackStore.ORIENTATION_MODE_LANDSCAPE -> {
+                applyRequestedOrientationIfDifferent(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE)
+                return
+            }
+            PlaybackStore.ORIENTATION_MODE_PORTRAIT -> {
+                applyRequestedOrientationIfDifferent(ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT)
+                return
+            }
+        }
+
+        if (manualOrientationOverrideForCurrentVideo) {
+            applyRequestedOrientationIfDifferent(currentManualRequestedOrientation)
+            return
+        }
+
+        val uri = currentVideoUri ?: return
+        val cached = PlaybackStore.getVideoDimensionsMeta(this, uri)
+        if (cached != null) {
+            applySmartOrientationForDimensions(cached.first, cached.second, cached.third, 1f)
+            return
+        }
+        if (initialHintWidth > 0 && initialHintHeight > 0) {
+            applySmartOrientationForDimensions(initialHintWidth, initialHintHeight, 0, 1f)
+        }
+
+        // Background MediaMetadataRetriever probe for exact rotation metadata (e.g., 1920x1080 rotated 90°)
+        val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: ""
+        if (scheme == "content" || scheme == "file") {
+            val probeGen = videoSwitchGeneration.get()
+            orientationProbeJob = lifecycleScope.launch(Dispatchers.IO) {
+                val probed = runCatching {
+                    val mmr = android.media.MediaMetadataRetriever()
+                    try {
+                        mmr.setDataSource(this@PlayerActivity, uri)
+                        val w = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+                        val h = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+                        val rot = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+                        if (w > 0 && h > 0) Triple(w, h, rot) else null
+                    } finally {
+                        runCatching { mmr.release() }
+                    }
+                }.getOrNull()
+                if (probed != null && probeGen == videoSwitchGeneration.get()) {
+                    PlaybackStore.saveVideoDimensionsMeta(this@PlayerActivity, uri, probed.first, probed.second, probed.third)
+                    withContext(Dispatchers.Main) {
+                        if (probeGen == videoSwitchGeneration.get() && !isFinishing && !isDestroyed) {
+                            applySmartOrientationForDimensions(probed.first, probed.second, probed.third, 1f)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showPlayerOrientationModeDialog() {
+        val items = listOf(
+            PremiumMenuItem(
+                iconEmoji = if (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO) "✅" else "🎬",
+                title = getString(R.string.orientation_auto_video),
+                subtitle = getString(R.string.orientation_auto_video_sub),
+                isAccentHighlighted = (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO),
+                onClick = {
+                    playerOrientationMode = PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO
+                    manualOrientationOverrideForCurrentVideo = false
+                    PlaybackStore.setDefaultOrientationIndex(this, playerOrientationMode)
+                    applyEarlyOrientationForCurrentVideo()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = if (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE) "✅" else "🔄",
+                title = getString(R.string.orientation_follow_device),
+                subtitle = getString(R.string.orientation_follow_device_sub),
+                isAccentHighlighted = (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE),
+                onClick = {
+                    playerOrientationMode = PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE
+                    manualOrientationOverrideForCurrentVideo = false
+                    PlaybackStore.setDefaultOrientationIndex(this, playerOrientationMode)
+                    applyEarlyOrientationForCurrentVideo()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = if (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_LANDSCAPE) "✅" else "↔️",
+                title = getString(R.string.orientation_landscape),
+                subtitle = null,
+                isAccentHighlighted = (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_LANDSCAPE),
+                onClick = {
+                    playerOrientationMode = PlaybackStore.ORIENTATION_MODE_LANDSCAPE
+                    manualOrientationOverrideForCurrentVideo = false
+                    PlaybackStore.setDefaultOrientationIndex(this, playerOrientationMode)
+                    applyEarlyOrientationForCurrentVideo()
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = if (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_PORTRAIT) "✅" else "↕️",
+                title = getString(R.string.orientation_portrait),
+                subtitle = null,
+                isAccentHighlighted = (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_PORTRAIT),
+                onClick = {
+                    playerOrientationMode = PlaybackStore.ORIENTATION_MODE_PORTRAIT
+                    manualOrientationOverrideForCurrentVideo = false
+                    PlaybackStore.setDefaultOrientationIndex(this, playerOrientationMode)
+                    applyEarlyOrientationForCurrentVideo()
+                }
+            )
+        )
+        showPlayerPremiumMenu("🔄", getString(R.string.setting_default_orientation), getOrientationLabel(playerOrientationMode), items)
     }
 
     private fun getScaleLabel(index: Int): String {
@@ -2188,6 +2372,12 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         binding.tvDraggableSubtitle.text = ""
         binding.tvDraggableSubtitle.visibility = View.GONE
 
+        // Reset per-video manual orientation override so next/prev video returns to Auto mode
+        manualOrientationOverrideForCurrentVideo = false
+        initialHintWidth = 0
+        initialHintHeight = 0
+        applyEarlyOrientationForCurrentVideo()
+
         binding.tvVideoTitle.text = nextTitle
         binding.seekBar.progress = 0
         binding.tvCurrentTime.text = formatTime(pendingStartPositionMs)
@@ -2356,12 +2546,31 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         }
 
         binding.btnOrientation.setOnClickListener {
-            currentOrientationIndex = (currentOrientationIndex + 1) % orientationModes.size
-            requestedOrientation = orientationModes[currentOrientationIndex]
-            val label = getOrientationLabel(currentOrientationIndex)
-            binding.btnOrientation.text = label
+            val isCurrentlyLand = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+            val nextTarget = if (isCurrentlyLand) {
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            } else {
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            }
+            if (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO) {
+                // Respect manual override for THIS video only; next video returns to Auto!
+                manualOrientationOverrideForCurrentVideo = true
+                currentManualRequestedOrientation = nextTarget
+            }
+            applyRequestedOrientationIfDifferent(nextTarget)
+            val label = if (nextTarget == ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT) {
+                getString(R.string.orientation_portrait)
+            } else {
+                getString(R.string.orientation_landscape)
+            }
+            binding.btnOrientation.text = getOrientationLabel(playerOrientationMode)
             showToastIndicator(label)
             scheduleHideControls()
+        }
+
+        binding.btnOrientation.setOnLongClickListener {
+            showPlayerOrientationModeDialog()
+            true
         }
 
         binding.btnSleepTimer.setOnClickListener {
@@ -4672,6 +4881,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     private fun switchToBackgroundAudioOnlyMode() {
         val uri = currentVideoUri ?: return
         isSwitchingToAudioOnly = true
+        runCatching { requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
         val pos = if (::mediaPlayer.isInitialized) mediaPlayer.time.coerceAtLeast(0L) else 0L
         saveCurrentPositionNow()
         if (::mediaPlayer.isInitialized && mediaPlayer.isPlaying) {
@@ -4690,6 +4900,8 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     }
 
     override fun finish() {
+        orientationProbeJob?.cancel()
+        runCatching { requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
         try {
             androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
                 .show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
