@@ -27,6 +27,7 @@ import android.provider.MediaStore
 import android.view.View
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
+import android.widget.PopupWindow
 import android.widget.ProgressBar
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -216,6 +217,7 @@ internal fun MainActivity.showSelectionOverflowMenu() {
                 iconEmoji = "🗑️",
                 title = getString(R.string.vault_action_delete_permanent),
                 subtitle = getString(R.string.selection_count_format, st.count),
+                isDanger = true,
                 onClick = { confirmAndBatchDeleteSelected(selectedVideos, selectedFolders, isVault = true) }
             )
         )
@@ -266,18 +268,13 @@ internal fun MainActivity.showSelectionOverflowMenu() {
                 iconEmoji = "🗑️",
                 title = getString(R.string.delete_action),
                 subtitle = getString(R.string.selection_count_format, st.count),
+                isDanger = true,
                 onClick = { confirmAndBatchDeleteSelected(selectedVideos, selectedFolders, isVault = false) }
             )
         )
     }
 
-    showPremiumMenuDialog(
-        headerIcon = if (inVault) "🛡️" else "☑️",
-        title = getString(R.string.selection_count_format, st.count),
-        subtitle = if (inVault) getString(R.string.tab_vault) else getString(R.string.tab_video_folders_compact),
-        items = items,
-        showHeaderVersionBadge = false
-    )
+    showSelectionDropdownPopup(binding.btnSelectionOverflow, items)
 }
 
 internal fun MainActivity.showFullMediaDetailsDialog(video: VideoItem, isVault: Boolean) {
@@ -1255,4 +1252,123 @@ internal fun MainActivity.shareVideosAsZipInBackground(
             Toast.makeText(this@shareVideosAsZipInBackground, getString(R.string.share_err_no_app), Toast.LENGTH_SHORT).show()
         }
     }
+}
+
+
+internal fun MainActivity.showSelectionDropdownPopup(anchor: View, items: List<PremiumMenuItem>) {
+    activeTopDropdownPopup?.dismiss()
+
+    val accent = PlaybackStore.getAccentColor(this)
+    val surface = PlaybackStore.getSurfaceColor(this)
+    val primaryText = PlaybackStore.getPrimaryTextColor(this)
+    val isLight = PlaybackStore.isLightThemeActive(this)
+    val errorColor = if (isLight) Color.parseColor("#DC2626") else Color.parseColor("#F43F5E")
+    val dividerColor = if (isLight) Color.parseColor("#180F172A") else Color.parseColor("#1FFFFFFF")
+    val rippleColor = Color.argb(38, Color.red(accent), Color.green(accent), Color.blue(accent))
+
+    val card = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(6), dp(6), dp(6), dp(6))
+        elevation = dp(12).toFloat()
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(18).toFloat()
+            setColor(surface)
+            setStroke(dp(1), Color.argb(100, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+    }
+
+    val popup = PopupWindow(
+        card,
+        dp(236),
+        android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+        true
+    ).apply {
+        isOutsideTouchable = true
+        elevation = dp(14).toFloat()
+        setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        setOnDismissListener { activeTopDropdownPopup = null }
+    }
+    activeTopDropdownPopup = popup
+
+    items.forEachIndexed { idx, item ->
+        if (idx > 0) {
+            card.addView(View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    dp(1)
+                ).apply {
+                    marginStart = dp(10)
+                    marginEnd = dp(10)
+                }
+                setBackgroundColor(dividerColor)
+            })
+        }
+
+        val contentShape = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(12).toFloat()
+            setColor(Color.TRANSPARENT)
+        }
+        val mask = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(12).toFloat()
+            setColor(Color.WHITE)
+        }
+        val rowRipple = if (item.isDanger) {
+            Color.argb(36, 244, 63, 94)
+        } else {
+            rippleColor
+        }
+
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            isFocusable = true
+            isClickable = true
+            minimumHeight = dp(46)
+            setPadding(dp(12), dp(9), dp(12), dp(9))
+            background = android.graphics.drawable.RippleDrawable(
+                ColorStateList.valueOf(rowRipple),
+                contentShape,
+                mask
+            )
+            contentDescription = item.title
+        }
+
+        val tvIcon = TextView(this).apply {
+            text = item.iconEmoji
+            textSize = 15.5f
+            setPadding(0, 0, dp(10), 0)
+        }
+        val tvLabel = TextView(this).apply {
+            text = item.title
+            setTextColor(if (item.isDanger) errorColor else primaryText)
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+
+        row.addView(tvIcon)
+        row.addView(tvLabel)
+        row.setOnClickListener {
+            popup.dismiss()
+            item.onClick()
+        }
+        card.addView(row)
+    }
+
+    card.alpha = 0f
+    card.scaleX = 0.94f
+    card.scaleY = 0.94f
+    popup.showAsDropDown(anchor, -dp(6), dp(4), android.view.Gravity.END)
+    card.animate()
+        .alpha(1f)
+        .scaleX(1f)
+        .scaleY(1f)
+        .setDuration(140L)
+        .setInterpolator(DecelerateInterpolator())
+        .start()
 }

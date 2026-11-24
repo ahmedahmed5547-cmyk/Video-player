@@ -909,4 +909,41 @@ class PurePlayerUnitTests {
             tmpRoot.deleteRecursively()
         }
     }
+
+    @Test
+    fun v9024_vaultAutoLockPoliciesAndEdgeCases() {
+        // 1. Immediate mode: locks on tab leave or app leave, NEVER during config change, biometric, or active Vault playback
+        assertTrue(HiddenMediaAndPlaylistHelper.shouldAutoLockVault(
+            mode = PlaybackStore.VAULT_AUTOLOCK_IMMEDIATE, leftVaultTimestampMs = 1000L, nowMs = 1000L,
+            delaySeconds = 60, isVaultMediaPlaying = false, isLeavingApp = false, isLeavingVaultSection = true, isConfigChangeOrBiometric = false
+        ))
+        assertFalse(HiddenMediaAndPlaylistHelper.shouldAutoLockVault(
+            mode = PlaybackStore.VAULT_AUTOLOCK_IMMEDIATE, leftVaultTimestampMs = 1000L, nowMs = 1000L,
+            delaySeconds = 60, isVaultMediaPlaying = true, isLeavingApp = true, isLeavingVaultSection = true, isConfigChangeOrBiometric = false
+        ))
+        assertFalse(HiddenMediaAndPlaylistHelper.shouldAutoLockVault(
+            mode = PlaybackStore.VAULT_AUTOLOCK_IMMEDIATE, leftVaultTimestampMs = 1000L, nowMs = 1000L,
+            delaySeconds = 60, isVaultMediaPlaying = false, isLeavingApp = true, isLeavingVaultSection = false, isConfigChangeOrBiometric = true
+        ))
+
+        // 2. On App Leave mode: does NOT lock when switching tabs inside app, locks on app leave
+        assertFalse(HiddenMediaAndPlaylistHelper.shouldAutoLockVault(
+            mode = PlaybackStore.VAULT_AUTOLOCK_ON_APP_LEAVE, leftVaultTimestampMs = 1000L, nowMs = 1000L,
+            delaySeconds = 60, isVaultMediaPlaying = false, isLeavingApp = false, isLeavingVaultSection = true, isConfigChangeOrBiometric = false
+        ))
+        assertTrue(HiddenMediaAndPlaylistHelper.shouldAutoLockVault(
+            mode = PlaybackStore.VAULT_AUTOLOCK_ON_APP_LEAVE, leftVaultTimestampMs = 1000L, nowMs = 1000L,
+            delaySeconds = 60, isVaultMediaPlaying = false, isLeavingApp = true, isLeavingVaultSection = false, isConfigChangeOrBiometric = false
+        ))
+
+        // 3. After Delay mode: stays unlocked before expiry, locks at/after expiry
+        assertFalse(HiddenMediaAndPlaylistHelper.shouldAutoLockVault(
+            mode = PlaybackStore.VAULT_AUTOLOCK_AFTER_DELAY, leftVaultTimestampMs = 10_000L, nowMs = 39_999L,
+            delaySeconds = 30, isVaultMediaPlaying = false, isLeavingApp = true, isLeavingVaultSection = true, isConfigChangeOrBiometric = false
+        ))
+        assertTrue(HiddenMediaAndPlaylistHelper.shouldAutoLockVault(
+            mode = PlaybackStore.VAULT_AUTOLOCK_AFTER_DELAY, leftVaultTimestampMs = 10_000L, nowMs = 40_000L,
+            delaySeconds = 30, isVaultMediaPlaying = false, isLeavingApp = false, isLeavingVaultSection = false, isConfigChangeOrBiometric = false
+        ))
+    }
 }

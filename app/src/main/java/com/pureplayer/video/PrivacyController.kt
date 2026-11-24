@@ -117,7 +117,8 @@ internal fun MainActivity.showFolderLockMenu(folder: VideoFolder) {
             onClick = {
                 if (!PlaybackStore.hasPrivacyPin(this)) {
                     showFirstTimeSetupPinDialog {
-                        isVaultSessionUnlocked = true
+                        isBiometricPromptInFlight = false
+                isVaultSessionUnlocked = true
                         toggleSingleFolderLock(folder.name)
                     }
                 } else if (isInVaultTab && isVaultSessionUnlocked) {
@@ -721,6 +722,13 @@ internal fun MainActivity.showPrivacyDashboardDialog() {
             onClick = { pushSettingsBackStack { showPrivacyDashboardDialog() }; showLockedFoldersMultiPickerDialog() }
         ),
         PremiumMenuItem(
+            iconEmoji = "⏱️",
+            title = getString(R.string.privacy_autolock_title),
+            subtitle = getVaultAutoLockSummaryLabel(),
+            isAccentHighlighted = true,
+            onClick = { pushSettingsBackStack { showPrivacyDashboardDialog() }; showVaultAutoLockDialog() }
+        ),
+        PremiumMenuItem(
             iconEmoji = "👆",
             title = getString(R.string.privacy_toggle_biometric_option, bioStatus),
             subtitle = getString(R.string.privacy_biometric_desc),
@@ -1071,4 +1079,186 @@ internal fun MainActivity.showAllowedFoldersMultiPickerDialog() {
             }
         }
     )
+}
+
+
+internal fun MainActivity.formatVaultDelayLabel(seconds: Int): String {
+    return when {
+        seconds < 60 -> getString(R.string.vault_autolock_sec_fmt, seconds)
+        seconds % 60 == 0 -> getString(R.string.vault_autolock_min_fmt, seconds / 60)
+        else -> getString(R.string.vault_autolock_sec_fmt, seconds)
+    }
+}
+
+internal fun MainActivity.getVaultAutoLockSummaryLabel(): String {
+    return when (PlaybackStore.getVaultAutoLockMode(this)) {
+        PlaybackStore.VAULT_AUTOLOCK_ON_APP_LEAVE -> getString(R.string.vault_autolock_on_app_leave)
+        PlaybackStore.VAULT_AUTOLOCK_AFTER_DELAY -> getString(
+            R.string.vault_autolock_after_delay_fmt,
+            formatVaultDelayLabel(PlaybackStore.getVaultAutoLockDelaySeconds(this))
+        )
+        else -> getString(R.string.vault_autolock_immediate)
+    }
+}
+
+internal fun MainActivity.showVaultAutoLockDialog() {
+    val currentMode = PlaybackStore.getVaultAutoLockMode(this)
+    val delayStr = formatVaultDelayLabel(PlaybackStore.getVaultAutoLockDelaySeconds(this))
+
+    val items = listOf(
+        PremiumMenuItem(
+            iconEmoji = if (currentMode == PlaybackStore.VAULT_AUTOLOCK_IMMEDIATE) "✅" else "🔒",
+            title = getString(R.string.vault_autolock_immediate),
+            subtitle = getString(R.string.vault_autolock_immediate_sub),
+            isAccentHighlighted = (currentMode == PlaybackStore.VAULT_AUTOLOCK_IMMEDIATE),
+            onClick = {
+                PlaybackStore.setVaultAutoLockMode(this, PlaybackStore.VAULT_AUTOLOCK_IMMEDIATE)
+                popSettingsBackStack()
+            }
+        ),
+        PremiumMenuItem(
+            iconEmoji = if (currentMode == PlaybackStore.VAULT_AUTOLOCK_ON_APP_LEAVE) "✅" else "📱",
+            title = getString(R.string.vault_autolock_on_app_leave),
+            subtitle = getString(R.string.vault_autolock_on_app_leave_sub),
+            isAccentHighlighted = (currentMode == PlaybackStore.VAULT_AUTOLOCK_ON_APP_LEAVE),
+            onClick = {
+                PlaybackStore.setVaultAutoLockMode(this, PlaybackStore.VAULT_AUTOLOCK_ON_APP_LEAVE)
+                popSettingsBackStack()
+            }
+        ),
+        PremiumMenuItem(
+            iconEmoji = if (currentMode == PlaybackStore.VAULT_AUTOLOCK_AFTER_DELAY) "✅" else "⏱️",
+            title = getString(R.string.vault_autolock_after_delay),
+            subtitle = getString(R.string.vault_autolock_after_delay_fmt, delayStr),
+            isAccentHighlighted = (currentMode == PlaybackStore.VAULT_AUTOLOCK_AFTER_DELAY),
+            onClick = {
+                pushSettingsBackStack { showVaultAutoLockDialog() }
+                showVaultAutoLockDelayPickerDialog()
+            }
+        )
+    )
+
+    showPremiumMenuDialog(
+        headerIcon = "⏱️",
+        title = getString(R.string.privacy_autolock_title),
+        subtitle = getVaultAutoLockSummaryLabel(),
+        items = items,
+        showHeaderVersionBadge = false
+    )
+}
+
+internal fun MainActivity.showVaultAutoLockDelayPickerDialog() {
+    val currentSec = PlaybackStore.getVaultAutoLockDelaySeconds(this)
+    val presets = listOf(30, 60, 300, 900, 1800)
+    val items = presets.map { sec ->
+        PremiumMenuItem(
+            iconEmoji = if (currentSec == sec) "✅" else "⏱️",
+            title = formatVaultDelayLabel(sec),
+            subtitle = null,
+            isAccentHighlighted = (currentSec == sec),
+            onClick = {
+                PlaybackStore.setVaultAutoLockDelaySeconds(this, sec)
+                PlaybackStore.setVaultAutoLockMode(this, PlaybackStore.VAULT_AUTOLOCK_AFTER_DELAY)
+                popSettingsBackStack()
+            }
+        )
+    } + listOf(
+        PremiumMenuItem(
+            iconEmoji = "✏️",
+            title = getString(R.string.vault_autolock_custom_title),
+            subtitle = getString(R.string.vault_autolock_custom_sub),
+            onClick = { showVaultCustomDelayInputDialog() }
+        )
+    )
+
+    showPremiumMenuDialog(
+        headerIcon = "⏱️",
+        title = getString(R.string.vault_autolock_after_delay),
+        subtitle = formatVaultDelayLabel(currentSec),
+        items = items,
+        showHeaderVersionBadge = false
+    )
+}
+
+internal fun MainActivity.showVaultCustomDelayInputDialog() {
+    val accent = PlaybackStore.getAccentColor(this)
+    val surface = PlaybackStore.getSurfaceColor(this)
+    val bg = PlaybackStore.getBackgroundColor(this)
+    val primaryText = PlaybackStore.getPrimaryTextColor(this)
+    val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+
+    val container = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(22), dp(20), dp(22), dp(18))
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(24).toFloat()
+            setColor(surface)
+            setStroke(dp(1), Color.argb(110, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+    }
+    val tvTitle = TextView(this).apply {
+        text = "⏱️  ${getString(R.string.vault_autolock_custom_title)}"
+        setTextColor(primaryText)
+        textSize = 17f
+        setTypeface(typeface, Typeface.BOLD)
+        setPadding(0, 0, 0, dp(10))
+    }
+    val input = EditText(this).apply {
+        inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        hint = getString(R.string.vault_autolock_custom_hint)
+        setText((PlaybackStore.getVaultAutoLockDelaySeconds(this@showVaultCustomDelayInputDialog) / 60).coerceAtLeast(1).toString())
+        setTextColor(primaryText)
+        setHintTextColor(secondaryText)
+        setPadding(dp(14), dp(12), dp(14), dp(12))
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(14).toFloat()
+            setColor(bg)
+            setStroke(dp(1), Color.argb(115, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+    }
+    val btnRow = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.END
+        setPadding(0, dp(14), 0, 0)
+    }
+    val dlg = AlertDialog.Builder(this).setView(container).create()
+    dlg.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+    val btnCancel = TextView(this).apply {
+        text = getString(R.string.cancel)
+        setTextColor(secondaryText)
+        textSize = 14f
+        setPadding(dp(14), dp(10), dp(14), dp(10))
+        setOnClickListener { dlg.dismiss() }
+    }
+    val btnSave = TextView(this).apply {
+        text = getString(R.string.ok)
+        setTextColor(Color.parseColor("#090D16"))
+        textSize = 14f
+        setTypeface(typeface, Typeface.BOLD)
+        setPadding(dp(20), dp(10), dp(20), dp(10))
+        background = GradientDrawable().apply {
+            cornerRadius = dp(12).toFloat()
+            setColor(accent)
+        }
+        setOnClickListener {
+            val mins = input.text.toString().trim().toIntOrNull()
+            if (mins != null && mins in 1..1440) {
+                PlaybackStore.setVaultAutoLockDelaySeconds(this@showVaultCustomDelayInputDialog, mins * 60)
+                PlaybackStore.setVaultAutoLockMode(this@showVaultCustomDelayInputDialog, PlaybackStore.VAULT_AUTOLOCK_AFTER_DELAY)
+                dlg.dismiss()
+                popSettingsBackStack()
+            } else {
+                Toast.makeText(this@showVaultCustomDelayInputDialog, getString(R.string.vault_autolock_custom_invalid), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    btnRow.addView(btnCancel)
+    btnRow.addView(btnSave)
+    container.addView(tvTitle)
+    container.addView(input)
+    container.addView(btnRow)
+    dlg.show()
 }

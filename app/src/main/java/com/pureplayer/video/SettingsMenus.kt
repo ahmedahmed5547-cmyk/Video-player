@@ -759,6 +759,15 @@ internal fun MainActivity.showSettingsSubtitlesPlaybackPage() {
             }
         ),
         PremiumMenuItem(
+            iconEmoji = "🗑️",
+            title = getString(R.string.setting_confirm_sub_delete_title),
+            subtitle = getString(R.string.setting_confirm_sub_delete_sub),
+            toggleChecked = PlaybackStore.isConfirmBeforeDeletingSubtitles(this),
+            onToggleChanged = { checked ->
+                PlaybackStore.setConfirmBeforeDeletingSubtitles(this, checked)
+            }
+        ),
+        PremiumMenuItem(
             iconEmoji = "🎯",
             title = getString(R.string.setting_reset_sub_position),
             subtitle = getString(R.string.sub_position_reset_toast),
@@ -1126,10 +1135,18 @@ internal fun MainActivity.showChangelogPage() {
         ChangelogReleaseEntry(
             version = verName,
             date = "2026-11-24",
-            iconEmoji = "📤",
-            title = getString(R.string.changelog_v90_23_title, verName),
-            description = getString(R.string.changelog_v90_23_desc),
+            iconEmoji = "⚡",
+            title = getString(R.string.changelog_v90_24_title, verName),
+            description = getString(R.string.changelog_v90_24_desc),
             isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.23",
+            date = "2026-11-24",
+            iconEmoji = "📤",
+            title = getString(R.string.changelog_v90_23_title, "90.23"),
+            description = getString(R.string.changelog_v90_23_desc),
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.22",

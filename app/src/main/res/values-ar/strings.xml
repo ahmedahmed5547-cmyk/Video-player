@@ -319,7 +319,7 @@
     <string name="settings_hub_subtitles_playback_title">الترجمة وإعدادات التشغيل</string>
     <string name="settings_hub_updates_title">التحديثات والمزامنة (GitHub)</string>
     <string name="settings_hub_about_title">حول التطبيق (About)</string>
-    <string name="settings_hub_about_sub">المطور: Ahmed M Moumen • الإصدار سجل التغييرات</string>
+    <string name="settings_hub_about_sub">سجل التغييرات • سياسة الخصوصية • معلومات التطبيق</string>
     <string name="about_developer_label">مطور التطبيق (Developer)</string>
     <string name="about_version_label">رقم الإصدار (Version)</string>
     <string name="about_changelog_title">سجل التحديثات والتغييرات (Changelog)</string>
@@ -739,4 +739,30 @@
     <string name="changelog_v90_23_desc">• نقل مفتاح «المجلدات المخفية» إلى القائمة المنسدلة العلوية (الخيار الرابع) وتنسيق القائمة بالكامل لتتوافق مع سمة التطبيق.
 • إضافة «مشاركة» و«إرسال (قريب)» للفيديوهات والمجلدات المحددة بدون نسخ الفيديوهات الكبيرة مع تأكيد الكميات الكبيرة وخيار ZIP في الخلفية.
 • إضافة زر حذف ✕ بحجم 48dp للترجمات المحمّلة داخل المشغل مع تأكيد وتنظيف فوري للكاش.</string>
+    <!-- v90.24 القائمة المنسدلة للتحديد، سلاسة التنقل بين الفيديوهات، التراجع عن حذف الترجمة، والقفل التلقائي للخزنة -->
+    <string name="sub_delete_dont_ask_again">لا تسألني مرة أخرى</string>
+    <string name="sub_removed_snackbar">تم حذف الترجمة</string>
+    <string name="action_undo">تراجع</string>
+    <string name="sub_restored_toast">تمت استعادة الترجمة</string>
+    <string name="setting_confirm_sub_delete_title">التأكيد قبل حذف الترجمات</string>
+    <string name="setting_confirm_sub_delete_sub">طلب تأكيد عند الضغط على ✕ لحذف ترجمة محمّلة</string>
+    <string name="privacy_autolock_title">القفل التلقائي للخزنة</string>
+    <string name="vault_autolock_immediate">فوراً عند مغادرة قسم الخزنة</string>
+    <string name="vault_autolock_immediate_sub">يُقفل بمجرد الانتقال لتبويب آخر أو مغادرة الخزنة (الافتراضي)</string>
+    <string name="vault_autolock_on_app_leave">عند مغادرة التطبيق</string>
+    <string name="vault_autolock_on_app_leave_sub">يُقفل عند تصغير التطبيق أو إطفاء الشاشة</string>
+    <string name="vault_autolock_after_delay">بعد وقت أختاره</string>
+    <string name="vault_autolock_after_delay_fmt">بعد %1$s</string>
+    <string name="vault_autolock_sec_fmt">%1$d ثانية</string>
+    <string name="vault_autolock_min_fmt">%1$d دقيقة</string>
+    <string name="vault_autolock_custom_title">مدة مخصّصة</string>
+    <string name="vault_autolock_custom_sub">أدخل عدد الدقائق (1 إلى 1440)</string>
+    <string name="vault_autolock_custom_hint">عدد الدقائق (مثلاً 10)</string>
+    <string name="vault_autolock_custom_invalid">يرجى إدخال رقم بين 1 و1440 دقيقة</string>
+    <string name="changelog_v90_24_title">الإصدار %1$s — قائمة التحديد المنسدلة، سلاسة المشغل، والقفل التلقائي للخزنة</string>
+    <string name="changelog_v90_24_desc">• تحويل قائمة ⋮ في وضع التحديد إلى قائمة منسدلة مدمجة وسريعة أسفل الزر مباشرة ومتوافقة مع سمة التطبيق.
+• معالجة التجمّد العرضي عند التنقل بين الفيديوهات بنقل إيقاف/تحرير LibVLC وقراءة ملفات الترجمة خارج الخيط الرئيسي مع تفعيل StrictMode في وضع التطوير.
+• إضافة خيار «لا تسألني مرة أخرى» وشريط التراجع (Undo) ومفتاح الإرجاع في الإعدادات لحذف الترجمات المحمّلة.
+• إضافة إعدادات القفل التلقائي للخزنة (فوراً عند المغادرة، عند مغادرة التطبيق، أو بعد مدة مخصّصة) مع حمايتها أثناء التشغيل الفعّال.
+• إزالة اسم المطور من شاشة الإعدادات الرئيسية وإبقائه داخل «حول التطبيق» فقط.</string>
 </resources>

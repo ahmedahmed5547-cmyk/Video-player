@@ -111,7 +111,7 @@ import javax.crypto.SecretKey
  */
 
 class MainActivity : AppCompatActivity() {
-    private var activeTopDropdownPopup: PopupWindow? = null
+    internal var activeTopDropdownPopup: PopupWindow? = null
 
     internal lateinit var binding: ActivityMainBinding
     internal lateinit var adapter: MediaAdapter
@@ -155,6 +155,56 @@ class MainActivity : AppCompatActivity() {
     // 0 = Video Folders, 1 = Private Vault, 2 = IPTV
     internal var currentMainTab = 0
     internal var isInVaultTab = false
+    internal var vaultLeftTimestampMs: Long = 0L
+    internal var isBiometricPromptInFlight: Boolean = false
+    internal var isLaunchingVaultPlayer: Boolean = false
+
+    internal fun isVaultMediaCurrentlyPlaying(): Boolean {
+        if (PlayerActivity.isVaultVideoActivelyPlaying || isLaunchingVaultPlayer) return true
+        return false
+    }
+
+    internal fun lockVaultAndClearInMemoryState(returnToVideosTabIfVisible: Boolean) {
+        isVaultSessionUnlocked = false
+        vaultLeftTimestampMs = 0L
+        VideoThumbnailLoader.cancelAllPending()
+        if (isInVaultTab) {
+            selectionViewModel.exitSelection()
+            updateVaultScreenSecurityFlag(false)
+            if (returnToVideosTabIfVisible) {
+                currentMainTab = 0
+                isInVaultTab = false
+                isInIptvTab = false
+                isShowingFolderVideos = false
+                currentOpenedFolder = null
+                binding.audioTabContainer.visibility = View.GONE
+                binding.iptvRecyclerView.visibility = View.GONE
+                binding.swipeRefresh.visibility = View.VISIBLE
+                updateBottomTabsVisualState()
+                applyFolderVisibilityAndRefreshUI()
+            }
+        }
+    }
+
+    internal fun onLeavingVaultSection() {
+        if (!isVaultSessionUnlocked) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        vaultLeftTimestampMs = now
+        val mode = PlaybackStore.getVaultAutoLockMode(this)
+        if (HiddenMediaAndPlaylistHelper.shouldAutoLockVault(
+                mode = mode,
+                leftVaultTimestampMs = vaultLeftTimestampMs,
+                nowMs = now,
+                delaySeconds = PlaybackStore.getVaultAutoLockDelaySeconds(this),
+                isVaultMediaPlaying = isVaultMediaCurrentlyPlaying(),
+                isLeavingApp = false,
+                isLeavingVaultSection = true,
+                isConfigChangeOrBiometric = isChangingConfigurations || isBiometricPromptInFlight
+            )
+        ) {
+            lockVaultAndClearInMemoryState(returnToVideosTabIfVisible = false)
+        }
+    }
     internal var isInIptvTab = false
     private var isAudioTabHighlighted = false
     private var lastSysBarLeft = 0
@@ -363,6 +413,27 @@ class MainActivity : AppCompatActivity() {
         outState.putBoolean("STATE_SETTINGS_OPEN", activeFullScreenDialog?.isShowing == true)
     }
 
+    override fun onStop() {
+        super.onStop()
+        if (isVaultSessionUnlocked) {
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (vaultLeftTimestampMs == 0L) vaultLeftTimestampMs = now
+            val shouldLock = HiddenMediaAndPlaylistHelper.shouldAutoLockVault(
+                mode = PlaybackStore.getVaultAutoLockMode(this),
+                leftVaultTimestampMs = vaultLeftTimestampMs,
+                nowMs = now,
+                delaySeconds = PlaybackStore.getVaultAutoLockDelaySeconds(this),
+                isVaultMediaPlaying = isVaultMediaCurrentlyPlaying(),
+                isLeavingApp = true,
+                isLeavingVaultSection = false,
+                isConfigChangeOrBiometric = isChangingConfigurations || isBiometricPromptInFlight
+            )
+            if (shouldLock) {
+                lockVaultAndClearInMemoryState(returnToVideosTabIfVisible = true)
+            }
+        }
+    }
+
     override fun onDestroy() {
         activeTopDropdownPopup?.dismiss()
         activeFullScreenDialog?.setOnCancelListener(null)
@@ -414,6 +485,25 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        isLaunchingVaultPlayer = false
+        if (isVaultSessionUnlocked && vaultLeftTimestampMs > 0L) {
+            val now = android.os.SystemClock.elapsedRealtime()
+            val shouldLock = HiddenMediaAndPlaylistHelper.shouldAutoLockVault(
+                mode = PlaybackStore.getVaultAutoLockMode(this),
+                leftVaultTimestampMs = vaultLeftTimestampMs,
+                nowMs = now,
+                delaySeconds = PlaybackStore.getVaultAutoLockDelaySeconds(this),
+                isVaultMediaPlaying = isVaultMediaCurrentlyPlaying(),
+                isLeavingApp = false,
+                isLeavingVaultSection = false,
+                isConfigChangeOrBiometric = isChangingConfigurations || isBiometricPromptInFlight
+            )
+            if (shouldLock) {
+                lockVaultAndClearInMemoryState(returnToVideosTabIfVisible = true)
+            } else if (isInVaultTab) {
+                vaultLeftTimestampMs = 0L
+            }
+        }
         restoreSystemBarsAndInsets()
         applyUserTheme()
         if (currentMainTab == 2) {
@@ -1568,6 +1658,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 isAudioTabHighlighted = false
                 selectionViewModel.exitSelection()
+                if (isInVaultTab) onLeavingVaultSection()
                 updateVaultScreenSecurityFlag(false)
                 binding.audioTabContainer.visibility = View.GONE
                 binding.iptvRecyclerView.visibility = View.GONE
@@ -1676,6 +1767,7 @@ class MainActivity : AppCompatActivity() {
                 VideoThumbnailLoader.cancelAllPending()
                 isAudioTabHighlighted = false
                 selectionViewModel.exitSelection()
+                if (isInVaultTab) onLeavingVaultSection()
                 updateVaultScreenSecurityFlag(false)
                 binding.audioTabContainer.visibility = View.GONE
                 binding.swipeRefresh.visibility = View.GONE
@@ -2719,6 +2811,8 @@ class MainActivity : AppCompatActivity() {
             putExtra("VIDEO_TITLE", title)
             putExtra("START_POSITION_MS", startPositionMs)
             putExtra(PlayerActivity.EXTRA_IS_STREAM, isStream)
+            putExtra(PlayerActivity.EXTRA_IS_VAULT_VIDEO, isInVaultTab)
+            if (isInVaultTab) isLaunchingVaultPlayer = true
             if (!isStream && playlistSource.size > 1 && playlistIndex >= 0) {
                 putStringArrayListExtra(
                     PlayerActivity.EXTRA_PLAYLIST_URIS,

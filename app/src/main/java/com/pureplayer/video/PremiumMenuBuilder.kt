@@ -683,7 +683,7 @@ internal fun MainActivity.showPremiumMenuDialog(
 
     // Refined Luxury Footer
     val tvFooter = TextView(this).apply {
-        text = "V Player • Crafted by Ahmed M Moumen"
+        text = "V Player"
         gravity = Gravity.CENTER
         setTextColor(secondaryText)
         textSize = 11.5f

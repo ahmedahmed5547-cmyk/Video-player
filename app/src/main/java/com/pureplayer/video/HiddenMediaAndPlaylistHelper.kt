@@ -195,4 +195,31 @@ object HiddenMediaAndPlaylistHelper {
     ): Boolean {
         return lastSwitchMs <= 0L || (nowMs - lastSwitchMs) >= debounceMs
     }
+
+
+    // =========================================================================
+    // Vault Auto-Lock Policy Evaluation (Pure Kotlin, Unit-Testable)
+    // =========================================================================
+
+    fun shouldAutoLockVault(
+        mode: Int,
+        leftVaultTimestampMs: Long,
+        nowMs: Long,
+        delaySeconds: Int,
+        isVaultMediaPlaying: Boolean,
+        isLeavingApp: Boolean,
+        isLeavingVaultSection: Boolean,
+        isConfigChangeOrBiometric: Boolean
+    ): Boolean {
+        if (isConfigChangeOrBiometric || isVaultMediaPlaying) return false
+        return when (mode) {
+            PlaybackStore.VAULT_AUTOLOCK_IMMEDIATE -> isLeavingVaultSection || isLeavingApp
+            PlaybackStore.VAULT_AUTOLOCK_ON_APP_LEAVE -> isLeavingApp
+            PlaybackStore.VAULT_AUTOLOCK_AFTER_DELAY -> {
+                if (leftVaultTimestampMs <= 0L) false
+                else (nowMs - leftVaultTimestampMs) >= delaySeconds.coerceAtLeast(1) * 1000L
+            }
+            else -> isLeavingVaultSection || isLeavingApp
+        }
+    }
 }

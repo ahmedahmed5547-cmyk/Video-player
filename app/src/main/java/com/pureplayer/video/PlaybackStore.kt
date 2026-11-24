@@ -128,6 +128,17 @@ object PlaybackStore {
     private const val KEY_SUB_BILINGUAL = "vexo_sub_bilingual_v1"
     private const val KEY_APP_ICON_STYLE = "vexo_app_icon_style_v1"
     private const val KEY_SHOW_HIDDEN_FOLDERS = "vexo_show_hidden_folders_v1"
+    private const val KEY_SUB_DELETE_CONFIRM = "vexo_sub_delete_confirm_v1"
+    private const val KEY_VAULT_AUTOLOCK_MODE = "vexo_vault_autolock_mode_v1"
+    private const val KEY_VAULT_AUTOLOCK_DELAY_SEC = "vexo_vault_autolock_delay_sec_v1"
+
+    // Vault Auto-Lock modes:
+    // 0 = Immediately when leaving Vault section (safest default)
+    // 1 = When leaving the app (background / screen off)
+    // 2 = After chosen timeout
+    const val VAULT_AUTOLOCK_IMMEDIATE = 0
+    const val VAULT_AUTOLOCK_ON_APP_LEAVE = 1
+    const val VAULT_AUTOLOCK_AFTER_DELAY = 2
     private const val KEY_LAST_ACTIVE_FOLDER = "last_active_folder_name_v1"
     private const val KEY_AUDIO_PRESET_MODE = "audio_eq_preset_mode_v1"
     private const val KEY_AUDIO_PREAMP_DB = "audio_eq_preamp_db_v1"
@@ -843,6 +854,27 @@ object PlaybackStore {
 
     fun setShowHiddenFolders(context: Context, show: Boolean) {
         prefs(context).edit().putBoolean(KEY_SHOW_HIDDEN_FOLDERS, show).apply()
+    }
+
+    fun isConfirmBeforeDeletingSubtitles(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_SUB_DELETE_CONFIRM, true)
+
+    fun setConfirmBeforeDeletingSubtitles(context: Context, confirm: Boolean) {
+        prefs(context).edit().putBoolean(KEY_SUB_DELETE_CONFIRM, confirm).apply()
+    }
+
+    fun getVaultAutoLockMode(context: Context): Int =
+        prefs(context).getInt(KEY_VAULT_AUTOLOCK_MODE, VAULT_AUTOLOCK_IMMEDIATE).coerceIn(0, 2)
+
+    fun setVaultAutoLockMode(context: Context, mode: Int) {
+        prefs(context).edit().putInt(KEY_VAULT_AUTOLOCK_MODE, mode.coerceIn(0, 2)).apply()
+    }
+
+    fun getVaultAutoLockDelaySeconds(context: Context): Int =
+        prefs(context).getInt(KEY_VAULT_AUTOLOCK_DELAY_SEC, 60).coerceIn(10, 86400)
+
+    fun setVaultAutoLockDelaySeconds(context: Context, seconds: Int) {
+        prefs(context).edit().putInt(KEY_VAULT_AUTOLOCK_DELAY_SEC, seconds.coerceIn(10, 86400)).apply()
     }
 
     fun isFirstLibraryScanDone(context: Context): Boolean =

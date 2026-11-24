@@ -1,12 +1,30 @@
 package com.pureplayer.video
 
 import android.app.Application
+import android.os.StrictMode
 import android.util.Log
 import com.google.android.material.color.DynamicColors
 
 class PureVideoApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        if (BuildConfig.DEBUG) {
+            StrictMode.setThreadPolicy(
+                StrictMode.ThreadPolicy.Builder()
+                    .detectDiskReads()
+                    .detectDiskWrites()
+                    .detectNetwork()
+                    .penaltyLog()
+                    .build()
+            )
+            StrictMode.setVmPolicy(
+                StrictMode.VmPolicy.Builder()
+                    .detectLeakedClosableObjects()
+                    .detectActivityLeaks()
+                    .penaltyLog()
+                    .build()
+            )
+        }
         try {
             PlaybackStore.migrateLegacyAppearanceIfNeeded(this)
             if (PlaybackStore.isMaterialYouSelected(this)) {

@@ -1,3 +1,10 @@
+## v90.24 (2026-11-24)
+- **Selection Mode ⋮ Dropdown**: Replaced the full-screen selection overflow dialog with a compact, theme-aware `PopupWindow` dropdown anchored directly under the ⋮ button (RTL-safe, error-colored Delete, smooth animation).
+- **Video Navigation Performance & Stability**: Moved LibVLC `stop()`/`release()`/`libVLC.release()` and cached subtitle disk parsing off the Main Thread with monotonic `videoSwitchGeneration` cancellation + enabled log-only `StrictMode` in debug builds.
+- **Subtitle Delete Confirmation & Undo**: Added "Don't ask me again" checkbox to the downloaded-subtitle delete dialog, immediate deletion with an **Undo** Snackbar when disabled, and a "Confirm before deleting subtitles" switch in Subtitle Settings.
+- **Vault Auto-Lock**: Added Auto-Lock options in Vault/Privacy settings (**Immediately when leaving Vault** [default], **When leaving the app**, or **After a chosen time**: 30s / 1m / 5m / 15m / 30m / custom) with protection during active Vault playback, rotation, and biometric authentication.
+- **Settings Cleanup**: Removed developer credit from the main Settings footer/hub (kept inside the About screen only).
+
 ## v90.23 (2026-11-24)
 - **Top Menu — Theme-Aware & Hidden Folders**: Converted the top dropdown menu into a fully themed `PopupWindow` (surface, text, dividers, ripple, rounded borders, and `SwitchCompat`) and moved **Hidden folders** there as the 4th option while removing it from **Sort and Layout**.
 - **Selection Mode — Share & Send (Nearby)**: Added **Share** (`ACTION_SEND` / `ACTION_SEND_MULTIPLE`) and **Send (Nearby)** (detecting installed Quick Share / Nearby Share and Bluetooth targets) for selected videos and folders using direct content/FileProvider URIs without copying large videos, with folder/batch size confirmation and optional background ZIP creation.

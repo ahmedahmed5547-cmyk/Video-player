@@ -122,6 +122,9 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     private var currentPlaylistIndex: Int = -1
     private var isStreamOrIptv: Boolean = false
     private var lastVideoSwitchTimeMs: Long = 0L
+    private val videoSwitchGeneration = java.util.concurrent.atomic.AtomicLong(0L)
+    private var activeVideoLoadJob: kotlinx.coroutines.Job? = null
+    private var isCurrentVideoFromVault: Boolean = false
 
     companion object {
         const val ACTION_PIP_AUDIO_ONLY = "com.pureplayer.video.ACTION_PIP_AUDIO_ONLY"
@@ -132,6 +135,9 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         const val EXTRA_PLAYLIST_TITLES = "EXTRA_PLAYLIST_TITLES"
         const val EXTRA_PLAYLIST_INDEX = "EXTRA_PLAYLIST_INDEX"
         const val EXTRA_IS_STREAM = "EXTRA_IS_STREAM"
+        const val EXTRA_IS_VAULT_VIDEO = "EXTRA_IS_VAULT_VIDEO"
+        @Volatile
+        var isVaultVideoActivelyPlaying: Boolean = false
     }
 
     private var batteryReceiverRegistered = false
@@ -381,13 +387,22 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             val cachedSubPath = PlaybackStore.getVideoSubtitleCachePath(this, uri)
             val savedSubMeta = PlaybackStore.getVideoSubtitleUri(this, uri)
             if (!cachedSubPath.isNullOrEmpty()) {
-                val file = File(cachedSubPath)
-                if (file.exists()) {
-                    val cues = SubtitleParser.parseFromFile(file)
-                    if (cues.isNotEmpty()) {
-                        externalSubtitleCues = cues
-                        currentSubtitleSourceFile = file
-                        currentSubtitleDisplayLabel = savedSubMeta?.second.orEmpty()
+                val initGen = videoSwitchGeneration.get()
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val file = File(cachedSubPath)
+                    if (file.exists()) {
+                        val cues = SubtitleParser.parseFromFile(file)
+                        if (cues.isNotEmpty() && initGen == videoSwitchGeneration.get()) {
+                            withContext(Dispatchers.Main) {
+                                if (initGen == videoSwitchGeneration.get()) {
+                                    externalSubtitleCues = cues
+                                    originalSubtitleCues = cues
+                                    currentSubtitleSourceFile = file
+                                    currentSubtitleDisplayLabel = savedSubMeta?.second.orEmpty()
+                                    updateDraggableSubtitleText(if (::mediaPlayer.isInitialized) mediaPlayer.time else 0L)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1545,6 +1560,8 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         val incomingTitles = incomingIntent.getStringArrayListExtra(EXTRA_PLAYLIST_TITLES)
         val incomingIdx = incomingIntent.getIntExtra(EXTRA_PLAYLIST_INDEX, -1)
         val uriScheme = resolvedUri?.scheme?.lowercase(Locale.ROOT) ?: ""
+        isCurrentVideoFromVault = incomingIntent.getBooleanExtra(EXTRA_IS_VAULT_VIDEO, false)
+        if (isCurrentVideoFromVault) isVaultVideoActivelyPlaying = true
         isStreamOrIptv = incomingIntent.getBooleanExtra(EXTRA_IS_STREAM, false) ||
             uriScheme == "http" || uriScheme == "https" || uriScheme == "rtsp" || uriScheme == "rtmp" || uriScheme == "mms"
         if (!isStreamOrIptv && !incomingUris.isNullOrEmpty() && incomingIdx in incomingUris.indices) {
@@ -2157,38 +2174,53 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         pendingStartPositionMs = if (savedPos > 3_000L) savedPos else 0L
         hasAppliedInitialSeek = false
 
-        // Restore per-video subtitle & sync offset (or clear old cues cleanly)
+        // Clear old subtitles immediately on UI thread & cancel any previous in-flight video switch
+        val switchGen = videoSwitchGeneration.incrementAndGet()
+        activeVideoLoadJob?.cancel()
         subtitleSyncOffsetMs = PlaybackStore.getVideoSubtitleSyncMs(this, nextUri)
         val cachedSubPath = PlaybackStore.getVideoSubtitleCachePath(this, nextUri)
         val savedSubMeta = PlaybackStore.getVideoSubtitleUri(this, nextUri)
-        val loadedCues = if (!cachedSubPath.isNullOrEmpty()) {
-            val f = File(cachedSubPath)
-            if (f.exists()) SubtitleParser.parseFromFile(f) else emptyList()
-        } else emptyList()
-        externalSubtitleCues = loadedCues
-        originalSubtitleCues = loadedCues
+        externalSubtitleCues = emptyList()
+        originalSubtitleCues = emptyList()
         lastTranslatedTexts = emptyList()
-        currentSubtitleSourceFile = cachedSubPath?.let { File(it) }?.takeIf { it.exists() }
-        currentSubtitleDisplayLabel = savedSubMeta?.second.orEmpty()
+        currentSubtitleSourceFile = null
+        currentSubtitleDisplayLabel = ""
         binding.tvDraggableSubtitle.text = ""
         binding.tvDraggableSubtitle.visibility = View.GONE
 
-        // Update UI & launch smoothly on existing mediaPlayer (preserves speed, volume, brightness, aspect ratio)
         binding.tvVideoTitle.text = nextTitle
         binding.seekBar.progress = 0
         binding.tvCurrentTime.text = formatTime(pendingStartPositionMs)
         updatePrevNextButtonsState()
-
-        if (::mediaPlayer.isInitialized) {
-            runCatching { mediaPlayer.stop() }
-        }
-        startVideoPlaybackSafely(nextUri)
-        if (::mediaPlayer.isInitialized && currentSpeed != 1.0f) {
-            runCatching { mediaPlayer.rate = currentSpeed }
-        }
-        updateMediaSessionPlaybackState(isPlaying = true)
-        updateAutoPipParams(isPlaying = true)
         showToastIndicator((if (delta < 0) "⏮ " else "⏭ ") + nextTitle)
+
+        // Move blocking LibVLC stop + subtitle disk I/O off the Main Thread
+        activeVideoLoadJob = lifecycleScope.launch {
+            val loadedSubPair = withContext(Dispatchers.IO) {
+                if (::mediaPlayer.isInitialized) {
+                    runCatching { mediaPlayer.stop() }
+                }
+                if (!cachedSubPath.isNullOrEmpty()) {
+                    val f = File(cachedSubPath)
+                    if (f.exists()) Pair(f, SubtitleParser.parseFromFile(f)) else null
+                } else null
+            }
+            if (switchGen != videoSwitchGeneration.get() || isFinishing || isDestroyed) return@launch
+
+            if (loadedSubPair != null && loadedSubPair.second.isNotEmpty()) {
+                currentSubtitleSourceFile = loadedSubPair.first
+                currentSubtitleDisplayLabel = savedSubMeta?.second.orEmpty()
+                externalSubtitleCues = loadedSubPair.second
+                originalSubtitleCues = loadedSubPair.second
+            }
+
+            startVideoPlaybackSafely(nextUri)
+            if (::mediaPlayer.isInitialized && currentSpeed != 1.0f) {
+                runCatching { mediaPlayer.rate = currentSpeed }
+            }
+            updateMediaSessionPlaybackState(isPlaying = true)
+            updateAutoPipParams(isPlaying = true)
+        }
     }
 
     private fun setupControls() {
@@ -2663,7 +2695,73 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         showVerticalSliderIndicator(isVolume = false, percent = percent)
     }
 
+    private fun executeDownloadedSubtitleDelete(
+        entry: SubtitleAutoTranslator.DownloadedSubtitleEntry,
+        offerUndo: Boolean
+    ) {
+        val deletedPath = entry.file.absolutePath
+        val wasActive = (currentSubtitleSourceFile?.absolutePath == deletedPath) ||
+            (currentVideoUri?.let { PlaybackStore.getVideoSubtitleCachePath(this, it) == deletedPath } == true)
+        val backupBytes = if (offerUndo) runCatching { entry.file.readBytes() }.getOrNull() else null
+        val prevLabel = currentSubtitleDisplayLabel
+        val prevCues = externalSubtitleCues
+        val prevOrigCues = originalSubtitleCues
+        val prevTranslatedTexts = lastTranslatedTexts
+
+        SubtitleAutoTranslator.deleteDownloadedSubtitleAndRelatedCaches(filesDir, entry.file)
+        currentVideoUri?.let { vUri ->
+            PlaybackStore.clearVideoSubtitleIfMatches(this, vUri, deletedPath)
+        }
+
+        if (wasActive) {
+            cancelActiveSubtitleTranslation()
+            externalSubtitleCues = emptyList()
+            originalSubtitleCues = emptyList()
+            lastTranslatedTexts = emptyList()
+            currentSubtitleSourceFile = null
+            currentSubtitleDisplayLabel = ""
+            binding.tvDraggableSubtitle.text = ""
+            binding.tvDraggableSubtitle.visibility = View.GONE
+            if (::mediaPlayer.isInitialized) {
+                mediaPlayer.spuTrack = -1
+            }
+        }
+
+        if (offerUndo && backupBytes != null && backupBytes.isNotEmpty()) {
+            com.google.android.material.snackbar.Snackbar
+                .make(binding.playerRoot, getString(R.string.sub_removed_snackbar), com.google.android.material.snackbar.Snackbar.LENGTH_LONG)
+                .setAction(getString(R.string.action_undo)) {
+                    runCatching {
+                        entry.file.parentFile?.mkdirs()
+                        entry.file.writeBytes(backupBytes)
+                        if (wasActive && prevCues.isNotEmpty()) {
+                            currentSubtitleSourceFile = entry.file
+                            currentSubtitleDisplayLabel = prevLabel
+                            externalSubtitleCues = prevCues
+                            originalSubtitleCues = prevOrigCues
+                            lastTranslatedTexts = prevTranslatedTexts
+                            currentVideoUri?.let { vUri ->
+                                PlaybackStore.saveVideoSubtitleCachePath(this, vUri, deletedPath)
+                                PlaybackStore.saveVideoSubtitleUri(this, vUri, deletedPath, prevLabel)
+                            }
+                            updateDraggableSubtitleText(if (::mediaPlayer.isInitialized) mediaPlayer.time else 0L)
+                        }
+                        showToastIndicator(getString(R.string.sub_restored_toast))
+                    }
+                }
+                .show()
+        } else {
+            showToastIndicator(getString(R.string.sub_deleted_toast))
+        }
+        showSubtitlesDialog()
+    }
+
     private fun confirmAndDeleteDownloadedSubtitle(entry: SubtitleAutoTranslator.DownloadedSubtitleEntry) {
+        if (!PlaybackStore.isConfirmBeforeDeletingSubtitles(this)) {
+            executeDownloadedSubtitleDelete(entry, offerUndo = true)
+            return
+        }
+
         val accent = PlaybackStore.getAccentColor(this)
         val surface = PlaybackStore.getSurfaceColor(this)
         val primaryText = PlaybackStore.getPrimaryTextColor(this)
@@ -2690,7 +2788,14 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             text = getString(R.string.sub_delete_confirm_msg, entry.displayName)
             setTextColor(secondaryText)
             textSize = 14f
-            setPadding(0, 0, 0, dp(16))
+            setPadding(0, 0, 0, dp(10))
+        }
+        val cbDontAsk = android.widget.CheckBox(this).apply {
+            text = getString(R.string.sub_delete_dont_ask_again)
+            setTextColor(primaryText)
+            textSize = 13.5f
+            buttonTintList = ColorStateList.valueOf(accent)
+            setPadding(dp(4), dp(6), dp(4), dp(12))
         }
         val btnRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -2720,38 +2825,18 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                 setColor(Color.parseColor("#E11D48"))
             }
             setOnClickListener {
+                if (cbDontAsk.isChecked) {
+                    PlaybackStore.setConfirmBeforeDeletingSubtitles(this@PlayerActivity, false)
+                }
                 dlg.dismiss()
-                val deletedPath = entry.file.absolutePath
-                val wasActive = (currentSubtitleSourceFile?.absolutePath == deletedPath) ||
-                    (currentVideoUri?.let { PlaybackStore.getVideoSubtitleCachePath(this@PlayerActivity, it) == deletedPath } == true)
-
-                SubtitleAutoTranslator.deleteDownloadedSubtitleAndRelatedCaches(filesDir, entry.file)
-                currentVideoUri?.let { vUri ->
-                    PlaybackStore.clearVideoSubtitleIfMatches(this@PlayerActivity, vUri, deletedPath)
-                }
-
-                if (wasActive) {
-                    cancelActiveSubtitleTranslation()
-                    externalSubtitleCues = emptyList()
-                    originalSubtitleCues = emptyList()
-                    lastTranslatedTexts = emptyList()
-                    currentSubtitleSourceFile = null
-                    currentSubtitleDisplayLabel = ""
-                    binding.tvDraggableSubtitle.text = ""
-                    binding.tvDraggableSubtitle.visibility = View.GONE
-                    if (::mediaPlayer.isInitialized) {
-                        mediaPlayer.spuTrack = -1
-                    }
-                }
-                showToastIndicator(getString(R.string.sub_deleted_toast))
-                // Reopen subtitle dialog immediately with updated list
-                showSubtitlesDialog()
+                executeDownloadedSubtitleDelete(entry, offerUndo = cbDontAsk.isChecked)
             }
         }
         btnRow.addView(btnCancel)
         btnRow.addView(btnDelete)
         container.addView(tvTitle)
         container.addView(tvMsg)
+        container.addView(cbDontAsk)
         container.addView(btnRow)
         dlg.setOnCancelListener { showSubtitlesDialog() }
         dlg.show()
@@ -4632,10 +4717,20 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             detachVlcViewsSafely()
             viewsAttached = false
         }
-        mediaPlayer.release()
-        libVLC.release()
-        try {
-            activePfd?.close()
-        } catch (e: Exception) { Log.w("PlayerActivity", "Handled non-fatal exception: ${e.javaClass.simpleName}") }
+        activeVideoLoadJob?.cancel()
+        if (isCurrentVideoFromVault) {
+            isVaultVideoActivelyPlaying = false
+        }
+        val mpToRelease = if (::mediaPlayer.isInitialized) mediaPlayer else null
+        val vlcToRelease = if (::libVLC.isInitialized) libVLC else null
+        val pfdToClose = activePfd
+        activePfd = null
+        // Release LibVLC native resources on a background thread so returning from player never freezes UI
+        Thread({
+            runCatching { mpToRelease?.stop() }
+            runCatching { mpToRelease?.release() }
+            runCatching { vlcToRelease?.release() }
+            runCatching { pfdToClose?.close() }
+        }, "VPlayer-VlcRelease").apply { isDaemon = true }.start()
     }
 }

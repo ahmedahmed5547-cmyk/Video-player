@@ -319,7 +319,7 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="settings_hub_subtitles_playback_title">Subtitles &amp; Playback</string>
     <string name="settings_hub_updates_title">Updates &amp; GitHub Sync</string>
     <string name="settings_hub_about_title">About App</string>
-    <string name="settings_hub_about_sub">Developer: Ahmed M Moumen  • Changelog</string>
+    <string name="settings_hub_about_sub">Changelog • Privacy Policy • Info</string>
     <string name="about_developer_label">Developer</string>
     <string name="about_version_label">App Version</string>
     <string name="about_changelog_title">Changelog (What\'s New)</string>
@@ -739,4 +739,30 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="changelog_v90_23_desc">• Moved Hidden folders switch into the top ☰ dropdown menu (4th option) and styled the entire dropdown to match Light, Dark, Luxury Dark &amp; Material You themes.
 • Added Share &amp; Send (Nearby: Quick Share / Bluetooth) for selected videos and folders using direct content URIs, confirmation for large batches, and optional background ZIP.
 • Added a 48dp themed ✕ delete button on app-downloaded subtitles in the player with confirmation and instant cleanup.</string>
+    <!-- v90.24 Selection Dropdown, Non-Blocking Player, Subtitle Undo, Vault Auto-Lock -->
+    <string name="sub_delete_dont_ask_again">Don't ask me again</string>
+    <string name="sub_removed_snackbar">Subtitle removed</string>
+    <string name="action_undo">Undo</string>
+    <string name="sub_restored_toast">Subtitle restored</string>
+    <string name="setting_confirm_sub_delete_title">Confirm before deleting subtitles</string>
+    <string name="setting_confirm_sub_delete_sub">Ask for confirmation when tapping ✕ on downloaded subtitles</string>
+    <string name="privacy_autolock_title">Vault Auto-Lock</string>
+    <string name="vault_autolock_immediate">Immediately when leaving Vault</string>
+    <string name="vault_autolock_immediate_sub">Locks as soon as you switch tabs or leave Vault (Default)</string>
+    <string name="vault_autolock_on_app_leave">When leaving the app</string>
+    <string name="vault_autolock_on_app_leave_sub">Locks when app goes to background or screen turns off</string>
+    <string name="vault_autolock_after_delay">After a chosen time</string>
+    <string name="vault_autolock_after_delay_fmt">After %1$s</string>
+    <string name="vault_autolock_sec_fmt">%1$d sec</string>
+    <string name="vault_autolock_min_fmt">%1$d min</string>
+    <string name="vault_autolock_custom_title">Custom delay</string>
+    <string name="vault_autolock_custom_sub">Enter number of minutes (1–1440)</string>
+    <string name="vault_autolock_custom_hint">Minutes (e.g. 10)</string>
+    <string name="vault_autolock_custom_invalid">Please enter a number between 1 and 1440 minutes</string>
+    <string name="changelog_v90_24_title">v%1$s — Selection Dropdown, Smooth Player Transitions &amp; Vault Auto-Lock</string>
+    <string name="changelog_v90_24_desc">• Replaced selection-mode ⋮ sheet with a fast, compact themed dropdown menu anchored directly under the ⋮ button.
+• Eliminated occasional video-switching freezes by moving LibVLC stop/release and subtitle disk parsing off the main thread + Debug StrictMode.
+• Added "Don't ask me again" checkbox, Undo snackbar, and a Settings toggle for downloaded subtitle deletion.
+• Added Vault Auto-Lock options (Immediately on leaving Vault, On leaving app, or Custom delay) while keeping Vault unlocked during active playback.
+• Removed developer credit from the main Settings screen (kept inside About only).</string>
 </resources>
