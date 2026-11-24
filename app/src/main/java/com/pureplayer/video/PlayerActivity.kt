@@ -372,7 +372,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         currentDecoderIndex = PlaybackStore.getDecoderModeIndex(this)
         binding.btnDecoder.text = getDecoderShortBadge(currentDecoderIndex)
         currentScaleIndex = 0
-        binding.btnAspectRatio.text = getScaleLabel(currentScaleIndex)
+        binding.btnAspectRatio.contentDescription = getScaleLabel(currentScaleIndex)
 
         extractIntentData(intent)
         if (savedInstanceState != null) {
