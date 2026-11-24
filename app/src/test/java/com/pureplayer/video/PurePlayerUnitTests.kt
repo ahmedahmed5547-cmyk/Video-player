@@ -861,4 +861,52 @@ class PurePlayerUnitTests {
         assertFalse(HiddenMediaAndPlaylistHelper.shouldAcceptSwitch(nowMs = 1200L, lastSwitchMs = 1000L))
         assertTrue(HiddenMediaAndPlaylistHelper.shouldAcceptSwitch(nowMs = 1500L, lastSwitchMs = 1000L))
     }
+
+    @Test
+    fun v9023_shareBatchSummaryAndSubtitleDeletionCleanup() {
+        // 1. Share batch summary & thresholds
+        val smallSingle = HiddenMediaAndPlaylistHelper.summarizeShareBatch(listOf(5_000_000L), hasFolderSelection = false)
+        assertEquals(1, smallSingle.totalCount)
+        assertFalse(smallSingle.requiresConfirmation)
+        assertFalse(smallSingle.exceedsMaxLimit)
+
+        val folderBatch = HiddenMediaAndPlaylistHelper.summarizeShareBatch(listOf(2_000_000L), hasFolderSelection = true)
+        assertTrue(folderBatch.requiresConfirmation)
+
+        val largeBytesBatch = HiddenMediaAndPlaylistHelper.summarizeShareBatch(listOf(60L * 1024L * 1024L), hasFolderSelection = false)
+        assertTrue(largeBytesBatch.requiresConfirmation)
+
+        val tooMany = HiddenMediaAndPlaylistHelper.summarizeShareBatch(List(101) { 1024L }, hasFolderSelection = false)
+        assertTrue(tooMany.exceedsMaxLimit)
+
+        assertEquals("512 B", HiddenMediaAndPlaylistHelper.formatBytesReadable(512L))
+        assertEquals("2.0 MB", HiddenMediaAndPlaylistHelper.formatBytesReadable(2L * 1024L * 1024L))
+
+        // 2. App-downloaded subtitle listing & safe deletion (never deletes files outside subtitles_cache)
+        val tmpRoot = java.nio.file.Files.createTempDirectory("vplayer_sub_del_").toFile()
+        try {
+            val cacheDir = java.io.File(tmpRoot, "subtitles_cache").apply { mkdirs() }
+            val trDir = java.io.File(cacheDir, "translated").apply { mkdirs() }
+            val origSub = java.io.File(cacheDir, "sub_en_123.srt").apply { writeText("1\n00:00:01,000 --> 00:00:02,000\nHello") }
+            val trSub = java.io.File(trDir, "tr_ar_abc123.srt").apply { writeText("1\n00:00:01,000 --> 00:00:02,000\nمرحباً") }
+            val trJson = java.io.File(trDir, "cues_ar_abc123.json").apply { writeText("{\"0\":\"مرحباً\"}") }
+            val userOwnedOutside = java.io.File(tmpRoot, "user_movie.srt").apply { writeText("1\n00:00:01,000 --> 00:00:02,000\nKeep me") }
+
+            val listed = SubtitleAutoTranslator.listAppDownloadedSubtitles(tmpRoot)
+            assertEquals(2, listed.size)
+
+            // Refuses to delete user-owned file outside subtitles_cache
+            assertEquals(0, SubtitleAutoTranslator.deleteDownloadedSubtitleAndRelatedCaches(tmpRoot, userOwnedOutside))
+            assertTrue(userOwnedOutside.exists())
+
+            // Deleting translated SRT also cleans up its cues_*.json cache
+            val deleted = SubtitleAutoTranslator.deleteDownloadedSubtitleAndRelatedCaches(tmpRoot, trSub)
+            assertEquals(2, deleted)
+            assertFalse(trSub.exists())
+            assertFalse(trJson.exists())
+            assertTrue(origSub.exists())
+        } finally {
+            tmpRoot.deleteRecursively()
+        }
+    }
 }

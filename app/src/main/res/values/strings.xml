@@ -707,4 +707,36 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="changelog_v90_22_desc">• Added a Hidden folders switch directly inside the top ☰ menu to instantly show or hide dot-folders, .nomedia folders, and hidden videos across folders, search, and Continue Watching.
 • Hidden folders and videos are subtly marked so they are easy to distinguish without modifying any files.
 • Added Previous &amp; Next video buttons to the player controls, MediaSession/lock-screen, and Picture-in-Picture, synced with your folder sort order, with tap debouncing and full playback state preservation.</string>
+    <!-- v90.23 Top Menu Hidden Folders, Share/Send & Subtitle Delete -->
+    <string name="selection_action_share">Share</string>
+    <string name="selection_action_share_sub">Share via any installed app</string>
+    <string name="selection_action_send_nearby">Send (Nearby)</string>
+    <string name="selection_action_send_nearby_sub">Quick Share / Nearby Share / Bluetooth</string>
+    <string name="share_confirm_direct">Share videos directly</string>
+    <string name="share_confirm_summary">%1$d videos • %2$s total</string>
+    <string name="share_as_zip_title">Share as ZIP archive</string>
+    <string name="share_as_zip_sub">Compress %1$s in background before sharing</string>
+    <string name="share_zip_progress_title">Preparing ZIP archive…</string>
+    <string name="share_err_no_files">No shareable videos in selection</string>
+    <string name="share_err_too_many">Too many items selected (max %1$d)</string>
+    <string name="share_err_unreadable">Selected files could not be accessed</string>
+    <string name="share_skipped_missing_count">Skipped %1$d unavailable file(s)</string>
+    <string name="share_err_no_app">No app available to handle this share</string>
+    <string name="share_err_permission">Permission denied while sharing file</string>
+    <string name="send_nearby_quickshare_sub">Fast Wi-Fi / nearby transfer</string>
+    <string name="send_nearby_bluetooth_sub">Bluetooth file transfer</string>
+    <string name="send_nearby_none_fallback">No dedicated nearby app found — opening Share sheet</string>
+    <string name="send_nearby_all_targets">More share targets…</string>
+    <string name="send_nearby_dialog_sub">Available nearby transfer options on this device</string>
+    <string name="sub_section_downloaded">Downloaded Subtitles</string>
+    <string name="sub_downloaded_badge">Downloaded • %1$d KB</string>
+    <string name="sub_downloaded_translated_badge">Translated • %1$d KB</string>
+    <string name="sub_delete_downloaded_cd">Delete %1$s</string>
+    <string name="sub_delete_confirm_title">Delete Downloaded Subtitle?</string>
+    <string name="sub_delete_confirm_msg">Remove "%1$s" and its cached translations?</string>
+    <string name="sub_deleted_toast">Subtitle deleted</string>
+    <string name="changelog_v90_23_title">v%1$s — Top Menu Theme &amp; Hidden Folders, Share/Send, Subtitle Delete</string>
+    <string name="changelog_v90_23_desc">• Moved Hidden folders switch into the top ☰ dropdown menu (4th option) and styled the entire dropdown to match Light, Dark, Luxury Dark &amp; Material You themes.
+• Added Share &amp; Send (Nearby: Quick Share / Bluetooth) for selected videos and folders using direct content URIs, confirmation for large batches, and optional background ZIP.
+• Added a 48dp themed ✕ delete button on app-downloaded subtitles in the player with confirmation and instant cleanup.</string>
 </resources>

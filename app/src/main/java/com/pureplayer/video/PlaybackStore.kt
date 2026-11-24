@@ -760,6 +760,18 @@ object PlaybackStore {
             .apply()
     }
 
+    fun clearVideoSubtitleIfMatches(context: Context, videoUri: Uri, deletedPath: String) {
+        val savedPath = getVideoSubtitleCachePath(context, videoUri)
+        val savedMeta = getVideoSubtitleUri(context, videoUri)
+        if (savedPath == deletedPath || savedMeta?.first == deletedPath) {
+            prefs(context).edit()
+                .remove(PREFIX_SUB_CACHE + videoUri.toString().hashCode())
+                .remove(PREFIX_SAVED_SUB_URI + videoUri.toString().hashCode())
+                .remove(PREFIX_SAVED_SUB_URI + "lbl_" + videoUri.toString().hashCode())
+                .apply()
+        }
+    }
+
     fun getVideoSubtitleUri(context: Context, videoUri: Uri): Pair<String, String>? {
         val u = prefs(context).getString(PREFIX_SAVED_SUB_URI + videoUri.toString().hashCode(), null) ?: return null
         if (u.isBlank()) return null

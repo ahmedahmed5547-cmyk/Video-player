@@ -171,30 +171,8 @@ internal fun MainActivity.applySortAndLayoutChangeToActiveScreen() {
 internal fun MainActivity.showSortAndLayoutDialog() {
     val isGrid = PlaybackStore.isGridLayoutEnabled(this)
     val sortMode = PlaybackStore.getSortOrderMode(this)
-    val showHidden = PlaybackStore.isShowHiddenFolders(this)
 
     val items = listOf(
-        // Section 0: Visibility (Hidden Folders inline switch)
-        PremiumMenuItem(
-            iconEmoji = "👁️",
-            title = getString(R.string.menu_hidden_folders_title),
-            subtitle = getString(R.string.menu_hidden_folders_sub),
-            isAccentHighlighted = showHidden,
-            sectionHeader = getString(R.string.section_visibility),
-            toggleChecked = showHidden,
-            onToggleChanged = { enabled ->
-                PlaybackStore.setShowHiddenFolders(this, enabled)
-                val lm = binding.recyclerView.layoutManager
-                val savedScroll = lm?.onSaveInstanceState()
-                applyFolderVisibilityAndRefreshUI()
-                updateResumeLastFab()
-                if (savedScroll != null) {
-                    binding.recyclerView.post {
-                        binding.recyclerView.layoutManager?.onRestoreInstanceState(savedScroll)
-                    }
-                }
-            }
-        ),
         // Section 1: Media Layout (List vs Grid)
         PremiumMenuItem(
             iconEmoji = "📋",
@@ -1147,11 +1125,19 @@ internal fun MainActivity.showChangelogPage() {
     val allConfiguredReleases = listOf(
         ChangelogReleaseEntry(
             version = verName,
+            date = "2026-11-24",
+            iconEmoji = "📤",
+            title = getString(R.string.changelog_v90_23_title, verName),
+            description = getString(R.string.changelog_v90_23_desc),
+            isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.22",
             date = "2026-11-23",
             iconEmoji = "⏭️",
-            title = getString(R.string.changelog_v90_22_title, verName),
+            title = getString(R.string.changelog_v90_22_title, "90.22"),
             description = getString(R.string.changelog_v90_22_desc),
-            isLatest = true
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.21",

@@ -583,6 +583,109 @@ object SubtitleAutoTranslator {
         )
     }
 
+
+    data class DownloadedSubtitleEntry(
+        val file: File,
+        val displayName: String,
+        val isTranslated: Boolean,
+        val sizeBytes: Long
+    )
+
+    /**
+     * Lists ONLY app-downloaded / app-cached subtitles inside filesDir/subtitles_cache.
+     * User-owned external files outside app cache are never included here.
+     */
+    fun listAppDownloadedSubtitles(filesDir: File): List<DownloadedSubtitleEntry> {
+        val cacheRoot = File(filesDir, "subtitles_cache")
+        if (!cacheRoot.exists() || !cacheRoot.isDirectory) return emptyList()
+
+        val results = mutableListOf<DownloadedSubtitleEntry>()
+        val exts = setOf("srt", "vtt", "ass", "ssa")
+
+        cacheRoot.listFiles()?.forEach { f ->
+            if (f.isFile && f.extension.lowercase(Locale.ROOT) in exts && f.length() > 0L) {
+                results.add(
+                    DownloadedSubtitleEntry(
+                        file = f,
+                        displayName = f.nameWithoutExtension.removePrefix("sub_").replace('_', ' '),
+                        isTranslated = false,
+                        sizeBytes = f.length()
+                    )
+                )
+            }
+        }
+
+        val trDir = File(cacheRoot, "translated")
+        if (trDir.exists() && trDir.isDirectory) {
+            trDir.listFiles()?.forEach { f ->
+                if (f.isFile && f.extension.lowercase(Locale.ROOT) in exts && f.length() > 0L) {
+                    results.add(
+                        DownloadedSubtitleEntry(
+                            file = f,
+                            displayName = f.nameWithoutExtension.removePrefix("tr_").replace('_', ' '),
+                            isTranslated = true,
+                            sizeBytes = f.length()
+                        )
+                    )
+                }
+            }
+        }
+
+        return results.sortedByDescending { it.file.lastModified() }
+    }
+
+    /**
+     * Deletes an app-downloaded subtitle file and any related cached translations/JSON cue caches.
+     * Safety: refuses to delete files outside `filesDir/subtitles_cache`.
+     */
+    fun deleteDownloadedSubtitleAndRelatedCaches(filesDir: File, targetFile: File): Int {
+        val cacheRoot = File(filesDir, "subtitles_cache")
+        val canonicalRoot = runCatching { cacheRoot.canonicalPath }.getOrNull() ?: return 0
+        val canonicalTarget = runCatching { targetFile.canonicalPath }.getOrNull() ?: return 0
+        if (!canonicalTarget.startsWith(canonicalRoot)) return 0
+
+        var deletedCount = 0
+        val trDir = File(cacheRoot, "translated")
+
+        // If deleting a tr_<lang>_<hash>.srt, also remove matching cues_<lang>_<hash>.json
+        val name = targetFile.name
+        if (name.startsWith("tr_") && name.endsWith(".srt")) {
+            val stem = name.removePrefix("tr_").removeSuffix(".srt")
+            val jsonCueFile = File(trDir, "cues_$stem.json")
+            if (jsonCueFile.exists() && jsonCueFile.delete()) deletedCount++
+        } else if (targetFile.exists() && trDir.exists()) {
+            // If deleting an original downloaded subtitle, also remove any translated SRT/JSON caches derived from its bytes
+            val rawBytes = runCatching { targetFile.readBytes() }.getOrNull()
+            if (rawBytes != null && rawBytes.isNotEmpty()) {
+                val md5OrSha = MessageDigest.getInstance("SHA-256")
+                val hexPrefix = runCatching {
+                    // Match any tr_*_<hash>.srt or cues_*_<hash>.json generated from these exact bytes
+                    val hashes = HashSet<String>()
+                    for (lang in listOf("ar", "en", "fr", "es", "de", "tr", "ru", "pt", "it", "he", "hi", "ur", "id", "zh", "ja", "ko")) {
+                        for (prov in listOf("free_google", "google_cloud", "deepl", "openai_llm")) {
+                            for (style in listOf("msa", "simple")) {
+                                hashes.add(computeCacheKey(rawBytes, "auto", lang, prov, style))
+                                hashes.add(computeCacheKey(rawBytes, "en", lang, prov, style))
+                            }
+                        }
+                    }
+                    hashes
+                }.getOrNull().orEmpty()
+
+                trDir.listFiles()?.forEach { f ->
+                    if (hexPrefix.any { h -> f.name.contains(h) }) {
+                        if (f.delete()) deletedCount++
+                    }
+                }
+            }
+        }
+
+        if (targetFile.exists() && targetFile.delete()) {
+            deletedCount++
+        }
+        return deletedCount
+    }
+
     fun resolveEffectiveProvider(configuredProvider: String, apiKey: String): String {
         return when (configuredProvider) {
             "google_cloud", "deepl", "openai_llm" -> {

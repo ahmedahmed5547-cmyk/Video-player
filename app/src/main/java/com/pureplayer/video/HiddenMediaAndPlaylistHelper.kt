@@ -12,6 +12,66 @@ object HiddenMediaAndPlaylistHelper {
 
     const val SWITCH_DEBOUNCE_MS = 450L
     const val DEFAULT_SHOW_HIDDEN_FOLDERS = true
+    const val MAX_SHARE_ITEMS = 100
+    const val LARGE_SHARE_BYTES_THRESHOLD = 50L * 1024L * 1024L
+    const val LARGE_SHARE_COUNT_THRESHOLD = 5
+
+    data class ShareBatchSummary(
+        val totalCount: Int,
+        val totalBytes: Long,
+        val hasFolderSelection: Boolean,
+        val requiresConfirmation: Boolean,
+        val exceedsMaxLimit: Boolean
+    )
+
+    fun collectUniqueVideosForShare(
+        selectedVideos: List<VideoItem>,
+        selectedFolders: List<VideoFolder>,
+        showHidden: Boolean
+    ): List<VideoItem> {
+        val out = mutableListOf<VideoItem>()
+        val seen = hashSetOf<String>()
+        fun addIfEligible(v: VideoItem) {
+            if (!showHidden && v.isHidden) return
+            val key = v.path.takeIf { it.isNotBlank() } ?: v.uri.toString()
+            if (seen.add(key)) out.add(v)
+        }
+        selectedVideos.forEach { addIfEligible(it) }
+        selectedFolders.forEach { folder ->
+            if (!showHidden && folder.isHidden) return@forEach
+            folder.videos.forEach { addIfEligible(it) }
+        }
+        return out
+    }
+
+    fun summarizeShareBatch(
+        videoSizes: List<Long>,
+        hasFolderSelection: Boolean
+    ): ShareBatchSummary {
+        val count = videoSizes.size
+        val totalBytes = videoSizes.sumOf { it.coerceAtLeast(0L) }
+        val exceedsMax = count > MAX_SHARE_ITEMS
+        val needsConfirm = hasFolderSelection ||
+            count >= LARGE_SHARE_COUNT_THRESHOLD ||
+            totalBytes >= LARGE_SHARE_BYTES_THRESHOLD
+        return ShareBatchSummary(
+            totalCount = count,
+            totalBytes = totalBytes,
+            hasFolderSelection = hasFolderSelection,
+            requiresConfirmation = needsConfirm,
+            exceedsMaxLimit = exceedsMax
+        )
+    }
+
+    fun formatBytesReadable(bytes: Long): String {
+        val b = bytes.coerceAtLeast(0L)
+        return when {
+            b >= 1024L * 1024L * 1024L -> String.format(Locale.US, "%.2f GB", b / (1024.0 * 1024.0 * 1024.0))
+            b >= 1024L * 1024L -> String.format(Locale.US, "%.1f MB", b / (1024.0 * 1024.0))
+            b >= 1024L -> String.format(Locale.US, "%.0f KB", b / 1024.0)
+            else -> "$b B"
+        }
+    }
 
     /**
      * Pure-Kotlin path check (no filesystem I/O) to classify whether a video path/folder is hidden:

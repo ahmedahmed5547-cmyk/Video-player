@@ -112,6 +112,8 @@ data class PremiumMenuItem(
     val statusChip: String? = null,
     val toggleChecked: Boolean? = null,
     val onToggleChanged: ((Boolean) -> Unit)? = null,
+    val deleteAction: (() -> Unit)? = null,
+    val deleteContentDescription: String? = null,
     val onClick: () -> Unit = {}
 )
 

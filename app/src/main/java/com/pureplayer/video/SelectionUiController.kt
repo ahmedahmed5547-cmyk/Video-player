@@ -2,6 +2,18 @@ package com.pureplayer.video
 
 import android.app.AlertDialog
 import android.content.res.ColorStateList
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.Job
+import java.util.zip.ZipOutputStream
+import java.util.zip.ZipEntry
+import java.io.FileOutputStream
+import java.io.FileInputStream
+import java.io.BufferedOutputStream
+import java.io.BufferedInputStream
+import androidx.core.content.FileProvider
+import android.content.pm.PackageManager
+import android.content.Intent
+import android.content.ClipData
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.media.MediaExtractor
@@ -168,6 +180,22 @@ internal fun MainActivity.showSelectionOverflowMenu() {
         )
         items.add(
             PremiumMenuItem(
+                iconEmoji = "📤",
+                title = getString(R.string.selection_action_share),
+                subtitle = getString(R.string.selection_action_share_sub),
+                onClick = { startShareSelectedFlow(selectedVideos, selectedFolders, isNearbyOnly = false) }
+            )
+        )
+        items.add(
+            PremiumMenuItem(
+                iconEmoji = "📡",
+                title = getString(R.string.selection_action_send_nearby),
+                subtitle = getString(R.string.selection_action_send_nearby_sub),
+                onClick = { startShareSelectedFlow(selectedVideos, selectedFolders, isNearbyOnly = true) }
+            )
+        )
+        items.add(
+            PremiumMenuItem(
                 iconEmoji = "📋",
                 title = getString(R.string.selection_action_copy),
                 subtitle = getString(R.string.selection_paste_sub),
@@ -198,6 +226,22 @@ internal fun MainActivity.showSelectionOverflowMenu() {
                 title = getString(R.string.selection_action_add_vault),
                 subtitle = getString(R.string.selection_action_add_vault_sub),
                 onClick = { addSelectedToVaultBatch(selectedVideos, selectedFolders) }
+            )
+        )
+        items.add(
+            PremiumMenuItem(
+                iconEmoji = "📤",
+                title = getString(R.string.selection_action_share),
+                subtitle = getString(R.string.selection_action_share_sub),
+                onClick = { startShareSelectedFlow(selectedVideos, selectedFolders, isNearbyOnly = false) }
+            )
+        )
+        items.add(
+            PremiumMenuItem(
+                iconEmoji = "📡",
+                title = getString(R.string.selection_action_send_nearby),
+                subtitle = getString(R.string.selection_action_send_nearby_sub),
+                onClick = { startShareSelectedFlow(selectedVideos, selectedFolders, isNearbyOnly = true) }
             )
         )
         items.add(
@@ -848,5 +892,366 @@ internal fun MainActivity.updateVaultScreenSecurityFlag(inVault: Boolean) {
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
     } else {
         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    }
+}
+
+
+internal fun MainActivity.resolveShareableUriForVideo(video: VideoItem): Uri? {
+    return try {
+        val u = video.uri
+        if (u.scheme == "content") {
+            u
+        } else {
+            val f = when {
+                video.path.isNotBlank() -> File(video.path)
+                u.scheme == "file" && !u.path.isNullOrBlank() -> File(u.path!!)
+                else -> null
+            }
+            if (f != null && f.exists() && f.canRead()) {
+                FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
+            } else {
+                null
+            }
+        }
+    } catch (_: Exception) {
+        null
+    }
+}
+
+internal fun MainActivity.buildDirectShareIntent(uris: ArrayList<Uri>, title: String): Intent {
+    return if (uris.size == 1) {
+        Intent(Intent.ACTION_SEND).apply {
+            type = "video/*"
+            putExtra(Intent.EXTRA_STREAM, uris[0])
+            putExtra(Intent.EXTRA_SUBJECT, title)
+            clipData = ClipData.newRawUri(title, uris[0])
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    } else {
+        Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "video/*"
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            putExtra(Intent.EXTRA_SUBJECT, title)
+            val cd = ClipData.newRawUri(title, uris[0])
+            for (i in 1 until uris.size) {
+                cd.addItem(ClipData.Item(uris[i]))
+            }
+            clipData = cd
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    }
+}
+
+internal fun MainActivity.startShareSelectedFlow(
+    selectedVideos: List<VideoItem>,
+    selectedFolders: List<VideoFolder>,
+    isNearbyOnly: Boolean
+) {
+    val showHidden = PlaybackStore.isShowHiddenFolders(this)
+    val videos = HiddenMediaAndPlaylistHelper.collectUniqueVideosForShare(
+        selectedVideos = selectedVideos,
+        selectedFolders = selectedFolders,
+        showHidden = showHidden
+    )
+    if (videos.isEmpty()) {
+        Toast.makeText(this, getString(R.string.share_err_no_files), Toast.LENGTH_SHORT).show()
+        return
+    }
+
+    val summary = HiddenMediaAndPlaylistHelper.summarizeShareBatch(
+        videoSizes = videos.map { it.size },
+        hasFolderSelection = selectedFolders.isNotEmpty()
+    )
+    if (summary.exceedsMaxLimit) {
+        Toast.makeText(
+            this,
+            getString(R.string.share_err_too_many, HiddenMediaAndPlaylistHelper.MAX_SHARE_ITEMS),
+            Toast.LENGTH_LONG
+        ).show()
+        return
+    }
+
+    if (summary.requiresConfirmation) {
+        val sizeStr = HiddenMediaAndPlaylistHelper.formatBytesReadable(summary.totalBytes)
+        val items = mutableListOf(
+            PremiumMenuItem(
+                iconEmoji = if (isNearbyOnly) "📡" else "📤",
+                title = getString(R.string.share_confirm_direct),
+                subtitle = getString(R.string.share_confirm_summary, summary.totalCount, sizeStr),
+                isAccentHighlighted = true,
+                onClick = {
+                    if (isNearbyOnly) {
+                        showNearbyTargetsAndSend(videos)
+                    } else {
+                        executeDirectVideoShare(videos, targetPackage = null)
+                    }
+                }
+            ),
+            PremiumMenuItem(
+                iconEmoji = "🗜️",
+                title = getString(R.string.share_as_zip_title),
+                subtitle = getString(R.string.share_as_zip_sub, sizeStr),
+                onClick = {
+                    shareVideosAsZipInBackground(videos, isNearbyOnly)
+                }
+            )
+        )
+        showPremiumMenuDialog(
+            headerIcon = if (isNearbyOnly) "📡" else "📤",
+            title = if (isNearbyOnly) getString(R.string.selection_action_send_nearby) else getString(R.string.selection_action_share),
+            subtitle = getString(R.string.share_confirm_summary, summary.totalCount, sizeStr),
+            items = items,
+            showHeaderVersionBadge = false
+        )
+    } else {
+        if (isNearbyOnly) {
+            showNearbyTargetsAndSend(videos)
+        } else {
+            executeDirectVideoShare(videos, targetPackage = null)
+        }
+    }
+}
+
+internal fun MainActivity.executeDirectVideoShare(
+    videos: List<VideoItem>,
+    targetPackage: String?,
+    targetClass: String? = null
+) {
+    val uris = ArrayList<Uri>(videos.size)
+    var skipped = 0
+    for (v in videos) {
+        val u = resolveShareableUriForVideo(v)
+        if (u != null) uris.add(u) else skipped++
+    }
+    if (uris.isEmpty()) {
+        Toast.makeText(this, getString(R.string.share_err_unreadable), Toast.LENGTH_LONG).show()
+        return
+    }
+    if (skipped > 0) {
+        Toast.makeText(this, getString(R.string.share_skipped_missing_count, skipped), Toast.LENGTH_SHORT).show()
+    }
+
+    val title = if (videos.size == 1) videos[0].title else getString(R.string.selection_count_format, uris.size)
+    val baseIntent = buildDirectShareIntent(uris, title)
+
+    try {
+        if (!targetPackage.isNullOrBlank()) {
+            baseIntent.setPackage(targetPackage)
+            if (!targetClass.isNullOrBlank()) {
+                baseIntent.setClassName(targetPackage, targetClass)
+            }
+            startActivity(baseIntent)
+        } else {
+            startActivity(Intent.createChooser(baseIntent, getString(R.string.selection_action_share)))
+        }
+        selectionViewModel.exitSelection()
+    } catch (_: android.content.ActivityNotFoundException) {
+        Toast.makeText(this, getString(R.string.share_err_no_app), Toast.LENGTH_SHORT).show()
+    } catch (_: SecurityException) {
+        Toast.makeText(this, getString(R.string.share_err_permission), Toast.LENGTH_SHORT).show()
+    } catch (_: Exception) {
+        Toast.makeText(this, getString(R.string.share_err_no_app), Toast.LENGTH_SHORT).show()
+    }
+}
+
+internal fun MainActivity.showNearbyTargetsAndSend(videos: List<VideoItem>) {
+    val probeUris = ArrayList<Uri>()
+    for (v in videos) {
+        resolveShareableUriForVideo(v)?.let { probeUris.add(it) }
+    }
+    if (probeUris.isEmpty()) {
+        Toast.makeText(this, getString(R.string.share_err_unreadable), Toast.LENGTH_LONG).show()
+        return
+    }
+    val probeIntent = buildDirectShareIntent(probeUris, getString(R.string.selection_action_send_nearby))
+    val pm = packageManager
+    @Suppress("DEPRECATION")
+    val resolved = pm.queryIntentActivities(probeIntent, PackageManager.MATCH_DEFAULT_ONLY)
+
+    val nearbyItems = mutableListOf<PremiumMenuItem>()
+    val seenPkgs = hashSetOf<String>()
+
+    for (ri in resolved) {
+        val pkg = ri.activityInfo?.packageName ?: continue
+        val cls = ri.activityInfo?.name ?: continue
+        val pkgLower = pkg.lowercase(Locale.ROOT)
+        val clsLower = cls.lowercase(Locale.ROOT)
+        val label = ri.loadLabel(pm)?.toString().orEmpty()
+        val labelLower = label.lowercase(Locale.ROOT)
+
+        val isQuickShare = pkgLower.contains("sharelive") ||
+            clsLower.contains("nearby") ||
+            clsLower.contains("quickshare") ||
+            labelLower.contains("quick share") ||
+            labelLower.contains("nearby")
+        val isBluetooth = pkgLower.contains("bluetooth") || labelLower.contains("bluetooth")
+
+        if ((isQuickShare || isBluetooth) && seenPkgs.add("$pkg/$cls")) {
+            val icon = if (isBluetooth) "📶" else "⚡"
+            nearbyItems.add(
+                PremiumMenuItem(
+                    iconEmoji = icon,
+                    title = label.ifBlank { pkg },
+                    subtitle = if (isBluetooth) getString(R.string.send_nearby_bluetooth_sub) else getString(R.string.send_nearby_quickshare_sub),
+                    isAccentHighlighted = isQuickShare,
+                    onClick = { executeDirectVideoShare(videos, targetPackage = pkg, targetClass = cls) }
+                )
+            )
+        }
+    }
+
+    if (nearbyItems.isEmpty()) {
+        Toast.makeText(this, getString(R.string.send_nearby_none_fallback), Toast.LENGTH_SHORT).show()
+        executeDirectVideoShare(videos, targetPackage = null)
+        return
+    }
+
+    nearbyItems.add(
+        PremiumMenuItem(
+            iconEmoji = "📤",
+            title = getString(R.string.send_nearby_all_targets),
+            subtitle = getString(R.string.selection_action_share_sub),
+            onClick = { executeDirectVideoShare(videos, targetPackage = null) }
+        )
+    )
+
+    showPremiumMenuDialog(
+        headerIcon = "📡",
+        title = getString(R.string.selection_action_send_nearby),
+        subtitle = getString(R.string.send_nearby_dialog_sub),
+        items = nearbyItems,
+        showHeaderVersionBadge = false
+    )
+}
+
+internal fun MainActivity.shareVideosAsZipInBackground(
+    videos: List<VideoItem>,
+    isNearbyOnly: Boolean
+) {
+    val accent = PlaybackStore.getAccentColor(this)
+    val surface = PlaybackStore.getSurfaceColor(this)
+    val primaryText = PlaybackStore.getPrimaryTextColor(this)
+    val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+
+    val container = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(22), dp(20), dp(22), dp(18))
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(24).toFloat()
+            setColor(surface)
+            setStroke(dp(1), Color.argb(110, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+    }
+    val tvTitle = TextView(this).apply {
+        text = "🗜️  ${getString(R.string.share_zip_progress_title)}"
+        setTextColor(primaryText)
+        textSize = 16.5f
+        setTypeface(typeface, Typeface.BOLD)
+        setPadding(0, 0, 0, dp(8))
+    }
+    val tvStatus = TextView(this).apply {
+        text = "0 / ${videos.size}"
+        setTextColor(secondaryText)
+        textSize = 13.5f
+        setPadding(0, 0, 0, dp(12))
+    }
+    val bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+        max = videos.size.coerceAtLeast(1)
+        progress = 0
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(8)).apply {
+            bottomMargin = dp(12)
+        }
+    }
+    val btnCancel = TextView(this).apply {
+        text = getString(R.string.cancel)
+        setTextColor(accent)
+        textSize = 14f
+        setTypeface(typeface, Typeface.BOLD)
+        setPadding(dp(12), dp(8), dp(12), dp(8))
+        gravity = android.view.Gravity.END
+    }
+    container.addView(tvTitle)
+    container.addView(tvStatus)
+    container.addView(bar)
+    container.addView(btnCancel)
+
+    val dlg = AlertDialog.Builder(this).setView(container).setCancelable(false).create()
+    dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+
+    var zipJob: Job? = null
+    btnCancel.setOnClickListener {
+        zipJob?.cancel()
+        dlg.dismiss()
+    }
+    dlg.show()
+
+    zipJob = lifecycleScope.launch {
+        val zipFile = withContext(Dispatchers.IO) {
+            val zipDir = File(cacheDir, "share_zips").apply { mkdirs() }
+            zipDir.listFiles()?.forEach { old ->
+                if (System.currentTimeMillis() - old.lastModified() > 24 * 3600 * 1000L) {
+                    old.delete()
+                }
+            }
+            val outZip = File(zipDir, "VPlayer_Share_${System.currentTimeMillis()}.zip")
+            val buf = ByteArray(32 * 1024)
+            var packed = 0
+            ZipOutputStream(BufferedOutputStream(FileOutputStream(outZip))).use { zos ->
+                videos.forEachIndexed { idx, v ->
+                    ensureActive()
+                    val entryName = "${idx + 1}_${v.title.replace(Regex("[^a-zA-Z0-9._-]"), "_")}"
+                    val input = runCatching {
+                        if (v.uri.scheme == "content") {
+                            contentResolver.openInputStream(v.uri)
+                        } else if (v.path.isNotBlank() && File(v.path).exists()) {
+                            FileInputStream(File(v.path))
+                        } else null
+                    }.getOrNull()
+                    if (input != null) {
+                        input.use { stream ->
+                            zos.putNextEntry(ZipEntry(entryName))
+                            val bis = BufferedInputStream(stream)
+                            while (true) {
+                                ensureActive()
+                                val n = bis.read(buf)
+                                if (n <= 0) break
+                                zos.write(buf, 0, n)
+                            }
+                            zos.closeEntry()
+                            packed++
+                        }
+                    }
+                    withContext(Dispatchers.Main) {
+                        if (dlg.isShowing) {
+                            bar.progress = idx + 1
+                            tvStatus.text = "${idx + 1} / ${videos.size}"
+                        }
+                    }
+                }
+            }
+            if (packed > 0 && outZip.exists()) outZip else { outZip.delete(); null }
+        }
+
+        if (dlg.isShowing) dlg.dismiss()
+        if (zipFile == null) {
+            Toast.makeText(this@shareVideosAsZipInBackground, getString(R.string.share_err_unreadable), Toast.LENGTH_SHORT).show()
+            return@launch
+        }
+
+        try {
+            val zipUri = FileProvider.getUriForFile(this@shareVideosAsZipInBackground, "$packageName.fileprovider", zipFile)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/zip"
+                putExtra(Intent.EXTRA_STREAM, zipUri)
+                putExtra(Intent.EXTRA_SUBJECT, zipFile.name)
+                clipData = ClipData.newRawUri(zipFile.name, zipUri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, getString(if (isNearbyOnly) R.string.selection_action_send_nearby else R.string.selection_action_share)))
+            selectionViewModel.exitSelection()
+        } catch (_: Exception) {
+            Toast.makeText(this@shareVideosAsZipInBackground, getString(R.string.share_err_no_app), Toast.LENGTH_SHORT).show()
+        }
     }
 }

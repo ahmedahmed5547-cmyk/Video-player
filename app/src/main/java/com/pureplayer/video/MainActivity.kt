@@ -81,7 +81,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.pureplayer.video.databinding.ActivityMainBinding
-import android.widget.PopupMenu
+import android.widget.PopupWindow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -363,6 +363,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        activeTopDropdownPopup?.dismiss()
         activeFullScreenDialog?.setOnCancelListener(null)
         if (activeFullScreenDialog?.isShowing == true) {
             runCatching { activeFullScreenDialog?.dismiss() }
@@ -375,6 +376,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        activeTopDropdownPopup?.dismiss()
         applyUserTheme(animated = false)
         updateRecyclerLayoutManager()
         updateActiveFullScreenMenuLayoutForWindowSize()
@@ -1289,44 +1291,189 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showTopHamburgerPopupMenu(anchor: View) {
-        val popup = PopupMenu(this, anchor, Gravity.END)
-        popup.menu.add(0, 1, 0, "⚙️  " + getString(R.string.top_menu_settings)).apply {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                contentDescription = getString(R.string.top_menu_settings)
+        activeTopDropdownPopup?.dismiss()
+
+        val accent = PlaybackStore.getAccentColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
+        val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+        val isLight = PlaybackStore.isLightThemeActive(this)
+
+        val dividerColor = if (isLight) Color.parseColor("#180F172A") else Color.parseColor("#1FFFFFFF")
+        val rippleColor = Color.argb(38, Color.red(accent), Color.green(accent), Color.blue(accent))
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            elevation = dp(12).toFloat()
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(20).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(100, Color.red(accent), Color.green(accent), Color.blue(accent)))
             }
         }
-        popup.menu.add(0, 2, 1, "🔃  " + getString(R.string.top_menu_sort)).apply {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                contentDescription = getString(R.string.top_menu_sort)
-            }
+
+        val popup = PopupWindow(
+            card,
+            dp(268),
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        ).apply {
+            isOutsideTouchable = true
+            elevation = dp(14).toFloat()
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            setOnDismissListener { activeTopDropdownPopup = null }
         }
-        popup.menu.add(0, 3, 2, "📂  " + getString(R.string.top_menu_open_files)).apply {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                contentDescription = getString(R.string.top_menu_open_files)
+        activeTopDropdownPopup = popup
+
+        fun makeThemedRowBackground(): android.graphics.drawable.Drawable {
+            val contentShape = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(13).toFloat()
+                setColor(Color.TRANSPARENT)
             }
+            val mask = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(13).toFloat()
+                setColor(Color.WHITE)
+            }
+            return android.graphics.drawable.RippleDrawable(
+                ColorStateList.valueOf(rippleColor),
+                contentShape,
+                mask
+            )
         }
-        popup.setOnMenuItemClickListener { menuItem ->
-            when (menuItem.itemId) {
-                1 -> {
-                    showProSettingsDialog(clearStack = true)
-                    true
+
+        fun addDivider() {
+            card.addView(View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    dp(1)
+                ).apply {
+                    marginStart = dp(10)
+                    marginEnd = dp(10)
+                    topMargin = dp(2)
+                    bottomMargin = dp(2)
                 }
-                2 -> {
-                    settingsBackStack.clear()
-                    showSortAndLayoutDialog()
-                    true
+                setBackgroundColor(dividerColor)
+            })
+        }
+
+        fun addActionRow(icon: String, label: String, onClick: () -> Unit) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                isFocusable = true
+                isClickable = true
+                minimumHeight = dp(48)
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                background = makeThemedRowBackground()
+                contentDescription = label
+            }
+            val tvIcon = TextView(this).apply {
+                text = icon
+                textSize = 16f
+                setPadding(0, 0, dp(12), 0)
+            }
+            val tvLabel = TextView(this).apply {
+                text = label
+                setTextColor(primaryText)
+                textSize = 14.5f
+                setTypeface(typeface, Typeface.BOLD)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            row.addView(tvIcon)
+            row.addView(tvLabel)
+            row.setOnClickListener {
+                popup.dismiss()
+                onClick()
+            }
+            card.addView(row)
+        }
+
+        // 1. Settings
+        addActionRow("⚙️", getString(R.string.top_menu_settings)) {
+            showProSettingsDialog(clearStack = true)
+        }
+        addDivider()
+
+        // 2. Sort and Layout
+        addActionRow("🔃", getString(R.string.top_menu_sort)) {
+            settingsBackStack.clear()
+            showSortAndLayoutDialog()
+        }
+        addDivider()
+
+        // 3. Open File
+        addActionRow("📂", getString(R.string.top_menu_open_files)) {
+            openDocumentLauncher.launch(arrayOf("video/*", "application/x-matroska"))
+        }
+        addDivider()
+
+        // 4. Hidden folders (with inline theme-aware SwitchCompat)
+        val showHiddenInitial = PlaybackStore.isShowHiddenFolders(this)
+        val hiddenRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isFocusable = true
+            isClickable = true
+            minimumHeight = dp(48)
+            setPadding(dp(12), dp(8), dp(10), dp(8))
+            background = makeThemedRowBackground()
+            contentDescription = getString(R.string.menu_hidden_folders_title)
+        }
+        val tvHiddenIcon = TextView(this).apply {
+            text = "👁️"
+            textSize = 16f
+            setPadding(0, 0, dp(12), 0)
+        }
+        val tvHiddenLabel = TextView(this).apply {
+            text = getString(R.string.menu_hidden_folders_title)
+            setTextColor(primaryText)
+            textSize = 14.5f
+            setTypeface(typeface, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val hiddenSwitch = androidx.appcompat.widget.SwitchCompat(this).apply {
+            isChecked = showHiddenInitial
+            thumbTintList = ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                intArrayOf(accent, if (isLight) Color.parseColor("#64748B") else Color.parseColor("#CBD5E1"))
+            )
+            trackTintList = ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                intArrayOf(
+                    Color.argb(120, Color.red(accent), Color.green(accent), Color.blue(accent)),
+                    Color.argb(65, Color.red(secondaryText), Color.green(secondaryText), Color.blue(secondaryText))
+                )
+            )
+        }
+        hiddenSwitch.setOnCheckedChangeListener { _, checked ->
+            PlaybackStore.setShowHiddenFolders(this, checked)
+            val lm = binding.recyclerView.layoutManager
+            val savedScroll = lm?.onSaveInstanceState()
+            applyFolderVisibilityAndRefreshUI()
+            updateResumeLastFab()
+            if (savedScroll != null) {
+                binding.recyclerView.post {
+                    binding.recyclerView.layoutManager?.onRestoreInstanceState(savedScroll)
                 }
-                3 -> {
-                    openDocumentLauncher.launch(arrayOf("video/*", "application/x-matroska"))
-                    true
-                }
-                else -> false
             }
         }
+        hiddenRow.setOnClickListener {
+            hiddenSwitch.isChecked = !hiddenSwitch.isChecked
+        }
+        hiddenRow.addView(tvHiddenIcon)
+        hiddenRow.addView(tvHiddenLabel)
+        hiddenRow.addView(hiddenSwitch)
+        card.addView(hiddenRow)
+
         anchor.animate().rotationBy(90f).setDuration(180L).withEndAction {
             anchor.rotation = 0f
         }.start()
-        popup.show()
+
+        popup.showAsDropDown(anchor, -dp(8), dp(6), Gravity.END)
     }
 
     private fun setupListeners() {

@@ -1,3 +1,8 @@
+## v90.23 (2026-11-24)
+- **Top Menu — Theme-Aware & Hidden Folders**: Converted the top dropdown menu into a fully themed `PopupWindow` (surface, text, dividers, ripple, rounded borders, and `SwitchCompat`) and moved **Hidden folders** there as the 4th option while removing it from **Sort and Layout**.
+- **Selection Mode — Share & Send (Nearby)**: Added **Share** (`ACTION_SEND` / `ACTION_SEND_MULTIPLE`) and **Send (Nearby)** (detecting installed Quick Share / Nearby Share and Bluetooth targets) for selected videos and folders using direct content/FileProvider URIs without copying large videos, with folder/batch size confirmation and optional background ZIP creation.
+- **Player Subtitles — Delete (`✕`) for Downloaded Subtitles**: Added a 48dp themed `✕` button on app-downloaded subtitles in the player's subtitle menu with confirmation, cache & translated-cache cleanup, and clean switch to no-subtitle if active.
+
 ## v90.22 (2026-11-23)
 - **Feature — Hidden Folders Toggle in Top ☰ Menu**: Added an inline `SwitchCompat` for **Hidden folders** (default: ON) directly inside the top ☰ menu (`showSortAndLayoutDialog`). Controls display of dot-prefixed folders/files, `.nomedia` directories, `.trashed-*` files, and `Android/data` hidden paths across folders, search, and Continue Watching with subtle visual markers and scroll-position preservation.
 - **Feature — Previous / Next Video Buttons**: Added Previous & Next transport buttons in `activity_player.xml` (`PlayerActivity.kt`), wired to the active folder/list sort order, MediaSession lock-screen/notification controls, and Picture-in-Picture actions, with 450ms tap debouncing, automatic hiding on single files & IPTV streams, dimmed boundary states, and full playback state + lifecycle preservation.

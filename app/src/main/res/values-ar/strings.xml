@@ -707,4 +707,36 @@
     <string name="changelog_v90_22_desc">• إضافة مفتاح تبديل مباشر «المجلدات المخفية» داخل قائمة ☰ العلوية لإظهار أو إخفاء المجلدات التي تبدأ بنقطة وملفات .nomedia فوراً في المجلدات والبحث وآخر المشاهدات.
 • تمييز بصري لطيف للعناصر المخفية دون تعديل أو نقل أي ملف.
 • إضافة زري الفيديو السابق والفيديو التالي في شريط المشغل وإشعار الوسائط وشاشة القفل ووضع PiP بنفس ترتيب المجلد، مع منع النقر المتكرر وحفظ السرعة والصوت والسطوع والمقاس.</string>
+    <!-- v90.23 القائمة العلوية، المشاركة والإرسال القريب، وحذف الترجمات المحمّلة -->
+    <string name="selection_action_share">مشاركة</string>
+    <string name="selection_action_share_sub">مشاركة عبر أي تطبيق مثبّت</string>
+    <string name="selection_action_send_nearby">إرسال (قريب)</string>
+    <string name="selection_action_send_nearby_sub">Quick Share / المشاركة القريبة / بلوتوث</string>
+    <string name="share_confirm_direct">مشاركة الفيديوهات مباشرة</string>
+    <string name="share_confirm_summary">%1$d فيديو • الإجمالي %2$s</string>
+    <string name="share_as_zip_title">مشاركة كملف ZIP مضغوط</string>
+    <string name="share_as_zip_sub">ضغط %1$s في الخلفية قبل المشاركة</string>
+    <string name="share_zip_progress_title">جاري تجهيز ملف ZIP…</string>
+    <string name="share_err_no_files">لا توجد فيديوهات قابلة للمشاركة</string>
+    <string name="share_err_too_many">تم تحديد عدد كبير جداً (الحد الأقصى %1$d)</string>
+    <string name="share_err_unreadable">تعذّر الوصول إلى الملفات المحددة</string>
+    <string name="share_skipped_missing_count">تم تخطي %1$d ملف غير متاح</string>
+    <string name="share_err_no_app">لا يوجد تطبيق متاح لاستقبال المشاركة</string>
+    <string name="share_err_permission">تم رفض الصلاحية أثناء مشاركة الملف</string>
+    <string name="send_nearby_quickshare_sub">نقل سريع عبر Wi-Fi / المشاركة القريبة</string>
+    <string name="send_nearby_bluetooth_sub">نقل عبر البلوتوث</string>
+    <string name="send_nearby_none_fallback">لم يُعثر على تطبيق نقل قريب مخصص — فتح قائمة المشاركة</string>
+    <string name="send_nearby_all_targets">خيارات مشاركة أخرى…</string>
+    <string name="send_nearby_dialog_sub">خيارات النقل القريب المتوفرة على جهازك</string>
+    <string name="sub_section_downloaded">الترجمات المحمّلة</string>
+    <string name="sub_downloaded_badge">محمّلة • %1$d KB</string>
+    <string name="sub_downloaded_translated_badge">مترجمة • %1$d KB</string>
+    <string name="sub_delete_downloaded_cd">حذف %1$s</string>
+    <string name="sub_delete_confirm_title">حذف الترجمة المحمّلة؟</string>
+    <string name="sub_delete_confirm_msg">هل تريد حذف «%1$s» وكل نسخها المترجمة من الكاش؟</string>
+    <string name="sub_deleted_toast">تم حذف الترجمة</string>
+    <string name="changelog_v90_23_title">الإصدار %1$s — القائمة العلوية، المشاركة/الإرسال، وحذف الترجمات</string>
+    <string name="changelog_v90_23_desc">• نقل مفتاح «المجلدات المخفية» إلى القائمة المنسدلة العلوية (الخيار الرابع) وتنسيق القائمة بالكامل لتتوافق مع سمة التطبيق.
+• إضافة «مشاركة» و«إرسال (قريب)» للفيديوهات والمجلدات المحددة بدون نسخ الفيديوهات الكبيرة مع تأكيد الكميات الكبيرة وخيار ZIP في الخلفية.
+• إضافة زر حذف ✕ بحجم 48dp للترجمات المحمّلة داخل المشغل مع تأكيد وتنظيف فوري للكاش.</string>
 </resources>

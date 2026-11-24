@@ -1034,7 +1034,36 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
             rowCard.addView(iconBadge)
             rowCard.addView(textCol)
-            rowCard.addView(tvArrow)
+            if (item.deleteAction != null) {
+                val btnDel = TextView(this).apply {
+                    text = "✕"
+                    textSize = 15f
+                    setTypeface(typeface, Typeface.BOLD)
+                    gravity = Gravity.CENTER
+                    setTextColor(Color.parseColor("#F43F5E"))
+                    minWidth = dp(48)
+                    minHeight = dp(48)
+                    contentDescription = item.deleteContentDescription ?: getString(R.string.delete_action)
+                    isClickable = true
+                    isFocusable = true
+                    layoutParams = LinearLayout.LayoutParams(dp(48), dp(48)).apply {
+                        marginStart = dp(4)
+                    }
+                    background = GradientDrawable().apply {
+                        shape = GradientDrawable.RECTANGLE
+                        cornerRadius = dp(12).toFloat()
+                        setColor(Color.argb(if (isLight) 24 else 32, 244, 63, 94))
+                        setStroke(dp(1), Color.argb(75, 244, 63, 94))
+                    }
+                    setOnClickListener {
+                        dialog.dismiss()
+                        item.deleteAction.invoke()
+                    }
+                }
+                rowCard.addView(btnDel)
+            } else {
+                rowCard.addView(tvArrow)
+            }
 
             if (item.isInteractive) {
                 rowCard.setOnTouchListener { v, event ->
@@ -2634,6 +2663,100 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         showVerticalSliderIndicator(isVolume = false, percent = percent)
     }
 
+    private fun confirmAndDeleteDownloadedSubtitle(entry: SubtitleAutoTranslator.DownloadedSubtitleEntry) {
+        val accent = PlaybackStore.getAccentColor(this)
+        val surface = PlaybackStore.getSurfaceColor(this)
+        val primaryText = PlaybackStore.getPrimaryTextColor(this)
+        val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(20), dp(22), dp(18))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(24).toFloat()
+                setColor(surface)
+                setStroke(dp(1), Color.argb(110, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+        }
+        val tvTitle = TextView(this).apply {
+            text = "🗑️  ${getString(R.string.sub_delete_confirm_title)}"
+            setTextColor(primaryText)
+            textSize = 17f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, 0, 0, dp(8))
+        }
+        val tvMsg = TextView(this).apply {
+            text = getString(R.string.sub_delete_confirm_msg, entry.displayName)
+            setTextColor(secondaryText)
+            textSize = 14f
+            setPadding(0, 0, 0, dp(16))
+        }
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+        }
+        val dlg = AlertDialog.Builder(this).setView(container).create()
+        dlg.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        val btnCancel = TextView(this).apply {
+            text = getString(R.string.cancel)
+            setTextColor(secondaryText)
+            textSize = 14f
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+            setOnClickListener {
+                dlg.dismiss()
+                showSubtitlesDialog()
+            }
+        }
+        val btnDelete = TextView(this).apply {
+            text = getString(R.string.delete_action)
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(20), dp(10), dp(20), dp(10))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(Color.parseColor("#E11D48"))
+            }
+            setOnClickListener {
+                dlg.dismiss()
+                val deletedPath = entry.file.absolutePath
+                val wasActive = (currentSubtitleSourceFile?.absolutePath == deletedPath) ||
+                    (currentVideoUri?.let { PlaybackStore.getVideoSubtitleCachePath(this@PlayerActivity, it) == deletedPath } == true)
+
+                SubtitleAutoTranslator.deleteDownloadedSubtitleAndRelatedCaches(filesDir, entry.file)
+                currentVideoUri?.let { vUri ->
+                    PlaybackStore.clearVideoSubtitleIfMatches(this@PlayerActivity, vUri, deletedPath)
+                }
+
+                if (wasActive) {
+                    cancelActiveSubtitleTranslation()
+                    externalSubtitleCues = emptyList()
+                    originalSubtitleCues = emptyList()
+                    lastTranslatedTexts = emptyList()
+                    currentSubtitleSourceFile = null
+                    currentSubtitleDisplayLabel = ""
+                    binding.tvDraggableSubtitle.text = ""
+                    binding.tvDraggableSubtitle.visibility = View.GONE
+                    if (::mediaPlayer.isInitialized) {
+                        mediaPlayer.spuTrack = -1
+                    }
+                }
+                showToastIndicator(getString(R.string.sub_deleted_toast))
+                // Reopen subtitle dialog immediately with updated list
+                showSubtitlesDialog()
+            }
+        }
+        btnRow.addView(btnCancel)
+        btnRow.addView(btnDelete)
+        container.addView(tvTitle)
+        container.addView(tvMsg)
+        container.addView(btnRow)
+        dlg.setOnCancelListener { showSubtitlesDialog() }
+        dlg.show()
+    }
+
     private fun showSubtitlesDialog() {
         val spuTracks = mediaPlayer.spuTracks ?: emptyArray()
         val preferredLangsStr = PlaybackStore.getPreferredSubtitleLanguages(this).joinToString(" → ") { it.uppercase() }
@@ -2756,6 +2879,44 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                         binding.tvDraggableSubtitle.text = ""
                         binding.tvDraggableSubtitle.visibility = View.GONE
                         mediaPlayer.spuTrack = -1
+                    }
+                )
+            )
+        }
+
+        val downloadedEntries = SubtitleAutoTranslator.listAppDownloadedSubtitles(filesDir)
+        downloadedEntries.forEachIndexed { dIdx, entry ->
+            val isActiveFile = (currentSubtitleSourceFile?.absolutePath == entry.file.absolutePath) ||
+                (currentVideoUri?.let { PlaybackStore.getVideoSubtitleCachePath(this, it) == entry.file.absolutePath } == true)
+            val sizeKb = (entry.sizeBytes / 1024L).coerceAtLeast(1L)
+            val subBadge = if (entry.isTranslated) {
+                getString(R.string.sub_downloaded_translated_badge, sizeKb)
+            } else {
+                getString(R.string.sub_downloaded_badge, sizeKb)
+            }
+            items.add(
+                PremiumMenuItem(
+                    iconEmoji = if (entry.isTranslated) "✨" else "📄",
+                    title = entry.displayName,
+                    subtitle = subBadge,
+                    isAccentHighlighted = isActiveFile,
+                    sectionHeader = if (dIdx == 0) getString(R.string.sub_section_downloaded) else null,
+                    deleteAction = { confirmAndDeleteDownloadedSubtitle(entry) },
+                    deleteContentDescription = getString(R.string.sub_delete_downloaded_cd, entry.displayName),
+                    onClick = {
+                        val cues = SubtitleParser.parseFromFile(entry.file)
+                        if (cues.isNotEmpty()) {
+                            currentSubtitleSourceFile = entry.file
+                            currentSubtitleDisplayLabel = entry.displayName
+                            currentVideoUri?.let { vUri ->
+                                PlaybackStore.saveVideoSubtitleCachePath(this, vUri, entry.file.absolutePath)
+                                PlaybackStore.saveVideoSubtitleUri(this, vUri, entry.file.absolutePath, entry.displayName)
+                            }
+                            applyLoadedSubtitleCues(cues, isTranslated = entry.isTranslated)
+                            showToastIndicator(getString(R.string.sub_loaded_count_format, cues.size))
+                        } else {
+                            showToastIndicator(getString(R.string.sub_err_corrupted))
+                        }
                     }
                 )
             )
