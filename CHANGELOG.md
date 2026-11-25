@@ -1,3 +1,9 @@
+## v90.27 (2026-11-25)
+- **Android Auto Support & Car UX Compliance**: Upgraded `VexoPlaybackService` with off-main-thread `MediaLibraryService` browsing & voice search (`AndroidAutoManager`), Car UX item caps & text truncation, safe disconnect/error handling, Audio-Only video-track disabling on car connect, and optional Auto-Resume.
+- **Structured Car Browse Tree**: Exposed a clean 3-section browse tree (**Favorites / Saved**, **Channels / Categories**, and **Recently Played**) across IPTV sources and local audio.
+- **Dedicated Android Auto Settings Screen**: Added **Android Auto Settings** (`AndroidAutoSettingsUi.kt`) with Enable/Disable toggle, Auto-Resume on car connect (default `false`), Audio-Only Mode on Car, Minimal Car Display (channel/group name only), and a live **Test / Check Android Auto Status** diagnostic dialog.
+- **R8/ProGuard & Build Hygiene**: Hardened `proguard-rules.pro` for Media3/Android Auto classes and unified AGP to `8.5.1` in `settings.gradle.kts`.
+
 ## v90.26 (2026-11-24)
 - **Bug Fix — Show Hidden Files / Folders**: Added Stage 4 background filesystem scanning (`collectHiddenFilesystemVideoPaths`) for dot-prefixed folders/files and `.nomedia` directories, removed the dot-file exclusion when hidden mode is enabled, triggered immediate background refresh on toggle, and added a clear Android 11+ All Files Access prompt instead of silently returning empty.
 - **Cutout-Safe Full-Screen Fit**: Enforced `SURFACE_BEST_FIT` as the default mode on video open and computed the display-cutout safe bounding box inside `changeSurfaceLayout()` so no edge, corner, or burned-in subtitle is cropped behind a camera notch or punch-hole.

@@ -784,4 +784,50 @@
     <string name="changelog_v90_26_title">الإصدار %1$s — إصلاح إظهار الملفات المخفية وملاءمة الفيديو الكاملة</string>
     <string name="changelog_v90_26_desc">• إصلاح خيار «المجلدات المخفية»: إضافة مسح خلفي مخصّص للمجلدات التي تبدأ بنقطة وملفات .nomedia مع تحديث فوري عند التبديل وتنبيه واضح لصلاحية الوصول لجميع الملفات في أندرويد 11+ بدلاً من الفشل الصامت.
 • تحسين وضع الملاءمة الافتراضي (Fit): يفتح كل فيديو بكامل أبعاده داخل المنطقة الآمنة بعيداً عن النوتش وثقب الكاميرا بدون أي قص أو مطّ، مع إعادة الملاءمة تلقائياً عند التدوير وتقسيم الشاشة والتبديل بين الفيديوهات.</string>
+    <string name="action_close">إغلاق</string>
+    <!-- v90.27 دعم Android Auto وإعدادات السيارة وتوحيد AGP -->
+    <string name="settings_android_auto_title">إعدادات Android Auto</string>
+    <string name="aa_hub_sub_enabled">تصفح السيارة، وضع الصوت فقط، وفحص الاتصال</string>
+    <string name="aa_hub_sub_disabled">معطّل لشاشات السيارة</string>
+    <string name="aa_status_connected">متصل حالياً بـ Android Auto</string>
+    <string name="aa_status_ready">جاهز للاتصال بـ Android Auto</string>
+    <string name="aa_status_disabled">دعم Android Auto متوقف</string>
+    <string name="aa_enable_title">تفعيل دعم Android Auto</string>
+    <string name="aa_enable_on_sub">السماح لشاشة السيارة باكتشاف وتصفح وسائط V Player</string>
+    <string name="aa_enable_off_sub">إيقاف تصفح الوسائط وطلبات الاتصال من السيارة</string>
+    <string name="aa_auto_resume_title">الاستئناف التلقائي عند الاتصال بالسيارة</string>
+    <string name="aa_auto_resume_on_sub">تشغيل آخر عنصر تلقائياً فور اتصال الجهاز بـ Android Auto</string>
+    <string name="aa_auto_resume_off_sub">انتظار التشغيل اليدوي بعد الاتصال (الافتراضي)</string>
+    <string name="aa_audio_only_title">وضع الصوت فقط أثناء القيادة</string>
+    <string name="aa_audio_only_on_sub">إعطاء الأولوية للصوت وتقليل تحميل الصور الثقيلة أثناء القيادة</string>
+    <string name="aa_audio_only_off_sub">تحميل البيانات والصور المصغرة بشكل اعتيادي</string>
+    <string name="aa_minimal_display_title">عرض اسم المجموعة/القناة فقط</string>
+    <string name="aa_minimal_display_on_sub">إخفاء التفاصيل الإضافية لتقليل التشتيت على شاشة السيارة</string>
+    <string name="aa_minimal_display_off_sub">عرض اسم القناة مع تفاصيل إضافية مختصرة</string>
+    <string name="aa_test_status_title">اختبار / فحص حالة اتصال Android Auto</string>
+    <string name="aa_test_status_sub">التحقق من جاهزية الخدمة، الاتصال الحالي، وعدد العناصر الجاهزة</string>
+    <string name="aa_tree_favorites">المفضلة / المحفوظات</string>
+    <string name="aa_tree_categories">القنوات / الفئات</string>
+    <string name="aa_tree_recent">المشغّل مؤخراً</string>
+    <string name="aa_tree_local_audio">الصوتيات المحلية</string>
+    <string name="aa_tree_playlists">قوائم التشغيل</string>
+    <string name="aa_category_count_fmt">%1$d عنصر</string>
+    <string name="aa_diag_yes">نعم</string>
+    <string name="aa_diag_no">لا</string>
+    <string name="aa_diag_support_enabled">• تفعيل Android Auto: %1$s</string>
+    <string name="aa_diag_service_ready">• جاهزية الخدمة وإعلان السيارة (Manifest): %1$s</string>
+    <string name="aa_diag_car_connected">• حالة الاتصال بالسيارة: متصل (%1$s)</string>
+    <string name="aa_diag_car_not_connected">• حالة الاتصال بالسيارة: غير متصل حالياً</string>
+    <string name="aa_diag_media_active">• الوسائط الحالية: %1$s (%2$s)</string>
+    <string name="aa_diag_media_idle">• الوسائط الحالية: في وضع الاستعداد</string>
+    <string name="aa_diag_playing">قيد التشغيل</string>
+    <string name="aa_diag_paused">متوقف مؤقتاً</string>
+    <string name="aa_diag_library_summary">• الجاهز لشاشة السيارة: %1$d مفضلة، %2$d فئة، %3$d حديثة</string>
+    <string name="aa_diag_audio_only_state">• وضع الصوت فقط أثناء القيادة: %1$s</string>
+    <string name="aa_diag_auto_resume_state">• الاستئناف التلقائي عند الاتصال: %1$s</string>
+    <string name="changelog_v90_27_title">الإصدار %1$s — دعم Android Auto المحسّن، إعدادات السيارة، وتوحيد AGP</string>
+    <string name="changelog_v90_27_desc">• ترقية خدمة الوسائط (VexoPlaybackService) لـ Android Auto بالتشغيل والتصفح والبحث الصوتي خارج الخيط الرئيسي مع قيود الأمان أثناء القيادة.
+• تنظيم شجرة تصفح سريعة ومختصرة لشاشة السيارة: المفضلة/المحفوظات، القنوات/الفئات، والمشغّل مؤخراً.
+• إضافة شاشة «إعدادات Android Auto» المستقلة (التفعيل/التعطيل، الاستئناف التلقائي، وضع الصوت فقط أثناء القيادة، عرض اسم القناة/المجموعة فقط، وزر فحص حالة الاتصال).
+• تعزيز قواعد R8/ProGuard لحماية خدمة الوسائط وفئات Android Auto وتوحيد إصدار AGP إلى 8.5.1 في settings.gradle.kts.</string>
 </resources>

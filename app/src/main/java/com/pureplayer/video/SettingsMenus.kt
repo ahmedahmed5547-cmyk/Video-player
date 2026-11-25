@@ -399,6 +399,17 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
                 showSettingsSubtitlesPlaybackPage()
             }
         ),
+        PremiumMenuItem(
+            iconEmoji = "🚗",
+            title = getString(R.string.settings_android_auto_title),
+            subtitle = if (PlaybackStore.isAndroidAutoEnabled(this)) getString(R.string.aa_hub_sub_enabled) else getString(R.string.aa_hub_sub_disabled),
+            isAccentHighlighted = PlaybackStore.isAndroidAutoEnabled(this),
+            statusChip = if (PlaybackStore.isAndroidAutoEnabled(this)) getString(R.string.enabled_label) else getString(R.string.disabled_label),
+            onClick = {
+                pushSettingsBackStack { showProSettingsDialog(false) }
+                showAndroidAutoSettingsPage()
+            }
+        ),
         // Group 2: Appearance & Language (Sort & Layout is unified in the top 3-line menu)
         PremiumMenuItem(
             iconEmoji = "🎨",
@@ -1135,11 +1146,19 @@ internal fun MainActivity.showChangelogPage() {
     val allConfiguredReleases = listOf(
         ChangelogReleaseEntry(
             version = verName,
+            date = "2026-11-25",
+            iconEmoji = "🚗",
+            title = getString(R.string.changelog_v90_27_title, verName),
+            description = getString(R.string.changelog_v90_27_desc),
+            isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.26",
             date = "2026-11-24",
             iconEmoji = "👁️",
-            title = getString(R.string.changelog_v90_26_title, verName),
+            title = getString(R.string.changelog_v90_26_title, "90.26"),
             description = getString(R.string.changelog_v90_26_desc),
-            isLatest = true
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.25",

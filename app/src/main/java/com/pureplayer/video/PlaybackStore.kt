@@ -131,6 +131,10 @@ object PlaybackStore {
     private const val KEY_SUB_DELETE_CONFIRM = "vexo_sub_delete_confirm_v1"
     private const val KEY_VAULT_AUTOLOCK_MODE = "vexo_vault_autolock_mode_v1"
     private const val KEY_VAULT_AUTOLOCK_DELAY_SEC = "vexo_vault_autolock_delay_sec_v1"
+    private const val KEY_ANDROID_AUTO_ENABLED = "vexo_android_auto_enabled_v1"
+    private const val KEY_ANDROID_AUTO_AUTO_RESUME = "vexo_android_auto_auto_resume_v1"
+    private const val KEY_ANDROID_AUTO_AUDIO_ONLY = "vexo_android_auto_audio_only_v1"
+    private const val KEY_ANDROID_AUTO_MINIMAL_DISPLAY = "vexo_android_auto_minimal_display_v1"
 
     // Vault Auto-Lock modes:
     // 0 = Immediately when leaving Vault section (safest default)
@@ -1043,6 +1047,42 @@ object PlaybackStore {
     fun setHdrModeIndex(context: Context, idx: Int) {
         prefs(context).edit().putInt(KEY_HDR_MODE_IDX, idx.coerceIn(0, 2)).apply()
     }
+
+    // --- Android Auto Settings (v90.27) ---
+    fun isAndroidAutoEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ANDROID_AUTO_ENABLED, true)
+
+    fun setAndroidAutoEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_ANDROID_AUTO_ENABLED, enabled).apply()
+    }
+
+    fun isAndroidAutoAutoResumeEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ANDROID_AUTO_AUTO_RESUME, false)
+
+    fun setAndroidAutoAutoResume(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_ANDROID_AUTO_AUTO_RESUME, enabled).apply()
+    }
+
+    fun isAndroidAutoAudioOnlyOnCar(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ANDROID_AUTO_AUDIO_ONLY, true)
+
+    fun setAndroidAutoAudioOnlyOnCar(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_ANDROID_AUTO_AUDIO_ONLY, enabled).apply()
+    }
+
+    fun isAndroidAutoMinimalDisplay(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ANDROID_AUTO_MINIMAL_DISPLAY, true)
+
+    fun setAndroidAutoMinimalDisplay(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_ANDROID_AUTO_MINIMAL_DISPLAY, enabled).apply()
+    }
+
+    fun getAndroidAutoConfig(context: Context): AndroidAutoConfig = AndroidAutoConfig(
+        enabled = isAndroidAutoEnabled(context),
+        autoResumeOnConnect = isAndroidAutoAutoResumeEnabled(context),
+        audioOnlyOnCar = isAndroidAutoAudioOnlyOnCar(context),
+        minimalCarDisplay = isAndroidAutoMinimalDisplay(context)
+    )
 
     fun formatTime(timeMs: Long): String {
         val totalSeconds = TimeUnit.MILLISECONDS.toSeconds(timeMs).coerceAtLeast(0L)

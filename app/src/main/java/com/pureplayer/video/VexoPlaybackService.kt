@@ -1,18 +1,19 @@
 package com.pureplayer.video
 
 import android.app.PendingIntent
-import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.provider.MediaStore
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.CommandButton
@@ -24,9 +25,15 @@ import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 data class BackgroundPlaybackState(
     val isActive: Boolean = false,
@@ -41,14 +48,17 @@ data class BackgroundPlaybackState(
 
 /**
  * Shared foreground Media3 MediaLibraryService powering:
- * 1) Android Auto audio browse tree (Artists, Albums, Tracks, Genres, Playlists, Recently Played) & voice search.
- * 2) Background Audio Library playback with notification & lock-screen controls.
- * 3) Video -> Audio-Only background mode with seamless position continuity, sleep timer, speed & AudioFX.
+ * 1) Android Auto browse tree (Favorites, Channels/Categories, Recently Played) & voice search off the main thread.
+ * 2) Car UX Restrictions: Audio-Only car track selection, minimal distraction metadata, safe disconnect handling, and optional Auto-Resume.
+ * 3) Background Audio Library playback with notification & lock-screen controls.
+ * 4) Video -> Audio-Only background mode with seamless position continuity, sleep timer, speed & AudioFX.
  */
 class VexoPlaybackService : MediaLibraryService() {
 
     private var player: ExoPlayer? = null
     private var mediaLibrarySession: MediaLibrarySession? = null
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     companion object {
         const val ACTION_PLAY_AUDIO_ONLY_VIDEO = "com.pureplayer.video.ACTION_PLAY_AUDIO_ONLY_VIDEO"
@@ -69,16 +79,6 @@ class VexoPlaybackService : MediaLibraryService() {
         const val EXTRA_QUEUE_TITLES = "extra_queue_titles"
         const val EXTRA_QUEUE_ARTISTS = "extra_queue_artists"
         const val EXTRA_START_INDEX = "extra_start_index"
-
-        private const val NODE_ROOT = "vexo_root"
-        private const val NODE_ARTISTS = "vexo_artists"
-        private const val NODE_ALBUMS = "vexo_albums"
-        private const val NODE_TRACKS = "vexo_tracks"
-        private const val NODE_GENRES = "vexo_genres"
-        private const val NODE_PLAYLISTS = "vexo_playlists"
-        private const val NODE_RECENT = "vexo_recent"
-
-        private val ALBUM_ART_BASE_URI: Uri = Uri.parse("content://media/external/audio/albumart")
 
         private val _playbackState = MutableStateFlow(BackgroundPlaybackState())
         val playbackState: StateFlow<BackgroundPlaybackState> = _playbackState.asStateFlow()
@@ -132,6 +132,8 @@ class VexoPlaybackService : MediaLibraryService() {
 
     override fun onCreate() {
         super.onCreate()
+        AndroidAutoManager.onServiceStarted()
+
         val audioAttrs = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
@@ -144,7 +146,9 @@ class VexoPlaybackService : MediaLibraryService() {
 
         exo.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                VexoAudioEffectsManager.attachToAudioSession(applicationContext, audioSessionId)
+                runCatching {
+                    VexoAudioEffectsManager.attachToAudioSession(applicationContext, audioSessionId)
+                }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -159,6 +163,11 @@ class VexoPlaybackService : MediaLibraryService() {
                 if (playbackState == Player.STATE_ENDED) {
                     SleepTimerManager.onMediaTrackEnded()
                 }
+                publishState(exo)
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                // Gracefully publish idle/error state without crashing Android Auto or system UI
                 publishState(exo)
             }
         })
@@ -184,7 +193,7 @@ class VexoPlaybackService : MediaLibraryService() {
         )
 
         val closeBtn = CommandButton.Builder()
-            .setDisplayName("Close")
+            .setDisplayName(getString(R.string.action_close))
             .setIconResId(android.R.drawable.ic_menu_close_clear_cancel)
             .setSessionCommand(SessionCommand(CUSTOM_CMD_CLOSE, Bundle.EMPTY))
             .build()
@@ -193,6 +202,54 @@ class VexoPlaybackService : MediaLibraryService() {
             .setSessionActivity(sessionActivityIntent)
             .setCustomLayout(ImmutableList.of(closeBtn))
             .build()
+    }
+
+    private fun applyCarAudioOnlyTrackPolicy() {
+        val exo = player ?: return
+        val config = PlaybackStore.getAndroidAutoConfig(applicationContext)
+        val disableVideoTracks = AndroidAutoManager.isAnyCarConnected() && config.enabled && config.audioOnlyOnCar
+        runCatching {
+            exo.trackSelectionParameters = exo.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, disableVideoTracks)
+                .build()
+        }
+    }
+
+    private fun triggerAutoResumeIfEligible() {
+        val config = PlaybackStore.getAndroidAutoConfig(applicationContext)
+        if (!config.enabled || !config.autoResumeOnConnect) return
+        val exo = player ?: return
+        if (exo.isPlaying) return
+
+        if (exo.currentMediaItem != null) {
+            mainHandler.post {
+                val p = player ?: return@post
+                if (!p.isPlaying && p.currentMediaItem != null) {
+                    applyCarAudioOnlyTrackPolicy()
+                    p.prepare()
+                    p.play()
+                }
+            }
+            return
+        }
+
+        serviceScope.launch {
+            val resumeItem = runCatching {
+                AndroidAutoManager.resolveAutoResumeItem(applicationContext)
+            }.getOrNull() ?: return@launch
+
+            mainHandler.post {
+                val p = player ?: return@post
+                if (!p.isPlaying && p.currentMediaItem == null && AndroidAutoManager.isAnyCarConnected()) {
+                    applyCarAudioOnlyTrackPolicy()
+                    p.setMediaItem(resumeItem)
+                    p.prepare()
+                    p.play()
+                    publishState(p)
+                }
+            }
+        }
     }
 
     private fun stopAndCloseCompletely() {
@@ -224,15 +281,19 @@ class VexoPlaybackService : MediaLibraryService() {
                                 MediaMetadata.Builder()
                                     .setTitle(title)
                                     .setArtist(sub)
+                                    .setSubtitle(sub)
+                                    .setIsBrowsable(false)
+                                    .setIsPlayable(true)
                                     .build()
                             )
                             .build()
+                        applyCarAudioOnlyTrackPolicy()
                         exo.setMediaItem(item)
                         exo.prepare()
                         if (pos > 0L) exo.seekTo(pos)
                         exo.setPlaybackSpeed(speed)
                         exo.play()
-                        VexoAudioEffectsManager.attachToAudioSession(applicationContext, exo.audioSessionId)
+                        runCatching { VexoAudioEffectsManager.attachToAudioSession(applicationContext, exo.audioSessionId) }
                         publishState(exo)
                     }
                 }
@@ -244,21 +305,28 @@ class VexoPlaybackService : MediaLibraryService() {
                     if (uris.isNotEmpty()) {
                         isCurrentSessionFromVideo = false
                         val mediaItems = uris.mapIndexed { idx, u ->
+                            val trackTitle = titles.getOrElse(idx) { "Audio Track" }
+                            val trackArtist = artists.getOrElse(idx) { "V Player" }
                             MediaItem.Builder()
                                 .setMediaId(u)
                                 .setUri(Uri.parse(u))
                                 .setMediaMetadata(
                                     MediaMetadata.Builder()
-                                        .setTitle(titles.getOrElse(idx) { "Audio Track" })
-                                        .setArtist(artists.getOrElse(idx) { "V Player" })
+                                        .setTitle(trackTitle)
+                                        .setArtist(trackArtist)
+                                        .setSubtitle(trackArtist)
+                                        .setIsBrowsable(false)
+                                        .setIsPlayable(true)
+                                        .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
                                         .build()
                                 )
                                 .build()
                         }
+                        applyCarAudioOnlyTrackPolicy()
                         exo.setMediaItems(mediaItems, startIdx, 0L)
                         exo.prepare()
                         exo.play()
-                        VexoAudioEffectsManager.attachToAudioSession(applicationContext, exo.audioSessionId)
+                        runCatching { VexoAudioEffectsManager.attachToAudioSession(applicationContext, exo.audioSessionId) }
                         publishState(exo)
                     }
                 }
@@ -278,6 +346,14 @@ class VexoPlaybackService : MediaLibraryService() {
         return super.onStartCommand(intent, flags, startId)
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val exo = player
+        if (exo == null || !exo.playWhenReady || exo.mediaItemCount == 0) {
+            stopSelf()
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
     private fun publishState(exo: ExoPlayer) {
         val current = exo.currentMediaItem
         val meta = current?.mediaMetadata
@@ -286,7 +362,7 @@ class VexoPlaybackService : MediaLibraryService() {
             isPlaying = exo.isPlaying,
             isFromVideoAudioOnly = isCurrentSessionFromVideo,
             title = meta?.title?.toString() ?: "V Player",
-            subtitle = meta?.artist?.toString() ?: "",
+            subtitle = meta?.artist?.toString() ?: meta?.subtitle?.toString() ?: "",
             currentUri = current?.localConfiguration?.uri?.toString() ?: current?.mediaId ?: "",
             positionMs = exo.currentPosition.coerceAtLeast(0L),
             durationMs = exo.duration.coerceAtLeast(0L)
@@ -298,10 +374,26 @@ class VexoPlaybackService : MediaLibraryService() {
     }
 
     private val libraryCallback = object : MediaLibrarySession.Callback {
+
         override fun onConnect(
             session: MediaSession,
             controller: MediaSession.ControllerInfo
         ): MediaSession.ConnectionResult {
+            val isCar = AndroidAutoManager.onControllerConnected(controller.packageName)
+            val config = PlaybackStore.getAndroidAutoConfig(applicationContext)
+
+            if (isCar && !config.enabled) {
+                // Reject Android Auto connection cleanly when user disabled Android Auto support
+                return MediaSession.ConnectionResult.reject()
+            }
+
+            if (isCar) {
+                mainHandler.post {
+                    applyCarAudioOnlyTrackPolicy()
+                    triggerAutoResumeIfEligible()
+                }
+            }
+
             val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
                 .buildUpon()
                 .add(SessionCommand(CUSTOM_CMD_CLOSE, Bundle.EMPTY))
@@ -309,6 +401,17 @@ class VexoPlaybackService : MediaLibraryService() {
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(sessionCommands)
                 .build()
+        }
+
+        override fun onDisconnected(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ) {
+            AndroidAutoManager.onControllerDisconnected(controller.packageName)
+            mainHandler.post {
+                applyCarAudioOnlyTrackPolicy()
+            }
+            super.onDisconnected(session, controller)
         }
 
         override fun onCustomCommand(
@@ -329,8 +432,35 @@ class VexoPlaybackService : MediaLibraryService() {
             browser: MediaSession.ControllerInfo,
             params: LibraryParams?
         ): ListenableFuture<LibraryResult<MediaItem>> {
-            val rootItem = buildBrowsableNode(NODE_ROOT, "V Player", MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+            val isCar = AndroidAutoUxPolicy.isAndroidAutoControllerPackage(browser.packageName)
+            val config = PlaybackStore.getAndroidAutoConfig(applicationContext)
+            if (isCar && !config.enabled) {
+                return Futures.immediateFuture(LibraryResult.ofError(LibraryResult.RESULT_ERROR_PERMISSION_DENIED))
+            }
+            val rootItem = AndroidAutoManager.buildRootNode(applicationContext)
             return Futures.immediateFuture(LibraryResult.ofItem(rootItem, params))
+        }
+
+        override fun onGetItem(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            mediaId: String
+        ): ListenableFuture<LibraryResult<MediaItem>> {
+            val future = SettableFuture.create<LibraryResult<MediaItem>>()
+            serviceScope.launch {
+                val result = runCatching {
+                    val item = AndroidAutoManager.resolveMediaItem(applicationContext, mediaId)
+                    if (item != null) {
+                        LibraryResult.ofItem(item, null)
+                    } else {
+                        LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
+                    }
+                }.getOrElse {
+                    LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN)
+                }
+                future.set(result)
+            }
+            return future
         }
 
         override fun onGetChildren(
@@ -341,39 +471,24 @@ class VexoPlaybackService : MediaLibraryService() {
             pageSize: Int,
             params: LibraryParams?
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
-            val items: List<MediaItem> = when {
-                parentId == NODE_ROOT -> listOf(
-                    buildBrowsableNode(NODE_TRACKS, "Tracks", MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
-                    buildBrowsableNode(NODE_ARTISTS, "Artists", MediaMetadata.MEDIA_TYPE_FOLDER_ARTISTS),
-                    buildBrowsableNode(NODE_ALBUMS, "Albums", MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS),
-                    buildBrowsableNode(NODE_GENRES, "Genres", MediaMetadata.MEDIA_TYPE_FOLDER_GENRES),
-                    buildBrowsableNode(NODE_PLAYLISTS, "Playlists", MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS),
-                    buildBrowsableNode(NODE_RECENT, "Recently Played", MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
-                )
-                parentId == NODE_TRACKS || parentId == NODE_RECENT -> queryAudioMediaItems(limit = 60)
-                parentId == NODE_ARTISTS -> queryArtistNodes()
-                parentId == NODE_ALBUMS -> queryAlbumNodes()
-                parentId == NODE_GENRES -> queryGenreNodes()
-                parentId == NODE_PLAYLISTS -> queryPlaylistMediaItems()
-                parentId.startsWith("artist_") -> {
-                    val artistName = parentId.removePrefix("artist_")
-                    queryAudioMediaItems(artistFilter = artistName, limit = 60)
+            val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+            val isCar = AndroidAutoUxPolicy.isAndroidAutoControllerPackage(browser.packageName)
+            serviceScope.launch {
+                val result = runCatching {
+                    val items = AndroidAutoManager.loadChildren(
+                        context = applicationContext,
+                        parentId = parentId,
+                        page = page,
+                        pageSize = pageSize,
+                        isCarController = isCar
+                    )
+                    LibraryResult.ofItemList(ImmutableList.copyOf(items), params)
+                }.getOrElse {
+                    LibraryResult.ofItemList(ImmutableList.of(), params)
                 }
-                parentId.startsWith("album_") -> {
-                    val albumId = parentId.removePrefix("album_").toLongOrNull() ?: -1L
-                    queryAudioMediaItems(albumIdFilter = albumId, limit = 60)
-                }
-                parentId.startsWith("genre_") -> {
-                    val genreId = parentId.removePrefix("genre_").toLongOrNull() ?: -1L
-                    queryGenreTracksMediaItems(genreId)
-                }
-                parentId.startsWith("playlist_") -> {
-                    val plId = parentId.removePrefix("playlist_").toLongOrNull() ?: -1L
-                    queryPlaylistTracksMediaItems(plId)
-                }
-                else -> emptyList()
+                future.set(result)
             }
-            return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+            return future
         }
 
         override fun onSearch(
@@ -382,9 +497,20 @@ class VexoPlaybackService : MediaLibraryService() {
             query: String,
             params: LibraryParams?
         ): ListenableFuture<LibraryResult<Void>> {
-            val matches = queryAudioMediaItems(filterQuery = query, limit = 25)
-            session.notifySearchResultChanged(browser, query, matches.size, params)
-            return Futures.immediateFuture(LibraryResult.ofVoid(params))
+            val future = SettableFuture.create<LibraryResult<Void>>()
+            val isCar = AndroidAutoUxPolicy.isAndroidAutoControllerPackage(browser.packageName)
+            serviceScope.launch {
+                runCatching {
+                    val matches = AndroidAutoManager.searchMedia(applicationContext, query, isCar)
+                    mainHandler.post {
+                        runCatching {
+                            session.notifySearchResultChanged(browser, query, matches.size, params)
+                        }
+                    }
+                }
+                future.set(LibraryResult.ofVoid(params))
+            }
+            return future
         }
 
         override fun onGetSearchResult(
@@ -395,8 +521,19 @@ class VexoPlaybackService : MediaLibraryService() {
             pageSize: Int,
             params: LibraryParams?
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
-            val matches = queryAudioMediaItems(filterQuery = query, limit = 25)
-            return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(matches), params))
+            val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+            val isCar = AndroidAutoUxPolicy.isAndroidAutoControllerPackage(browser.packageName)
+            serviceScope.launch {
+                val result = runCatching {
+                    val matches = AndroidAutoManager.searchMedia(applicationContext, query, isCar)
+                    val paged = AndroidAutoUxPolicy.paginate(matches, page, pageSize, AndroidAutoUxPolicy.MAX_SEARCH_ITEMS)
+                    LibraryResult.ofItemList(ImmutableList.copyOf(paged), params)
+                }.getOrElse {
+                    LibraryResult.ofItemList(ImmutableList.of(), params)
+                }
+                future.set(result)
+            }
+            return future
         }
 
         override fun onAddMediaItems(
@@ -404,258 +541,49 @@ class VexoPlaybackService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>
         ): ListenableFuture<MutableList<MediaItem>> {
-            val resolved = mediaItems.map { item ->
-                if (item.localConfiguration != null) {
-                    item
+            val future = SettableFuture.create<MutableList<MediaItem>>()
+            serviceScope.launch {
+                val resolved = runCatching {
+                    mediaItems.map { item ->
+                        if (item.localConfiguration != null) {
+                            item
+                        } else {
+                            AndroidAutoManager.resolveMediaItem(applicationContext, item.mediaId)
+                                ?: runCatching {
+                                    item.buildUpon().setUri(Uri.parse(item.mediaId)).build()
+                                }.getOrDefault(item)
+                        }
+                    }.toMutableList()
+                }.getOrDefault(mediaItems)
+                future.set(resolved)
+            }
+            return future
+        }
+
+        override fun onPlaybackResumption(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val future = SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
+            serviceScope.launch {
+                val item = runCatching {
+                    AndroidAutoManager.resolveAutoResumeItem(applicationContext)
+                }.getOrNull()
+                if (item != null) {
+                    future.set(MediaSession.MediaItemsWithStartPosition(listOf(item), 0, 0L))
                 } else {
-                    item.buildUpon().setUri(Uri.parse(item.mediaId)).build()
-                }
-            }.toMutableList()
-            return Futures.immediateFuture(resolved)
-        }
-    }
-
-    private fun buildBrowsableNode(
-        id: String,
-        title: String,
-        mediaType: Int,
-        subtitle: String? = null,
-        artworkUri: Uri? = null
-    ): MediaItem {
-        val metaBuilder = MediaMetadata.Builder()
-            .setTitle(title)
-            .setIsBrowsable(true)
-            .setIsPlayable(false)
-            .setMediaType(mediaType)
-        if (!subtitle.isNullOrBlank()) metaBuilder.setSubtitle(subtitle)
-        if (artworkUri != null) metaBuilder.setArtworkUri(artworkUri)
-        return MediaItem.Builder()
-            .setMediaId(id)
-            .setMediaMetadata(metaBuilder.build())
-            .build()
-    }
-
-    private fun queryArtistNodes(): List<MediaItem> {
-        val seen = linkedMapOf<String, Int>()
-        runCatching {
-            contentResolver.query(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                arrayOf(MediaStore.Audio.Media.ARTIST),
-                "${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DURATION} > 5000",
-                null,
-                "${MediaStore.Audio.Media.ARTIST} ASC"
-            )?.use { c ->
-                val col = c.getColumnIndex(MediaStore.Audio.Media.ARTIST)
-                while (c.moveToNext() && seen.size < 60) {
-                    val name = if (col != -1) (c.getString(col)?.takeIf { it.isNotBlank() } ?: "Unknown Artist") else "Unknown Artist"
-                    seen[name] = (seen[name] ?: 0) + 1
+                    future.set(MediaSession.MediaItemsWithStartPosition(emptyList(), C.INDEX_UNSET, C.TIME_UNSET))
                 }
             }
+            return future
         }
-        return seen.map { (name, count) ->
-            buildBrowsableNode("artist_$name", name, MediaMetadata.MEDIA_TYPE_ARTIST, "$count tracks")
-        }
-    }
-
-    private fun queryAlbumNodes(): List<MediaItem> {
-        val out = mutableListOf<MediaItem>()
-        val seen = hashSetOf<Long>()
-        runCatching {
-            contentResolver.query(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                arrayOf(MediaStore.Audio.Media.ALBUM_ID, MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.ARTIST),
-                "${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DURATION} > 5000",
-                null,
-                "${MediaStore.Audio.Media.ALBUM} ASC"
-            )?.use { c ->
-                val idCol = c.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
-                val albumCol = c.getColumnIndex(MediaStore.Audio.Media.ALBUM)
-                val artistCol = c.getColumnIndex(MediaStore.Audio.Media.ARTIST)
-                while (c.moveToNext() && out.size < 60) {
-                    val albumId = if (idCol != -1) c.getLong(idCol) else -1L
-                    if (albumId <= 0L || !seen.add(albumId)) continue
-                    val album = if (albumCol != -1) (c.getString(albumCol) ?: "Unknown Album") else "Unknown Album"
-                    val artist = if (artistCol != -1) (c.getString(artistCol) ?: "") else ""
-                    val artUri = ContentUris.withAppendedId(ALBUM_ART_BASE_URI, albumId)
-                    out.add(buildBrowsableNode("album_$albumId", album, MediaMetadata.MEDIA_TYPE_ALBUM, artist, artUri))
-                }
-            }
-        }
-        return out
-    }
-
-    private fun queryGenreNodes(): List<MediaItem> {
-        val out = mutableListOf<MediaItem>()
-        runCatching {
-            contentResolver.query(
-                MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI,
-                arrayOf(MediaStore.Audio.Genres._ID, MediaStore.Audio.Genres.NAME),
-                null,
-                null,
-                "${MediaStore.Audio.Genres.NAME} ASC"
-            )?.use { c ->
-                val idCol = c.getColumnIndexOrThrow(MediaStore.Audio.Genres._ID)
-                val nameCol = c.getColumnIndexOrThrow(MediaStore.Audio.Genres.NAME)
-                while (c.moveToNext() && out.size < 50) {
-                    val gid = c.getLong(idCol)
-                    val gname = c.getString(nameCol)?.takeIf { it.isNotBlank() } ?: continue
-                    out.add(buildBrowsableNode("genre_$gid", gname, MediaMetadata.MEDIA_TYPE_GENRE))
-                }
-            }
-        }
-        return out
-    }
-
-    private fun queryGenreTracksMediaItems(genreId: Long): List<MediaItem> {
-        if (genreId <= 0L) return emptyList()
-        val out = mutableListOf<MediaItem>()
-        runCatching {
-            val uri = MediaStore.Audio.Genres.Members.getContentUri("external", genreId)
-            contentResolver.query(
-                uri,
-                arrayOf(
-                    MediaStore.Audio.Media._ID,
-                    MediaStore.Audio.Media.TITLE,
-                    MediaStore.Audio.Media.ARTIST,
-                    MediaStore.Audio.Media.ALBUM,
-                    MediaStore.Audio.Media.ALBUM_ID
-                ),
-                null,
-                null,
-                "${MediaStore.Audio.Media.TITLE} ASC"
-            )?.use { c ->
-                val idCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-                val titleCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-                val artistCol = c.getColumnIndex(MediaStore.Audio.Media.ARTIST)
-                val albumCol = c.getColumnIndex(MediaStore.Audio.Media.ALBUM)
-                val albumIdCol = c.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
-                while (c.moveToNext() && out.size < 60) {
-                    val id = c.getLong(idCol)
-                    val title = c.getString(titleCol) ?: continue
-                    val artist = if (artistCol != -1) (c.getString(artistCol) ?: "Unknown") else "Unknown"
-                    val album = if (albumCol != -1) (c.getString(albumCol) ?: "Unknown") else "Unknown"
-                    val albumId = if (albumIdCol != -1) c.getLong(albumIdCol) else -1L
-                    val trackUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
-                    val artUri = if (albumId > 0L) ContentUris.withAppendedId(ALBUM_ART_BASE_URI, albumId) else null
-                    val metaBuilder = MediaMetadata.Builder()
-                        .setTitle(title)
-                        .setArtist(artist)
-                        .setAlbumTitle(album)
-                        .setIsBrowsable(false)
-                        .setIsPlayable(true)
-                        .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                    if (artUri != null) metaBuilder.setArtworkUri(artUri)
-                    out.add(
-                        MediaItem.Builder()
-                            .setMediaId(trackUri.toString())
-                            .setUri(trackUri)
-                            .setMediaMetadata(metaBuilder.build())
-                            .build()
-                    )
-                }
-            }
-        }
-        return out
-    }
-
-    private fun queryAudioMediaItems(
-        filterQuery: String = "",
-        artistFilter: String? = null,
-        albumIdFilter: Long? = null,
-        limit: Int = 60
-    ): List<MediaItem> {
-        val out = mutableListOf<MediaItem>()
-        val q = filterQuery.trim().lowercase()
-        runCatching {
-            val projection = arrayOf(
-                MediaStore.Audio.Media._ID,
-                MediaStore.Audio.Media.TITLE,
-                MediaStore.Audio.Media.ARTIST,
-                MediaStore.Audio.Media.ALBUM,
-                MediaStore.Audio.Media.ALBUM_ID
-            )
-            contentResolver.query(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                projection,
-                "${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DURATION} > 5000",
-                null,
-                "${MediaStore.Audio.Media.DATE_ADDED} DESC"
-            )?.use { c ->
-                val idCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-                val titleCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-                val artistCol = c.getColumnIndex(MediaStore.Audio.Media.ARTIST)
-                val albumCol = c.getColumnIndex(MediaStore.Audio.Media.ALBUM)
-                val albumIdCol = c.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
-                while (c.moveToNext() && out.size < limit) {
-                    val id = c.getLong(idCol)
-                    val title = c.getString(titleCol) ?: continue
-                    val artist = if (artistCol != -1) (c.getString(artistCol) ?: "Unknown") else "Unknown"
-                    val album = if (albumCol != -1) (c.getString(albumCol) ?: "Unknown") else "Unknown"
-                    val albumId = if (albumIdCol != -1) c.getLong(albumIdCol) else -1L
-                    if (artistFilter != null && !artist.equals(artistFilter, ignoreCase = true)) continue
-                    if (albumIdFilter != null && albumId != albumIdFilter) continue
-                    if (q.isNotEmpty() && !title.lowercase().contains(q) && !artist.lowercase().contains(q) && !album.lowercase().contains(q)) {
-                        continue
-                    }
-                    val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
-                    val artUri = if (albumId > 0L) ContentUris.withAppendedId(ALBUM_ART_BASE_URI, albumId) else null
-                    val metaBuilder = MediaMetadata.Builder()
-                        .setTitle(title)
-                        .setArtist(artist)
-                        .setAlbumTitle(album)
-                        .setIsBrowsable(false)
-                        .setIsPlayable(true)
-                        .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                    if (artUri != null) metaBuilder.setArtworkUri(artUri)
-                    out.add(
-                        MediaItem.Builder()
-                            .setMediaId(uri.toString())
-                            .setUri(uri)
-                            .setMediaMetadata(metaBuilder.build())
-                            .build()
-                    )
-                }
-            }
-        }
-        return out
-    }
-
-    private fun queryPlaylistMediaItems(): List<MediaItem> {
-        return runCatching {
-            val dao = IptvRoomDatabase.getInstance(applicationContext).audioPlaylistDao()
-            dao.getAllPlaylists().map { pl ->
-                buildBrowsableNode("playlist_${pl.id}", pl.name, MediaMetadata.MEDIA_TYPE_PLAYLIST)
-            }
-        }.getOrDefault(emptyList())
-    }
-
-    private fun queryPlaylistTracksMediaItems(playlistId: Long): List<MediaItem> {
-        if (playlistId <= 0L) return emptyList()
-        return runCatching {
-            val dao = IptvRoomDatabase.getInstance(applicationContext).audioPlaylistDao()
-            dao.getTracksForPlaylist(playlistId).map { tr ->
-                val uri = Uri.parse(tr.contentUri)
-                val metaBuilder = MediaMetadata.Builder()
-                    .setTitle(tr.title)
-                    .setArtist(tr.artist)
-                    .setAlbumTitle(tr.album)
-                    .setIsBrowsable(false)
-                    .setIsPlayable(true)
-                    .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                if (tr.albumArtUri.isNotBlank()) {
-                    metaBuilder.setArtworkUri(Uri.parse(tr.albumArtUri))
-                }
-                MediaItem.Builder()
-                    .setMediaId(tr.contentUri)
-                    .setUri(uri)
-                    .setMediaMetadata(metaBuilder.build())
-                    .build()
-            }
-        }.getOrDefault(emptyList())
     }
 
     override fun onDestroy() {
-        VexoAudioEffectsManager.releaseAll()
+        mainHandler.removeCallbacksAndMessages(null)
+        serviceScope.cancel()
+        AndroidAutoManager.onServiceDestroyed()
+        runCatching { VexoAudioEffectsManager.releaseAll() }
         mediaLibrarySession?.run {
             player.release()
             release()

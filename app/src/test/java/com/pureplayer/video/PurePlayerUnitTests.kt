@@ -1000,4 +1000,55 @@ class PurePlayerUnitTests {
             HiddenMediaAndPlaylistHelper.decideSmartVideoOrientation(0, 0)
         )
     }
+
+    @Test
+    fun androidAutoUxPolicy_sanitizationCapsMinimalDisplayAndAudioOnlyArtwork() {
+        // 1. Controller package detection
+        assertTrue(AndroidAutoUxPolicy.isAndroidAutoControllerPackage("com.google.android.projection.gearhead"))
+        assertTrue(AndroidAutoUxPolicy.isAndroidAutoControllerPackage("com.google.android.autosimulator"))
+        assertFalse(AndroidAutoUxPolicy.isAndroidAutoControllerPackage("com.pureplayer.video"))
+        assertFalse(AndroidAutoUxPolicy.isAndroidAutoControllerPackage(null))
+
+        // 2. Minimal display strips noisy tags and keeps only concise group/channel name
+        val minimalCfg = AndroidAutoConfig(enabled = true, autoResumeOnConnect = false, audioOnlyOnCar = true, minimalCarDisplay = true)
+        val (minTitle, minSub) = AndroidAutoUxPolicy.formatDisplayMetadata(
+            rawTitle = "  Al Jazeera [FHD] [H.265] Live  ",
+            rawGroupOrSource = "News Channels",
+            rawExtraDetail = "1080p • 50fps • Live Stream",
+            config = minimalCfg
+        )
+        assertEquals("Al Jazeera Live", minTitle)
+        assertEquals("News Channels", minSub)
+
+        // 3. Full display retains concise extra detail within Car UX char limits
+        val fullCfg = minimalCfg.copy(minimalCarDisplay = false)
+        val (_, fullSub) = AndroidAutoUxPolicy.formatDisplayMetadata(
+            rawTitle = "Sports 1",
+            rawGroupOrSource = "Sports",
+            rawExtraDetail = "Live",
+            config = fullCfg
+        )
+        assertEquals("Sports • Live", fullSub)
+
+        // 4. Long labels are safely truncated to Car UX max length
+        val longLabel = "A".repeat(120)
+        val truncated = AndroidAutoUxPolicy.sanitizeLabel(longLabel, AndroidAutoUxPolicy.MAX_TITLE_CHARS, "V Player")
+        assertEquals(AndroidAutoUxPolicy.MAX_TITLE_CHARS, truncated.length)
+        assertTrue(truncated.endsWith("…"))
+
+        // 5. Audio-Only Mode on Car suppresses heavy remote HTTP/HTTPS artwork for car controllers
+        assertFalse(AndroidAutoUxPolicy.shouldIncludeArtwork(minimalCfg, isCarController = true, artworkUrl = "https://cdn.example.com/poster.png"))
+        assertTrue(AndroidAutoUxPolicy.shouldIncludeArtwork(minimalCfg, isCarController = false, artworkUrl = "https://cdn.example.com/poster.png"))
+        assertTrue(AndroidAutoUxPolicy.shouldIncludeArtwork(minimalCfg.copy(audioOnlyOnCar = false), isCarController = true, artworkUrl = "https://cdn.example.com/poster.png"))
+        assertTrue(AndroidAutoUxPolicy.shouldIncludeArtwork(minimalCfg, isCarController = true, artworkUrl = "content://media/external/audio/albumart/42"))
+
+        // 6. Bounded pagination never exceeds Car UX hard cap and never throws out-of-range
+        val bigList = (1..100).toList()
+        val cappedAll = AndroidAutoUxPolicy.paginate(bigList, page = 0, pageSize = 100, maxCap = AndroidAutoUxPolicy.MAX_LEAF_ITEMS)
+        assertEquals(AndroidAutoUxPolicy.MAX_LEAF_ITEMS, cappedAll.size)
+        val page2 = AndroidAutoUxPolicy.paginate(bigList, page = 1, pageSize = 15, maxCap = 25)
+        assertEquals((16..25).toList(), page2)
+        val outOfRange = AndroidAutoUxPolicy.paginate(bigList, page = 9, pageSize = 15, maxCap = 25)
+        assertTrue(outOfRange.isEmpty())
+    }
 }

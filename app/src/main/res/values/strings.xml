@@ -784,4 +784,50 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="changelog_v90_26_title">v%1$s — Hidden Files Scan Fix &amp; Cutout-Safe Full-Screen Fit</string>
     <string name="changelog_v90_26_desc">• Fixed "Hidden folders" toggle: added a dedicated background filesystem scan for dot-prefixed folders/files and .nomedia directories, instant refresh when toggled, and a clear Android 11+ All Files Access prompt instead of failing silently.
 • Improved default video Fit mode: every video opens centered and scaled to maximum size with zero cropped edges, respecting display cutouts/notches and re-fitting automatically on rotation, split-screen, and next/previous switches.</string>
+    <string name="action_close">Close</string>
+    <!-- v90.27 Android Auto Support, Settings & Car UX Restrictions -->
+    <string name="settings_android_auto_title">Android Auto Settings</string>
+    <string name="aa_hub_sub_enabled">Car browsing, audio-only mode &amp; diagnostics</string>
+    <string name="aa_hub_sub_disabled">Disabled for car head units</string>
+    <string name="aa_status_connected">Connected to Android Auto</string>
+    <string name="aa_status_ready">Ready for Android Auto connection</string>
+    <string name="aa_status_disabled">Android Auto support is turned off</string>
+    <string name="aa_enable_title">Enable Android Auto Support</string>
+    <string name="aa_enable_on_sub">Allow car screens to discover and browse V Player media</string>
+    <string name="aa_enable_off_sub">Block car media browsing and connection requests</string>
+    <string name="aa_auto_resume_title">Auto-Resume on Car Connect</string>
+    <string name="aa_auto_resume_on_sub">Automatically resume the last played item when connected</string>
+    <string name="aa_auto_resume_off_sub">Wait for manual play tap after connecting (Default)</string>
+    <string name="aa_audio_only_title">Audio-Only Mode on Car</string>
+    <string name="aa_audio_only_on_sub">Prioritize audio tracks and skip heavy remote artwork while driving</string>
+    <string name="aa_audio_only_off_sub">Load standard metadata and artwork on car screen</string>
+    <string name="aa_minimal_display_title">Minimal Car Display</string>
+    <string name="aa_minimal_display_on_sub">Show channel or group name only without extra details</string>
+    <string name="aa_minimal_display_off_sub">Show channel name with additional media info</string>
+    <string name="aa_test_status_title">Test / Check Android Auto Status</string>
+    <string name="aa_test_status_sub">Verify media service readiness, connection &amp; library counts</string>
+    <string name="aa_tree_favorites">Favorites / Saved</string>
+    <string name="aa_tree_categories">Channels / Categories</string>
+    <string name="aa_tree_recent">Recently Played</string>
+    <string name="aa_tree_local_audio">Local Audio</string>
+    <string name="aa_tree_playlists">Playlists</string>
+    <string name="aa_category_count_fmt">%1$d items</string>
+    <string name="aa_diag_yes">Yes</string>
+    <string name="aa_diag_no">No</string>
+    <string name="aa_diag_support_enabled">• Android Auto Enabled: %1$s</string>
+    <string name="aa_diag_service_ready">• Media Service &amp; Car Manifest Ready: %1$s</string>
+    <string name="aa_diag_car_connected">• Car Connection: Connected (%1$s)</string>
+    <string name="aa_diag_car_not_connected">• Car Connection: Not currently connected</string>
+    <string name="aa_diag_media_active">• Current Media: %1$s (%2$s)</string>
+    <string name="aa_diag_media_idle">• Current Media: Idle (ready to play)</string>
+    <string name="aa_diag_playing">Playing</string>
+    <string name="aa_diag_paused">Paused</string>
+    <string name="aa_diag_library_summary">• Ready for Car: %1$d favorites, %2$d categories, %3$d recent</string>
+    <string name="aa_diag_audio_only_state">• Audio-Only Mode on Car: %1$s</string>
+    <string name="aa_diag_auto_resume_state">• Auto-Resume on Connect: %1$s</string>
+    <string name="changelog_v90_27_title">v%1$s — Android Auto Support, Dedicated Car Settings &amp; Build Cleanup</string>
+    <string name="changelog_v90_27_desc">• Upgraded VexoPlaybackService for Android Auto with off-main-thread browsing, voice search, Car UX limits, and safe disconnect handling.
+• Added a clean 3-section Android Auto browse tree: Favorites / Saved, Channels / Categories, and Recently Played.
+• Added dedicated Android Auto Settings inside V Player (Enable/Disable, Auto-Resume on connect, Audio-Only Mode on Car, Minimal Car Display, and Connection Status Diagnostics).
+• Hardened R8/ProGuard keep rules for Media3 &amp; Android Auto and unified AGP to 8.5.1 in settings.gradle.kts.</string>
 </resources>

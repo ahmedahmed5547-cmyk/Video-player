@@ -82,8 +82,19 @@
 -keep class com.pureplayer.video.FoldableAdaptiveMath { *; }
 -keep class com.pureplayer.video.FoldPosture { *; }
 
-# Keep Media3 Playback Service, Audio Library & AudioFX
+# Keep Media3 Playback Service, Android Auto, Audio Library & AudioFX
 -keep class com.pureplayer.video.VexoPlaybackService { *; }
+-keep class com.pureplayer.video.VexoPlaybackService$* { *; }
+-keep class com.pureplayer.video.BackgroundPlaybackState { *; }
+-keep class com.pureplayer.video.AndroidAutoManager { *; }
+-keep class com.pureplayer.video.AndroidAutoUxPolicy { *; }
+-keep class com.pureplayer.video.AndroidAutoConfig { *; }
+-keep class com.pureplayer.video.AndroidAutoConnectionSnapshot { *; }
+-keep class com.pureplayer.video.AndroidAutoDiagnosticReport { *; }
+-keep class * extends androidx.media3.session.MediaLibraryService { *; }
+-keep class * extends androidx.media3.session.MediaSessionService { *; }
+-keep class * implements androidx.media3.session.MediaLibraryService$MediaLibrarySession$Callback { *; }
+-keep class * implements androidx.media3.session.MediaSession$Callback { *; }
 -keep class com.pureplayer.video.AudioLibraryViewModel { *; }
 -keep class com.pureplayer.video.AudioPlaylistEntity { *; }
 -keep class com.pureplayer.video.AudioPlaylistTrackEntity { *; }
