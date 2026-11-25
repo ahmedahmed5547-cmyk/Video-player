@@ -19,6 +19,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import android.hardware.biometrics.BiometricPrompt
 import android.media.MediaMetadataRetriever
 import android.media.MediaScannerConnection
@@ -61,7 +62,10 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.AccessibilityDelegateCompat
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import android.widget.ProgressBar
 import org.json.JSONObject
 import java.io.FileOutputStream
@@ -108,6 +112,7 @@ data class PremiumMenuItem(
     val isDanger: Boolean = false,
     val sectionHeader: String? = null,
     val isInteractive: Boolean = true,
+    val isEnabled: Boolean = true,
     val iconResId: Int = 0,
     val statusChip: String? = null,
     val toggleChecked: Boolean? = null,
@@ -246,7 +251,8 @@ internal fun MainActivity.presentInFullScreenHost(
     pageScroll: View,
     cardContainer: View,
     animatedRows: List<View>,
-    surfaceColor: Int
+    surfaceColor: Int,
+    animateEntrance: Boolean = true
 ) {
     activeFullScreenCardView?.animate()?.cancel()
     isFullScreenDialogClosing = false
@@ -266,7 +272,9 @@ internal fun MainActivity.presentInFullScreenHost(
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
         )
-        animateDialogCardEntrance(cardContainer, animatedRows)
+        if (animateEntrance) {
+            animateDialogCardEntrance(cardContainer, animatedRows)
+        }
         return
     }
 
@@ -323,12 +331,58 @@ internal fun MainActivity.presentInFullScreenHost(
  * Premium UI Engine: Builds a sleek, full-screen, theme-harmonious page
  * with fluid spring entrance, staggered row cascade, and zero-flicker in-place navigation!
  */
+/**
+ * Shared theme-aware SwitchCompat styling helper used by BOTH the top dropdown's
+ * "Hidden folders" switch and Settings switch rows (e.g. Android Auto).
+ * Derives 100% of checked, unchecked, and disabled colors from active theme tokens
+ * so it adapts automatically to Follow System / Light / Dark and all 10+ color themes.
+ */
+internal fun MainActivity.applyThemedSwitchStyle(
+    sw: androidx.appcompat.widget.SwitchCompat,
+    enabled: Boolean = true
+) {
+    val accent = PlaybackStore.getAccentColor(this)
+    val primaryText = PlaybackStore.getPrimaryTextColor(this)
+    val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+    val isLight = PlaybackStore.isLightThemeActive(this)
+
+    val uncheckedThumb = if (isLight) {
+        Color.argb(235, Color.red(secondaryText), Color.green(secondaryText), Color.blue(secondaryText))
+    } else {
+        Color.argb(225, Color.red(primaryText), Color.green(primaryText), Color.blue(primaryText))
+    }
+    val disabledThumb = Color.argb(95, Color.red(secondaryText), Color.green(secondaryText), Color.blue(secondaryText))
+
+    val checkedTrack = Color.argb(120, Color.red(accent), Color.green(accent), Color.blue(accent))
+    val uncheckedTrack = Color.argb(72, Color.red(secondaryText), Color.green(secondaryText), Color.blue(secondaryText))
+    val disabledTrack = Color.argb(36, Color.red(secondaryText), Color.green(secondaryText), Color.blue(secondaryText))
+
+    sw.isEnabled = enabled
+    sw.thumbTintList = ColorStateList(
+        arrayOf(
+            intArrayOf(-android.R.attr.state_enabled),
+            intArrayOf(android.R.attr.state_checked),
+            intArrayOf()
+        ),
+        intArrayOf(disabledThumb, accent, uncheckedThumb)
+    )
+    sw.trackTintList = ColorStateList(
+        arrayOf(
+            intArrayOf(-android.R.attr.state_enabled),
+            intArrayOf(android.R.attr.state_checked),
+            intArrayOf()
+        ),
+        intArrayOf(disabledTrack, checkedTrack, uncheckedTrack)
+    )
+}
+
 internal fun MainActivity.showPremiumMenuDialog(
     headerIcon: String,
     title: String,
     subtitle: String?,
     items: List<PremiumMenuItem>,
-    showHeaderVersionBadge: Boolean = false
+    showHeaderVersionBadge: Boolean = false,
+    animateEntrance: Boolean = true
 ) {
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
@@ -336,8 +390,8 @@ internal fun MainActivity.showPremiumMenuDialog(
     val isLight = PlaybackStore.isLightThemeActive(this)
     val primaryText = PlaybackStore.getPrimaryTextColor(this)
     val secondaryText = PlaybackStore.getSecondaryTextColor(this)
-    val hairlineColor = if (isLight) Color.parseColor("#CBD5E1") else Color.parseColor("#1FFFFFFF")
-    val cardFillColor = if (isLight) Color.parseColor("#FFFFFF") else surface
+    val hairlineColor = Color.argb(if (isLight) 68 else 42, Color.red(secondaryText), Color.green(secondaryText), Color.blue(secondaryText))
+    val cardFillColor = surface
 
     val outerScroll = ScrollView(this).apply {
         isVerticalScrollBarEnabled = false
@@ -493,7 +547,12 @@ internal fun MainActivity.showPremiumMenuDialog(
         val rowCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(52)
             setPadding(dp(16), dp(14), dp(14), dp(14))
+            isEnabled = item.isEnabled
+            isClickable = item.isEnabled && (item.toggleChecked != null || item.isInteractive)
+            isFocusable = item.isEnabled && (item.toggleChecked != null || item.isInteractive)
+            alpha = if (item.isEnabled) 1f else 0.46f
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -501,16 +560,21 @@ internal fun MainActivity.showPremiumMenuDialog(
                 bottomMargin = dp(10)
             }
             val strokeC = when {
+                !item.isEnabled -> hairlineColor
                 item.isDanger -> Color.parseColor("#55F43F5E")
                 item.isAccentHighlighted -> Color.argb(85, Color.red(accent), Color.green(accent), Color.blue(accent))
                 else -> hairlineColor
             }
-            background = GradientDrawable().apply {
+            val cardShape = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = dp(20).toFloat()
                 setColor(cardFillColor)
                 setStroke(dp(1), strokeC)
             }
+            val rippleColor = ColorStateList.valueOf(
+                Color.argb(if (isLight) 34 else 48, Color.red(accent), Color.green(accent), Color.blue(accent))
+            )
+            background = if (item.isEnabled) RippleDrawable(rippleColor, cardShape, null) else cardShape
         }
 
         val iconCircleBg = GradientDrawable().apply {
@@ -557,6 +621,7 @@ internal fun MainActivity.showPremiumMenuDialog(
             setTextColor(if (item.isDanger) Color.parseColor("#F43F5E") else primaryText)
             textSize = 15f
             letterSpacing = 0.01f
+            textAlignment = View.TEXT_ALIGNMENT_VIEW_START
             setTypeface(typeface, Typeface.BOLD)
         }
         textCol.addView(tvItemTitle)
@@ -566,6 +631,7 @@ internal fun MainActivity.showPremiumMenuDialog(
                 text = item.subtitle
                 setTextColor(secondaryText)
                 textSize = 12f
+                textAlignment = View.TEXT_ALIGNMENT_VIEW_START
                 setPadding(0, dp(3), 0, 0)
             }
             textCol.addView(tvItemSub)
@@ -601,26 +667,32 @@ internal fun MainActivity.showPremiumMenuDialog(
         if (item.toggleChecked != null) {
             val sw = androidx.appcompat.widget.SwitchCompat(this).apply {
                 isChecked = item.toggleChecked
-                thumbTintList = ColorStateList(
-                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                    intArrayOf(accent, Color.parseColor("#CBD5E1"))
-                )
-                trackTintList = ColorStateList(
-                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                    intArrayOf(Color.argb(110, Color.red(accent), Color.green(accent), Color.blue(accent)), Color.argb(65, 148, 163, 184))
-                )
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply { marginStart = dp(8) }
+                ).apply { marginStart = dp(10) }
             }
-            sw.setOnCheckedChangeListener { _, checked ->
-                item.onToggleChanged?.invoke(checked)
+            applyThemedSwitchStyle(sw, enabled = item.isEnabled)
+            if (item.isEnabled) {
+                sw.setOnCheckedChangeListener { _, checked ->
+                    item.onToggleChanged?.invoke(checked)
+                }
+                rowCard.setOnClickListener {
+                    sw.isChecked = !sw.isChecked
+                }
             }
+            rowCard.contentDescription = listOfNotNull(item.title, item.subtitle).joinToString(". ")
+            ViewCompat.setAccessibilityDelegate(rowCard, object : AccessibilityDelegateCompat() {
+                override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfoCompat) {
+                    super.onInitializeAccessibilityNodeInfo(host, info)
+                    info.className = "android.widget.Switch"
+                    info.isCheckable = true
+                    info.isChecked = sw.isChecked
+                    info.isEnabled = item.isEnabled
+                }
+            })
             rowCard.addView(sw)
-            rowCard.setOnClickListener {
-                sw.isChecked = !sw.isChecked
-            }
         } else if (item.isInteractive) {
             val ivChevron = ImageView(this).apply {
                 setImageResource(R.drawable.ic_lux_chevron)
@@ -692,7 +764,7 @@ internal fun MainActivity.showPremiumMenuDialog(
     }
     cardContainer.addView(tvFooter)
 
-    presentInFullScreenHost(outerScroll, cardContainer, animatedRows, bg)
+    presentInFullScreenHost(outerScroll, cardContainer, animatedRows, bg, animateEntrance = animateEntrance)
 }
 
 internal fun MainActivity.updateActiveFullScreenMenuLayoutForWindowSize() {

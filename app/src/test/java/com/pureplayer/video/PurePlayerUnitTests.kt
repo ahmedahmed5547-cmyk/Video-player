@@ -831,7 +831,13 @@ class PurePlayerUnitTests {
         val onlyVisible = HiddenMediaAndPlaylistHelper.filterHiddenItems(samples, showHidden = false) { it.hidden }
         assertEquals(1, onlyVisible.size)
         assertEquals("Movies", onlyVisible[0].folder)
-        assertTrue(HiddenMediaAndPlaylistHelper.DEFAULT_SHOW_HIDDEN_FOLDERS)
+        assertFalse(HiddenMediaAndPlaylistHelper.DEFAULT_SHOW_HIDDEN_FOLDERS)
+        // One-time upgrade migration resets legacy true/missing values to OFF once
+        assertEquals(Pair(false, true), HiddenMediaAndPlaylistHelper.resolveHiddenFoldersMigration(hasMigratedV2 = false, storedValue = true))
+        assertEquals(Pair(false, true), HiddenMediaAndPlaylistHelper.resolveHiddenFoldersMigration(hasMigratedV2 = false, storedValue = null))
+        // After migration, explicit user ON persists across restarts
+        assertEquals(Pair(true, false), HiddenMediaAndPlaylistHelper.resolveHiddenFoldersMigration(hasMigratedV2 = true, storedValue = true))
+        assertEquals(Pair(false, false), HiddenMediaAndPlaylistHelper.resolveHiddenFoldersMigration(hasMigratedV2 = true, storedValue = null))
 
         // 3. Previous / Next index calculation at boundaries (first, middle, last, single-item)
         assertFalse(HiddenMediaAndPlaylistHelper.canGoPrevious(0, 3))

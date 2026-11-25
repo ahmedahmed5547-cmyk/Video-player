@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.MediaStore
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -630,13 +631,20 @@ object AndroidAutoManager {
             }
         }
 
-        // 2. Last played local media from PlaybackStore
+        // 2. Last played local media from PlaybackStore (respects Hidden folders OFF)
+        val showHidden = PlaybackStore.isShowHiddenFolders(context)
         runCatching {
             val last = PlaybackStore.getLastPlayedVideo(context)
             if (last != null && out.size < AndroidAutoUxPolicy.MAX_RECENT_ITEMS) {
                 val (uri, rawTitle, _) = last
                 val uriStr = uri.toString()
-                if (uriStr.isNotBlank() && seenIds.add(uriStr)) {
+                val uriPath = uri.path.orEmpty()
+                val isHiddenLast = !showHidden && HiddenMediaAndPlaylistHelper.isHiddenMedia(
+                    path = uriPath,
+                    folderName = "",
+                    title = rawTitle
+                )
+                if (!isHiddenLast && uriStr.isNotBlank() && seenIds.add(uriStr)) {
                     val (title, subtitle) = AndroidAutoUxPolicy.formatDisplayMetadata(
                         rawTitle = rawTitle,
                         rawGroupOrSource = context.getString(R.string.aa_tree_recent),
@@ -727,14 +735,29 @@ object AndroidAutoManager {
     ): List<MediaItem> {
         val out = mutableListOf<MediaItem>()
         val q = filterQuery.trim().lowercase()
+        val showHidden = PlaybackStore.isShowHiddenFolders(context)
+        val nomediaCache = HashMap<String, Boolean>()
         runCatching {
-            val projection = arrayOf(
-                MediaStore.Audio.Media._ID,
-                MediaStore.Audio.Media.TITLE,
-                MediaStore.Audio.Media.ARTIST,
-                MediaStore.Audio.Media.ALBUM,
-                MediaStore.Audio.Media.ALBUM_ID
-            )
+            val projection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                arrayOf(
+                    MediaStore.Audio.Media._ID,
+                    MediaStore.Audio.Media.TITLE,
+                    MediaStore.Audio.Media.ARTIST,
+                    MediaStore.Audio.Media.ALBUM,
+                    MediaStore.Audio.Media.ALBUM_ID,
+                    MediaStore.Audio.Media.DATA,
+                    MediaStore.Audio.Media.RELATIVE_PATH
+                )
+            } else {
+                arrayOf(
+                    MediaStore.Audio.Media._ID,
+                    MediaStore.Audio.Media.TITLE,
+                    MediaStore.Audio.Media.ARTIST,
+                    MediaStore.Audio.Media.ALBUM,
+                    MediaStore.Audio.Media.ALBUM_ID,
+                    MediaStore.Audio.Media.DATA
+                )
+            }
             context.contentResolver.query(
                 MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                 projection,
@@ -747,9 +770,23 @@ object AndroidAutoManager {
                 val artistCol = c.getColumnIndex(MediaStore.Audio.Media.ARTIST)
                 val albumCol = c.getColumnIndex(MediaStore.Audio.Media.ALBUM)
                 val albumIdCol = c.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
+                val dataCol = c.getColumnIndex(MediaStore.Audio.Media.DATA)
+                val relPathCol = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) c.getColumnIndex(MediaStore.Audio.Media.RELATIVE_PATH) else -1
                 while (c.moveToNext() && out.size < limit) {
                     val id = c.getLong(idCol)
                     val rawTitle = c.getString(titleCol) ?: continue
+                    if (!showHidden) {
+                        val filePath = if (dataCol != -1) c.getString(dataCol).orEmpty() else ""
+                        val relPath = if (relPathCol != -1) c.getString(relPathCol).orEmpty() else ""
+                        val combinedPath = filePath.ifBlank { relPath }
+                        val isHiddenAudio = HiddenMediaAndPlaylistHelper.isHiddenMedia(
+                            path = combinedPath,
+                            folderName = "",
+                            title = rawTitle,
+                            hasNomediaAncestor = filePath.isNotBlank() && HiddenMediaAndPlaylistHelper.hasNomediaInParentChain(filePath, nomediaCache)
+                        )
+                        if (isHiddenAudio) continue
+                    }
                     val rawArtist = if (artistCol != -1) (c.getString(artistCol) ?: "") else ""
                     val rawAlbum = if (albumCol != -1) (c.getString(albumCol) ?: "") else ""
                     val albumId = if (albumIdCol != -1) c.getLong(albumIdCol) else -1L
@@ -820,8 +857,12 @@ object AndroidAutoManager {
         if (playlistId <= 0L) return emptyList()
         return runCatching {
             val dao = IptvRoomDatabase.getInstance(context.applicationContext).audioPlaylistDao()
+            val showHidden = PlaybackStore.isShowHiddenFolders(context)
             dao.getTracksForPlaylist(playlistId).take(AndroidAutoUxPolicy.MAX_LEAF_ITEMS).mapNotNull { tr ->
                 val uri = runCatching { Uri.parse(tr.contentUri) }.getOrNull() ?: return@mapNotNull null
+                if (!showHidden && HiddenMediaAndPlaylistHelper.isHiddenMedia(path = uri.path.orEmpty(), folderName = "", title = tr.title)) {
+                    return@mapNotNull null
+                }
                 val (title, subtitle) = AndroidAutoUxPolicy.formatDisplayMetadata(
                     rawTitle = tr.title,
                     rawGroupOrSource = tr.artist,

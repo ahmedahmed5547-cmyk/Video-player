@@ -671,10 +671,16 @@ class MainActivity : AppCompatActivity() {
         if (lastVideo != null) {
             val (uri, title, positionMs) = lastVideo
             val matchingItem = allDiscoveredVideos.find { it.uri == uri }
-            if (matchingItem != null && (
+            val showHiddenNow = PlaybackStore.isShowHiddenFolders(this)
+            val isHiddenFallback = !showHiddenNow && HiddenMediaAndPlaylistHelper.isHiddenMedia(
+                path = uri.path.orEmpty(),
+                folderName = "",
+                title = title
+            )
+            if (isHiddenFallback || (matchingItem != null && (
                     PlaybackStore.isFolderLocked(this, matchingItem.folderName) ||
-                    (matchingItem.isHidden && !PlaybackStore.isShowHiddenFolders(this))
-                )
+                    (matchingItem.isHidden && !showHiddenNow)
+                ))
             ) {
                 binding.fabResumeLast.visibility = View.GONE
                 return
@@ -1609,24 +1615,28 @@ class MainActivity : AppCompatActivity() {
         }
         val hiddenSwitch = androidx.appcompat.widget.SwitchCompat(this).apply {
             isChecked = showHiddenInitial
-            thumbTintList = ColorStateList(
-                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                intArrayOf(accent, if (isLight) Color.parseColor("#64748B") else Color.parseColor("#CBD5E1"))
-            )
-            trackTintList = ColorStateList(
-                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                intArrayOf(
-                    Color.argb(120, Color.red(accent), Color.green(accent), Color.blue(accent)),
-                    Color.argb(65, Color.red(secondaryText), Color.green(secondaryText), Color.blue(secondaryText))
-                )
-            )
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
+        applyThemedSwitchStyle(hiddenSwitch, enabled = true)
+        androidx.core.view.ViewCompat.setAccessibilityDelegate(hiddenRow, object : androidx.core.view.AccessibilityDelegateCompat() {
+            override fun onInitializeAccessibilityNodeInfo(
+                host: View,
+                info: androidx.core.view.accessibility.AccessibilityNodeInfoCompat
+            ) {
+                super.onInitializeAccessibilityNodeInfo(host, info)
+                info.className = "android.widget.Switch"
+                info.isCheckable = true
+                info.isChecked = hiddenSwitch.isChecked
+            }
+        })
         hiddenSwitch.setOnCheckedChangeListener { _, checked ->
             PlaybackStore.setShowHiddenFolders(this, checked)
             val lm = binding.recyclerView.layoutManager
             val savedScroll = lm?.onSaveInstanceState()
             applyFolderVisibilityAndRefreshUI()
             updateResumeLastFab()
+            runCatching { audioLibraryViewModel.refreshAudioLibrary() }
+            VexoPlaybackService.notifyLibraryChanged(this)
             if (savedScroll != null) {
                 binding.recyclerView.post {
                     binding.recyclerView.layoutManager?.onRestoreInstanceState(savedScroll)

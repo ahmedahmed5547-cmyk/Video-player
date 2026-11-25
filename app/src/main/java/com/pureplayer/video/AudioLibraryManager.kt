@@ -214,15 +214,32 @@ class AudioLibraryViewModel(application: Application) : AndroidViewModel(applica
         val cr = appContext.contentResolver
         val artworkBaseUri = Uri.parse("content://media/external/audio/albumart")
 
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.DATE_ADDED
-        )
+        val showHidden = PlaybackStore.isShowHiddenFolders(appContext)
+        val nomediaCache = HashMap<String, Boolean>()
+        val projection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            arrayOf(
+                MediaStore.Audio.Media._ID,
+                MediaStore.Audio.Media.TITLE,
+                MediaStore.Audio.Media.ARTIST,
+                MediaStore.Audio.Media.ALBUM,
+                MediaStore.Audio.Media.ALBUM_ID,
+                MediaStore.Audio.Media.DURATION,
+                MediaStore.Audio.Media.DATE_ADDED,
+                MediaStore.Audio.Media.DATA,
+                MediaStore.Audio.Media.RELATIVE_PATH
+            )
+        } else {
+            arrayOf(
+                MediaStore.Audio.Media._ID,
+                MediaStore.Audio.Media.TITLE,
+                MediaStore.Audio.Media.ARTIST,
+                MediaStore.Audio.Media.ALBUM,
+                MediaStore.Audio.Media.ALBUM_ID,
+                MediaStore.Audio.Media.DURATION,
+                MediaStore.Audio.Media.DATE_ADDED,
+                MediaStore.Audio.Media.DATA
+            )
+        }
         runCatching {
             cr.query(
                 MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
@@ -238,10 +255,24 @@ class AudioLibraryViewModel(application: Application) : AndroidViewModel(applica
                 val albumIdCol = c.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
                 val durCol = c.getColumnIndex(MediaStore.Audio.Media.DURATION)
                 val dateCol = c.getColumnIndex(MediaStore.Audio.Media.DATE_ADDED)
+                val dataCol = c.getColumnIndex(MediaStore.Audio.Media.DATA)
+                val relPathCol = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) c.getColumnIndex(MediaStore.Audio.Media.RELATIVE_PATH) else -1
                 while (c.moveToNext()) {
                     val id = c.getLong(idCol)
                     val title = c.getString(titleCol)?.trim().orEmpty()
                     if (title.isEmpty()) continue
+                    if (!showHidden) {
+                        val filePath = if (dataCol != -1) c.getString(dataCol).orEmpty() else ""
+                        val relPath = if (relPathCol != -1) c.getString(relPathCol).orEmpty() else ""
+                        val combinedPath = filePath.ifBlank { relPath }
+                        val isHiddenAudio = HiddenMediaAndPlaylistHelper.isHiddenMedia(
+                            path = combinedPath,
+                            folderName = "",
+                            title = title,
+                            hasNomediaAncestor = filePath.isNotBlank() && HiddenMediaAndPlaylistHelper.hasNomediaInParentChain(filePath, nomediaCache)
+                        )
+                        if (isHiddenAudio) continue
+                    }
                     val artist = (if (artistCol != -1) c.getString(artistCol) else null)
                         ?.takeIf { it.isNotBlank() && it != "<unknown>" } ?: "Unknown Artist"
                     val album = (if (albumCol != -1) c.getString(albumCol) else null)

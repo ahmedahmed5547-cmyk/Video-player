@@ -128,6 +128,7 @@ object PlaybackStore {
     private const val KEY_SUB_BILINGUAL = "vexo_sub_bilingual_v1"
     private const val KEY_APP_ICON_STYLE = "vexo_app_icon_style_v1"
     private const val KEY_SHOW_HIDDEN_FOLDERS = "vexo_show_hidden_folders_v1"
+    private const val KEY_SHOW_HIDDEN_MIGRATED_V2 = "vexo_show_hidden_default_off_migrated_v2"
     private const val KEY_SUB_DELETE_CONFIRM = "vexo_sub_delete_confirm_v1"
     private const val KEY_VAULT_AUTOLOCK_MODE = "vexo_vault_autolock_mode_v1"
     private const val KEY_VAULT_AUTOLOCK_DELAY_SEC = "vexo_vault_autolock_delay_sec_v1"
@@ -882,11 +883,29 @@ object PlaybackStore {
         prefs(context).edit().putString(KEY_APP_ICON_STYLE, styleId).apply()
     }
 
-    fun isShowHiddenFolders(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_SHOW_HIDDEN_FOLDERS, HiddenMediaAndPlaylistHelper.DEFAULT_SHOW_HIDDEN_FOLDERS)
+    fun isShowHiddenFolders(context: Context): Boolean {
+        val p = prefs(context)
+        val hasMigrated = runCatching { p.getBoolean(KEY_SHOW_HIDDEN_MIGRATED_V2, false) }.getOrDefault(false)
+        val stored = if (p.contains(KEY_SHOW_HIDDEN_FOLDERS)) {
+            runCatching { p.getBoolean(KEY_SHOW_HIDDEN_FOLDERS, HiddenMediaAndPlaylistHelper.DEFAULT_SHOW_HIDDEN_FOLDERS) }.getOrNull()
+        } else {
+            null
+        }
+        val (effective, needsWrite) = HiddenMediaAndPlaylistHelper.resolveHiddenFoldersMigration(hasMigrated, stored)
+        if (needsWrite) {
+            p.edit()
+                .putBoolean(KEY_SHOW_HIDDEN_FOLDERS, effective)
+                .putBoolean(KEY_SHOW_HIDDEN_MIGRATED_V2, true)
+                .apply()
+        }
+        return effective
+    }
 
     fun setShowHiddenFolders(context: Context, show: Boolean) {
-        prefs(context).edit().putBoolean(KEY_SHOW_HIDDEN_FOLDERS, show).apply()
+        prefs(context).edit()
+            .putBoolean(KEY_SHOW_HIDDEN_FOLDERS, show)
+            .putBoolean(KEY_SHOW_HIDDEN_MIGRATED_V2, true)
+            .apply()
     }
 
     fun isConfirmBeforeDeletingSubtitles(context: Context): Boolean =

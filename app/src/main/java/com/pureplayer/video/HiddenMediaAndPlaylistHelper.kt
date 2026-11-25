@@ -11,7 +11,19 @@ import java.util.Locale
 object HiddenMediaAndPlaylistHelper {
 
     const val SWITCH_DEBOUNCE_MS = 450L
-    const val DEFAULT_SHOW_HIDDEN_FOLDERS = true
+    const val DEFAULT_SHOW_HIDDEN_FOLDERS = false
+
+    /**
+     * Pure-Kotlin one-time migration rule for upgrades from versions where hidden folders defaulted to ON.
+     * Returns Pair(effectiveShowHidden, shouldMarkMigrated).
+     */
+    fun resolveHiddenFoldersMigration(hasMigratedV2: Boolean, storedValue: Boolean?): Pair<Boolean, Boolean> {
+        if (!hasMigratedV2) {
+            // Reset to OFF once because older builds could have persisted true by default
+            return Pair(false, true)
+        }
+        return Pair(storedValue ?: DEFAULT_SHOW_HIDDEN_FOLDERS, false)
+    }
     const val MAX_SHARE_ITEMS = 100
     const val LARGE_SHARE_BYTES_THRESHOLD = 50L * 1024L * 1024L
     const val LARGE_SHARE_COUNT_THRESHOLD = 5

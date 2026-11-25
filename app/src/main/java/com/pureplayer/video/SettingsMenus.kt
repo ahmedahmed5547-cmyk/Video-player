@@ -402,7 +402,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
         PremiumMenuItem(
             iconEmoji = "🚗",
             title = getString(R.string.settings_android_auto_title),
-            subtitle = if (PlaybackStore.isAndroidAutoEnabled(this)) getString(R.string.aa_hub_sub_enabled) else getString(R.string.aa_hub_sub_disabled),
+            subtitle = if (PlaybackStore.isAndroidAutoEnabled(this)) getString(R.string.aa_master_on_sub) else getString(R.string.aa_master_off_sub),
             isAccentHighlighted = PlaybackStore.isAndroidAutoEnabled(this),
             statusChip = if (PlaybackStore.isAndroidAutoEnabled(this)) getString(R.string.enabled_label) else getString(R.string.disabled_label),
             onClick = {
@@ -1147,10 +1147,18 @@ internal fun MainActivity.showChangelogPage() {
         ChangelogReleaseEntry(
             version = verName,
             date = "2026-11-25",
-            iconEmoji = "🚗",
-            title = getString(R.string.changelog_v90_27_title, verName),
-            description = getString(R.string.changelog_v90_27_desc),
+            iconEmoji = "🎛️",
+            title = getString(R.string.changelog_v90_28_title, verName),
+            description = getString(R.string.changelog_v90_28_desc),
             isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.27",
+            date = "2026-11-25",
+            iconEmoji = "🚗",
+            title = getString(R.string.changelog_v90_27_title, "90.27"),
+            description = getString(R.string.changelog_v90_27_desc),
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.26",

@@ -830,4 +830,11 @@ Any series, movie, or channel you play will appear here automatically so you can
 • Added a clean 3-section Android Auto browse tree: Favorites / Saved, Channels / Categories, and Recently Played.
 • Added dedicated Android Auto Settings inside V Player (Enable/Disable, Auto-Resume on connect, Audio-Only Mode on Car, Minimal Car Display, and Connection Status Diagnostics).
 • Hardened R8/ProGuard keep rules for Media3 &amp; Android Auto and unified AGP to 8.5.1 in settings.gradle.kts.</string>
+    <!-- v90.28 Theme-Aware Android Auto Switches & Hidden Files Default OFF -->
+    <string name="aa_master_label">Android Auto</string>
+    <string name="aa_master_on_sub">Library is available in your car</string>
+    <string name="aa_master_off_sub">Library is hidden from your car</string>
+    <string name="changelog_v90_28_title">v%1$s — Android Auto Switches, Theme Consistency &amp; Hidden Files Default OFF</string>
+    <string name="changelog_v90_28_desc">• Replaced Android Auto toggle rows with instant, theme-aware Switch controls matching the top menu\'s Hidden folders switch, with TalkBack &amp; RTL support and disabled dependent options when Android Auto is off.
+• Changed Hidden folders / Show hidden files to default to OFF everywhere (fresh installs and upgrades via one-time migration) and filtered hidden paths across videos, search, Continue Watching, audio library, and Android Auto with immediate refresh.</string>
 </resources>

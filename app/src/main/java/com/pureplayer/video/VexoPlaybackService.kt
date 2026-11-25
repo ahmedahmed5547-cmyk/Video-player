@@ -66,6 +66,7 @@ class VexoPlaybackService : MediaLibraryService() {
         const val ACTION_TOGGLE_PLAY_PAUSE = "com.pureplayer.video.ACTION_TOGGLE_PLAY_PAUSE"
         const val ACTION_NEXT_TRACK = "com.pureplayer.video.ACTION_NEXT_TRACK"
         const val ACTION_STOP_AND_CLOSE = "com.pureplayer.video.ACTION_STOP_AND_CLOSE"
+        const val ACTION_REFRESH_ANDROID_AUTO = "com.pureplayer.video.ACTION_REFRESH_ANDROID_AUTO"
 
         private const val CUSTOM_CMD_CLOSE = "com.pureplayer.video.CMD_CLOSE_NOTIFICATION"
 
@@ -127,6 +128,19 @@ class VexoPlaybackService : MediaLibraryService() {
                 action = actionName
             }
             runCatching { context.startService(intent) }
+        }
+
+        /**
+         * Applies Android Auto setting changes or hidden-files toggle immediately to a running
+         * MediaLibraryService without requiring an app restart.
+         */
+        fun notifyAndroidAutoConfigChanged(context: Context) {
+            if (!AndroidAutoManager.connectionState.value.isServiceRunning) return
+            sendAction(context, ACTION_REFRESH_ANDROID_AUTO)
+        }
+
+        fun notifyLibraryChanged(context: Context) {
+            notifyAndroidAutoConfigChanged(context)
         }
     }
 
@@ -202,6 +216,19 @@ class VexoPlaybackService : MediaLibraryService() {
             .setSessionActivity(sessionActivityIntent)
             .setCustomLayout(ImmutableList.of(closeBtn))
             .build()
+    }
+
+    private fun notifyCarBrowseTreeChanged() {
+        val session = mediaLibrarySession ?: return
+        val enabled = PlaybackStore.isAndroidAutoEnabled(applicationContext)
+        val count = if (enabled) 3 else 0
+        runCatching {
+            session.notifyChildrenChanged(AndroidAutoManager.NODE_ROOT, count, null)
+            session.notifyChildrenChanged(AndroidAutoManager.NODE_FAVORITES, 0, null)
+            session.notifyChildrenChanged(AndroidAutoManager.NODE_CATEGORIES, 0, null)
+            session.notifyChildrenChanged(AndroidAutoManager.NODE_RECENT, 0, null)
+            session.notifyChildrenChanged(AndroidAutoManager.NODE_LOCAL_AUDIO, 0, null)
+        }
     }
 
     private fun applyCarAudioOnlyTrackPolicy() {
@@ -340,6 +367,10 @@ class VexoPlaybackService : MediaLibraryService() {
                 }
                 ACTION_STOP_AND_CLOSE -> {
                     stopAndCloseCompletely()
+                }
+                ACTION_REFRESH_ANDROID_AUTO -> {
+                    applyCarAudioOnlyTrackPolicy()
+                    notifyCarBrowseTreeChanged()
                 }
             }
         }

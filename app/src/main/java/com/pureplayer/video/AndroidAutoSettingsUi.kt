@@ -8,65 +8,75 @@ import kotlinx.coroutines.withContext
 
 /**
  * Dedicated Android Auto Settings screen inside V Player.
- * Keeps SettingsMenus.kt modular and matches the app's themed PremiumMenuDialog design.
+ * Uses theme-aware SwitchCompat rows identical to the top dropdown's "Hidden folders" switch,
+ * with zero Enable/Disable dialogs, instant save/apply, RTL & TalkBack support, and visibly
+ * disabled dependent rows whenever the master Android Auto switch is OFF.
  */
-internal fun MainActivity.showAndroidAutoSettingsPage() {
+internal fun MainActivity.showAndroidAutoSettingsPage(animateEntrance: Boolean = true) {
     val config = PlaybackStore.getAndroidAutoConfig(this)
     val conn = AndroidAutoManager.connectionState.value
 
     val statusSummary = when {
-        !config.enabled -> getString(R.string.aa_status_disabled)
+        !config.enabled -> getString(R.string.aa_master_off_sub)
         conn.isCarConnected -> getString(R.string.aa_status_connected)
-        else -> getString(R.string.aa_status_ready)
+        else -> getString(R.string.aa_master_on_sub)
     }
 
     val items = listOf(
-        // 1. Enable / Disable Android Auto Support
+        // 1. Master Android Auto Switch (one tap toggles immediately; no extra dialog)
         PremiumMenuItem(
             iconEmoji = "🚗",
-            title = getString(R.string.aa_enable_title),
-            subtitle = if (config.enabled) getString(R.string.aa_enable_on_sub) else getString(R.string.aa_enable_off_sub),
+            title = getString(R.string.aa_master_label),
+            subtitle = if (config.enabled) getString(R.string.aa_master_on_sub) else getString(R.string.aa_master_off_sub),
             isAccentHighlighted = config.enabled,
-            statusChip = if (config.enabled) getString(R.string.enabled_label) else getString(R.string.disabled_label),
-            onClick = {
-                PlaybackStore.setAndroidAutoEnabled(this, !config.enabled)
-                showAndroidAutoSettingsPage()
+            isEnabled = true,
+            toggleChecked = config.enabled,
+            onToggleChanged = { checked ->
+                PlaybackStore.setAndroidAutoEnabled(this, checked)
+                VexoPlaybackService.notifyAndroidAutoConfigChanged(this)
+                showAndroidAutoSettingsPage(animateEntrance = false)
             }
         ),
-        // 2. Auto-Resume on Car Connect (default: false)
+        // 2. Auto-Resume on Car Connect (disabled/greyed out when master switch is OFF)
         PremiumMenuItem(
             iconEmoji = "▶️",
             title = getString(R.string.aa_auto_resume_title),
             subtitle = if (config.autoResumeOnConnect) getString(R.string.aa_auto_resume_on_sub) else getString(R.string.aa_auto_resume_off_sub),
             isAccentHighlighted = config.enabled && config.autoResumeOnConnect,
-            statusChip = if (config.autoResumeOnConnect) getString(R.string.enabled_label) else getString(R.string.disabled_label),
-            onClick = {
-                PlaybackStore.setAndroidAutoAutoResume(this, !config.autoResumeOnConnect)
-                showAndroidAutoSettingsPage()
+            isEnabled = config.enabled,
+            toggleChecked = config.autoResumeOnConnect,
+            onToggleChanged = { checked ->
+                PlaybackStore.setAndroidAutoAutoResume(this, checked)
+                VexoPlaybackService.notifyAndroidAutoConfigChanged(this)
+                showAndroidAutoSettingsPage(animateEntrance = false)
             }
         ),
-        // 3. Audio-Only Mode on Car
+        // 3. Audio-Only Mode on Car (disabled/greyed out when master switch is OFF)
         PremiumMenuItem(
             iconEmoji = "🎧",
             title = getString(R.string.aa_audio_only_title),
             subtitle = if (config.audioOnlyOnCar) getString(R.string.aa_audio_only_on_sub) else getString(R.string.aa_audio_only_off_sub),
             isAccentHighlighted = config.enabled && config.audioOnlyOnCar,
-            statusChip = if (config.audioOnlyOnCar) getString(R.string.enabled_label) else getString(R.string.disabled_label),
-            onClick = {
-                PlaybackStore.setAndroidAutoAudioOnlyOnCar(this, !config.audioOnlyOnCar)
-                showAndroidAutoSettingsPage()
+            isEnabled = config.enabled,
+            toggleChecked = config.audioOnlyOnCar,
+            onToggleChanged = { checked ->
+                PlaybackStore.setAndroidAutoAudioOnlyOnCar(this, checked)
+                VexoPlaybackService.notifyAndroidAutoConfigChanged(this)
+                showAndroidAutoSettingsPage(animateEntrance = false)
             }
         ),
-        // 4. Minimal Car Display (Show channel/group name only)
+        // 4. Minimal Car Display (disabled/greyed out when master switch is OFF)
         PremiumMenuItem(
             iconEmoji = "🛡️",
             title = getString(R.string.aa_minimal_display_title),
             subtitle = if (config.minimalCarDisplay) getString(R.string.aa_minimal_display_on_sub) else getString(R.string.aa_minimal_display_off_sub),
             isAccentHighlighted = config.enabled && config.minimalCarDisplay,
-            statusChip = if (config.minimalCarDisplay) getString(R.string.enabled_label) else getString(R.string.disabled_label),
-            onClick = {
-                PlaybackStore.setAndroidAutoMinimalDisplay(this, !config.minimalCarDisplay)
-                showAndroidAutoSettingsPage()
+            isEnabled = config.enabled,
+            toggleChecked = config.minimalCarDisplay,
+            onToggleChanged = { checked ->
+                PlaybackStore.setAndroidAutoMinimalDisplay(this, checked)
+                VexoPlaybackService.notifyAndroidAutoConfigChanged(this)
+                showAndroidAutoSettingsPage(animateEntrance = false)
             }
         ),
         // 5. Test / Check Android Auto Connection & Readiness Status
@@ -75,6 +85,7 @@ internal fun MainActivity.showAndroidAutoSettingsPage() {
             title = getString(R.string.aa_test_status_title),
             subtitle = getString(R.string.aa_test_status_sub),
             isAccentHighlighted = true,
+            isEnabled = true,
             onClick = {
                 showAndroidAutoDiagnosticsDialog()
             }
@@ -86,7 +97,8 @@ internal fun MainActivity.showAndroidAutoSettingsPage() {
         title = getString(R.string.settings_android_auto_title),
         subtitle = statusSummary,
         items = items,
-        showHeaderVersionBadge = false
+        showHeaderVersionBadge = false,
+        animateEntrance = animateEntrance
     )
 }
 

@@ -1,3 +1,7 @@
+## v90.28 (2026-11-25)
+- **Android Auto Instant Theme-Aware Switches**: Replaced Enable/Disable click rows in Android Auto Settings with direct `SwitchCompat` rows sharing the exact theme-derived styling (`applyThemedSwitchStyle`) as the top dropdown's Hidden folders switch, with instant live refresh (`VexoPlaybackService.notifyAndroidAutoConfigChanged`), visibly disabled dependent rows when OFF, RTL alignment, large-font wrapping, and TalkBack switch semantics.
+- **Hidden Folders Always Default OFF**: Changed `HiddenMediaAndPlaylistHelper.DEFAULT_SHOW_HIDDEN_FOLDERS` to `false`, added a one-time upgrade migration (`vexo_show_hidden_default_off_migrated_v2`) in `PlaybackStore`, and enforced hidden-path filtering across videos, Continue Watching FAB, audio library (`AudioLibraryManager`), and Android Auto (`AndroidAutoManager`) with immediate refresh on toggle.
+
 ## v90.27 (2026-11-25)
 - **Android Auto Support & Car UX Compliance**: Upgraded `VexoPlaybackService` with off-main-thread `MediaLibraryService` browsing & voice search (`AndroidAutoManager`), Car UX item caps & text truncation, safe disconnect/error handling, Audio-Only video-track disabling on car connect, and optional Auto-Resume.
 - **Structured Car Browse Tree**: Exposed a clean 3-section browse tree (**Favorites / Saved**, **Channels / Categories**, and **Recently Played**) across IPTV sources and local audio.
