@@ -22,6 +22,7 @@ object AppIconManager {
     const val STYLE_GLASS_DARK = "glass_dark"
     const val STYLE_DARK = "obsidian_dark"
     const val STYLE_GRADIENT = "aurora_gradient"
+    const val STYLE_EMERALD = "emerald_prism"
 
     data class AppIconOption(
         val id: String,
@@ -87,6 +88,13 @@ object AppIconManager {
             mipmapResId = R.mipmap.ic_launcher_gradient,
             titleResId = R.string.icon_style_gradient,
             subtitleResId = R.string.icon_style_gradient_sub
+        ),
+        AppIconOption(
+            id = STYLE_EMERALD,
+            aliasClassName = "com.pureplayer.video.LauncherAliasEmerald",
+            mipmapResId = R.mipmap.ic_launcher_emerald,
+            titleResId = R.string.icon_style_emerald,
+            subtitleResId = R.string.icon_style_emerald_sub
         )
     )
 
@@ -98,7 +106,8 @@ object AppIconManager {
         "com.pureplayer.video.LauncherAliasGlassLight",
         "com.pureplayer.video.LauncherAliasGlassDark",
         "com.pureplayer.video.LauncherAliasDark",
-        "com.pureplayer.video.LauncherAliasGradient"
+        "com.pureplayer.video.LauncherAliasGradient",
+        "com.pureplayer.video.LauncherAliasEmerald"
     )
 
     private val styleToAlias: Map<String, String> = mapOf(
@@ -109,7 +118,8 @@ object AppIconManager {
         STYLE_GLASS_LIGHT to "com.pureplayer.video.LauncherAliasGlassLight",
         STYLE_GLASS_DARK to "com.pureplayer.video.LauncherAliasGlassDark",
         STYLE_DARK to "com.pureplayer.video.LauncherAliasDark",
-        STYLE_GRADIENT to "com.pureplayer.video.LauncherAliasGradient"
+        STYLE_GRADIENT to "com.pureplayer.video.LauncherAliasGradient",
+        STYLE_EMERALD to "com.pureplayer.video.LauncherAliasEmerald"
     )
 
     /**

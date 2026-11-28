@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Subtle 3D Drop Shadow -->
+    <path android:fillColor="#44020B08" android:pathData="M37,31 L81,55.5 L37,80 Z" />
+    <!-- Luminous Emerald-Mint & Warm Gold Rim Faceted Crystal Play Triangle -->
+    <path android:fillColor="#6EE7B7" android:pathData="M35,28 L52,54 L35,54 Z" />
+    <path android:fillColor="#A7F3D0" android:pathData="M35,28 L57,41 L52,54 Z" />
+    <path android:fillColor="#34D399" android:pathData="M35,54 L52,54 L35,80 Z" />
+    <path android:fillColor="#10B981" android:pathData="M52,54 L57,41 L79,54 Z" />
+    <path android:fillColor="#059669" android:pathData="M52,54 L79,54 L57,67 Z" />
+    <path android:fillColor="#047857" android:pathData="M35,80 L52,54 L57,67 Z" />
+    <path android:fillColor="#34D399" android:pathData="M57,41 L79,54 L67,54 Z" />
+    <path android:fillColor="#065F46" android:pathData="M67,54 L79,54 L57,67 Z" />
+    <!-- Crisp Warm-Gold & White Specular Highlights -->
+    <path android:fillColor="#BBFDE68A" android:pathData="M35,28 L37.8,29.6 L37.8,54 L35,54 Z" />
+    <path android:fillColor="#88FFFFFF" android:pathData="M35,28 L57,41 L55.4,42.3 L35,30.2 Z" />
+    <path android:fillColor="#99FDE68A" android:pathData="M67,54 L79,54 L71,56 Z" />
+</vector>

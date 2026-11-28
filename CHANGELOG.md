@@ -1,3 +1,7 @@
+## v90.32 (2026-11-28)
+- **Randomized Shorts Feed**: Every tap on the Shorts tab now shuffles the eligible Shorts list completely (preventing repeating the exact same opening clip) while preserving your current Short when returning from full-screen.
+- **9th Pro Adaptive Icon (Emerald Prism)**: Added **Emerald Prism** (`LauncherAliasEmerald`, faceted obsidian-emerald crystal with warm gold rim) completing a symmetric 3×3 icon picker grid.
+
 ## v90.31 (2026-11-28)
 - **Bug Fix — Shorts Full-Screen → Back Audio Loss**: Separated `leaveShortsTab()` from `pauseForLifecycle()` so returning from `PlayerActivity` triggers `onHostResumed()`, cleanly recreating the pooled `ExoPlayer` with `handleAudioFocus = true`, explicit audio-track enablement, persisted mute state (`vexo_shorts_muted_v1`), and exact resume position from `PlaybackStore`.
 - **Bug Fix — Resume Last Video Button Over Shorts**: Drove `fabResumeLast` visibility directly from navigation state (`isShortsTabActive`, `isAudioTabHighlighted`, `isInVaultTab`, `currentMainTab`) with smooth 160ms fade-out in Shorts and `STATE_IS_SHORTS_TAB` preservation across rotation/recreation.

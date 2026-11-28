@@ -923,4 +923,9 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="changelog_v90_31_title">v%1$s — Shorts Full-Screen Audio Fix &amp; Clean Shorts Overlay</string>
     <string name="changelog_v90_31_desc">• Fixed missing audio when returning from full-screen player back to Shorts: cleanly hands off AudioFocus, restores exact playback position &amp; mute state, re-enables audio tracks, and resumes immediately with zero black flash.
 • Hidden the bottom Resume Last Video button automatically whenever Shorts is active (including after returning from full-screen or rotation) with a smooth fade when switching back to Videos.</string>
+    <string name="icon_style_emerald">Emerald Prism</string>
+    <string name="icon_style_emerald_sub">Faceted emerald crystal with warm gold rim</string>
+    <string name="changelog_v90_32_title">v%1$s — Randomized Shorts Feed &amp; Emerald Prism Icon</string>
+    <string name="changelog_v90_32_desc">• Shorts now shuffles completely every time you tap the Shorts tab (avoiding repeating the same opening clip while preserving your exact short when returning from full-screen).
+• Added a 9th adaptive launcher icon (Emerald Prism) to complete a balanced 3×3 icon grid in Appearance settings.</string>
 </resources>

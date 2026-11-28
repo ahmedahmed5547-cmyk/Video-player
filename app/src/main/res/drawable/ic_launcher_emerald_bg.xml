@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Deep Obsidian-Emerald Faceted Background (Emerald Prism) -->
+    <path android:fillColor="#041511" android:pathData="M0,0 H108 V108 H0 Z" />
+    <path android:fillColor="#06211A" android:pathData="M0,0 L54,0 L30,36 Z" />
+    <path android:fillColor="#082B22" android:pathData="M54,0 L108,0 L78,34 Z" />
+    <path android:fillColor="#051B15" android:pathData="M54,0 L78,34 L30,36 Z" />
+    <path android:fillColor="#051914" android:pathData="M0,0 L30,36 L0,70 Z" />
+    <path android:fillColor="#093026" android:pathData="M108,0 L108,68 L78,34 Z" />
+    <path android:fillColor="#07251D" android:pathData="M30,36 L78,34 L54,72 Z" />
+    <path android:fillColor="#03110E" android:pathData="M0,70 L30,36 L30,108 L0,108 Z" />
+    <path android:fillColor="#061E18" android:pathData="M30,36 L54,72 L30,108 Z" />
+    <path android:fillColor="#07221B" android:pathData="M78,34 L108,68 L108,108 L78,108 Z" />
+    <path android:fillColor="#051914" android:pathData="M78,34 L78,108 L54,72 Z" />
+    <path android:fillColor="#041511" android:pathData="M30,108 L54,72 L78,108 Z" />
+</vector>

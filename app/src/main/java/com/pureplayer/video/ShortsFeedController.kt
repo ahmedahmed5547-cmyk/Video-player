@@ -56,15 +56,27 @@ object ShortsFeedPolicy {
     fun filterShorts(
         allVideos: List<VideoItem>,
         lockedFolders: Set<String>,
-        showHidden: Boolean
+        showHidden: Boolean,
+        shuffle: Boolean = true,
+        avoidFirstId: Long = -1L
     ): List<VideoItem> {
-        return allVideos
+        val base = allVideos
             .asSequence()
             .filter { it.folderName !in lockedFolders }
             .filter { showHidden || !it.isHidden }
             .filter { isShortVideo(it) }
-            .sortedByDescending { it.dateAddedSec }
             .toList()
+        if (!shuffle) return base.sortedByDescending { it.dateAddedSec }
+        if (base.size <= 1) return base
+        val rng = kotlin.random.Random(System.nanoTime())
+        val shuffled = base.shuffled(rng).toMutableList()
+        if (avoidFirstId != -1L && shuffled[0].id == avoidFirstId) {
+            val swapIdx = rng.nextInt(1, shuffled.size)
+            val tmp = shuffled[0]
+            shuffled[0] = shuffled[swapIdx]
+            shuffled[swapIdx] = tmp
+        }
+        return shuffled
     }
 }
 
@@ -100,6 +112,7 @@ class ShortsFeedController(
     private var layoutManager: LinearLayoutManager? = null
     private val playerPool = mutableListOf<PooledPlayerEntry>()
     private var activePosition: Int = -1
+    private var lastFirstShortId: Long = -1L
     private var isMuted: Boolean = PlaybackStore.isShortsMuted(activity)
     private var isVisibleToUser: Boolean = false
     private var returningFromFullScreenUri: Uri? = null
@@ -253,7 +266,11 @@ class ShortsFeedController(
         ensureInitialized()
         isMuted = PlaybackStore.isShortsMuted(activity)
         isVisibleToUser = true
-        refreshDataAsync(allVideos)
+        // Fully randomize order every time the user taps Shorts, starting cleanly at index 0
+        pauseForLifecycle()
+        activePosition = 0
+        pendingResumePositionMs = -1L
+        refreshDataAsync(allVideos, reshuffle = true)
     }
 
     fun markDirtyIfHidden(allVideos: List<VideoItem>) {
@@ -263,17 +280,24 @@ class ShortsFeedController(
         }
     }
 
-    fun refreshDataAsync(allVideos: List<VideoItem>) {
+    fun refreshDataAsync(allVideos: List<VideoItem>, reshuffle: Boolean = false) {
         if (recyclerView == null) return
         val snapshot = allVideos.toList()
         val locked = PlaybackStore.getLockedFolders(activity)
         val showHidden = PlaybackStore.isShowHiddenFolders(activity)
         val prevList = shortsList
+        val avoidId = if (reshuffle) lastFirstShortId else -1L
 
         filterJob?.cancel()
         filterJob = activity.lifecycleScope.launch {
             val (filtered, diffResult) = withContext(Dispatchers.Default) {
-                val next = ShortsFeedPolicy.filterShorts(snapshot, locked, showHidden)
+                val next = ShortsFeedPolicy.filterShorts(
+                    allVideos = snapshot,
+                    lockedFolders = locked,
+                    showHidden = showHidden,
+                    shuffle = true,
+                    avoidFirstId = avoidId
+                )
                 val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
                     override fun getOldListSize(): Int = prevList.size
                     override fun getNewListSize(): Int = next.size
@@ -287,6 +311,7 @@ class ShortsFeedController(
 
             isDataDirty = false
             shortsList = filtered
+            if (filtered.isNotEmpty()) lastFirstShortId = filtered[0].id
             emptyTextView?.setTextColor(PlaybackStore.getSecondaryTextColor(activity))
             container.setBackgroundColor(PlaybackStore.getBackgroundColor(activity))
             adapter?.let { diffResult.dispatchUpdatesTo(it) }
@@ -303,10 +328,10 @@ class ShortsFeedController(
             emptyTextView?.visibility = View.GONE
 
             if (isVisibleToUser) {
-                val targetPos = if (activePosition in filtered.indices) activePosition else 0
+                val targetPos = if (reshuffle) 0 else if (activePosition in filtered.indices) activePosition else 0
                 recyclerView?.post {
                     if (!isVisibleToUser) return@post
-                    if (activePosition !in filtered.indices) {
+                    if (reshuffle || activePosition !in filtered.indices) {
                         recyclerView?.scrollToPosition(0)
                     }
                     activateSettledPosition(targetPos, seekToMs = pendingResumePositionMs)
