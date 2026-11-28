@@ -85,8 +85,8 @@ android {
         applicationId = "com.pureplayer.video"
         minSdk = 24
         targetSdk = 36
-        versionCode = 9034
-        versionName = "90.34"
+        versionCode = 9035
+        versionName = "90.35"
 
         buildConfigField("String", "SUBDL_API_KEY", "\"\"")
 
@@ -159,6 +159,19 @@ android {
         unitTests.isReturnDefaultValues = true
     }
 
+    bundle {
+        language {
+            // Keep all 15 bundled locales in the base APK so in-app language switching works offline
+            enableSplit = false
+        }
+        density {
+            enableSplit = true
+        }
+        abi {
+            enableSplit = true
+        }
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = false
@@ -180,6 +193,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
     implementation("androidx.window:window:1.3.0")
+    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-session:1.4.1")
     implementation("androidx.media3:media3-common:1.4.1")

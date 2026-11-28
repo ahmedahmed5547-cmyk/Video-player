@@ -936,4 +936,6 @@ Any series, movie, or channel you play will appear here automatically so you can
 • Added an instant Delete button inside Shorts with clean transition to the next Short.</string>
     <string name="changelog_v90_34_title">v%1$s — Instant Shorts Auto-Advance &amp; Unified Icons</string>
     <string name="changelog_v90_34_desc">• Fixed black screen after deleting a Short so the next Short plays immediately.\n• Unified every Settings sub-menu and the top 3-bar dropdown menu with monochrome outline vector icons.\n• Redesigned the About screen with a cohesive hero card and matching vector rows.</string>
+    <string name="changelog_v90_35_title">v%1$s — App Bundle &amp; Startup Optimization</string>
+    <string name="changelog_v90_35_desc">• Configured App Bundle density and ABI splits for smaller Play Store downloads while preserving all 15 in-app languages.\n• Added AndroidX ProfileInstaller to accelerate cold app startup via Google Play Cloud Profiles.</string>
 </resources>

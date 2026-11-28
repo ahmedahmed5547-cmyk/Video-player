@@ -1,3 +1,7 @@
+## v90.35 (versionCode 9035)
+- **App Bundle Split Optimization**: Enabled explicit `density` and `abi` splits in `app/build.gradle.kts` while keeping `language.enableSplit = false` so all 15 bundled locales remain available offline for the in-app language picker.
+- **Startup Optimization (`ProfileInstaller`)**: Added `androidx.profileinstaller:profileinstaller:1.3.1` to support Android ART / Google Play Cloud Profiles for faster cold starts.
+
 ## v90.34 (versionCode 9034)
 - **Shorts Instant Delete Fix**: Eliminated the black screen after deleting a Short by resetting the deleted player slot, shifting pre-warmed pool positions, and immediately auto-playing the next Short once the list settles.
 - **Unified Settings & Top Dropdown Icons**: Replaced all colored emoji icons across every Settings sub-menu (Video Player & Decoder, Audio, Subtitles, Appearance, Privacy, Updates) and the 3-bar top dropdown menu with minimalist monochrome outline vector icons (`ic_lux_*`).
