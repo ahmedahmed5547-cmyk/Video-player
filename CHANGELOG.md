@@ -1,3 +1,9 @@
+## v90.36 (versionCode 9036)
+- **Smart No-Repeat Shorts Shuffle**: Tracks watched Short IDs in `PlaybackStore` (`vexo_shorts_seen_ids_v1`) so unseen clips always appear first in random order; once every clip has been seen, the cycle resets automatically for a fresh randomized pass.
+- **Unified Settings Header Icons**: Added monochrome vector icon badges next to every Settings page title (matching each section's own `ic_lux_*` icon) and the About screen header.
+- **About Screen Layout**: Positioned the Developer card (`Ahmed M Moumen`) at the very bottom of the About screen.
+- **Guaranteed Native Debug Symbols Export**: Enhanced `.github/workflows/build.yml` to always package `PureVideoPlayer-v90.36-native-debug-symbols.zip` (and `mapping.txt`) alongside the Play `.aab`.
+
 ## v90.35 (versionCode 9035)
 - **App Bundle Split Optimization**: Enabled explicit `density` and `abi` splits in `app/build.gradle.kts` while keeping `language.enableSplit = false` so all 15 bundled locales remain available offline for the in-app language picker.
 - **Startup Optimization (`ProfileInstaller`)**: Added `androidx.profileinstaller:profileinstaller:1.3.1` to support Android ART / Google Play Cloud Profiles for faster cold starts.

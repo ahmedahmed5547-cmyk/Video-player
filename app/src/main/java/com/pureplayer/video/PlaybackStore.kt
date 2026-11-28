@@ -143,6 +143,7 @@ object PlaybackStore {
     private const val KEY_DEFAULT_PROMPT_LAST_SHOWN_MS = "vexo_default_prompt_last_shown_ms_v1"
     private const val KEY_MEDIA_VIEW_MODE = "vexo_media_view_mode_v1"
     private const val KEY_SHORTS_MUTED = "vexo_shorts_muted_v1"
+    private const val KEY_SHORTS_SEEN_IDS = "vexo_shorts_seen_ids_v1"
     const val VIEW_MODE_FOLDER = 0
     const val VIEW_MODE_TREE = 1
     const val VIEW_MODE_LIBRARY = 2
@@ -1220,6 +1221,22 @@ object PlaybackStore {
 
     fun setShortsMuted(context: Context, muted: Boolean) {
         prefs(context).edit().putBoolean(KEY_SHORTS_MUTED, muted).apply()
+    }
+
+    fun getSeenShortIds(context: Context): Set<Long> {
+        val raw = prefs(context).getStringSet(KEY_SHORTS_SEEN_IDS, emptySet()).orEmpty()
+        return raw.mapNotNull { it.toLongOrNull() }.toSet()
+    }
+
+    fun markShortSeen(context: Context, videoId: Long) {
+        val current = prefs(context).getStringSet(KEY_SHORTS_SEEN_IDS, emptySet()).orEmpty().toMutableSet()
+        if (current.add(videoId.toString())) {
+            prefs(context).edit().putStringSet(KEY_SHORTS_SEEN_IDS, current).apply()
+        }
+    }
+
+    fun clearSeenShortIds(context: Context) {
+        prefs(context).edit().remove(KEY_SHORTS_SEEN_IDS).apply()
     }
 
     fun formatTime(timeMs: Long): String {

@@ -376,13 +376,40 @@ internal fun MainActivity.applyThemedSwitchStyle(
     )
 }
 
+private fun resolveUnifiedHeaderIconRes(headerIcon: String, explicitResId: Int?): Int? {
+    if (explicitResId != null) return explicitResId
+    return when (headerIcon.trim()) {
+        "⚙️" -> R.drawable.ic_lux_settings
+        "🎬" -> R.drawable.ic_lux_play_engine
+        "🔊", "🎭", "🎚️", "🎵" -> R.drawable.ic_lux_audio
+        "💬" -> R.drawable.ic_lux_subtitles
+        "🚗" -> R.drawable.ic_lux_android_auto
+        "🎨" -> R.drawable.ic_lux_palette
+        "🛡️" -> R.drawable.ic_lux_shield
+        "🔒", "🔐" -> R.drawable.ic_lux_lock
+        "🚀" -> R.drawable.ic_lux_update
+        "🧹" -> R.drawable.ic_lux_clear_cache
+        "🔋" -> R.drawable.ic_lux_battery
+        "ℹ️" -> R.drawable.ic_lux_info
+        "⚡" -> R.drawable.ic_lux_bolt
+        "🔄" -> R.drawable.ic_lux_rotate
+        "⏯️" -> R.drawable.ic_lux_resume
+        "✨" -> R.drawable.ic_lux_translate
+        "🌐" -> R.drawable.ic_lux_globe
+        "📂", "📁" -> R.drawable.ic_lux_folder
+        "🩺" -> R.drawable.ic_lux_diagnostics
+        else -> null
+    }
+}
+
 internal fun MainActivity.showPremiumMenuDialog(
     headerIcon: String,
     title: String,
     subtitle: String?,
     items: List<PremiumMenuItem>,
     showHeaderVersionBadge: Boolean = false,
-    animateEntrance: Boolean = true
+    animateEntrance: Boolean = true,
+    headerIconResId: Int? = null
 ) {
     val accent = PlaybackStore.getAccentColor(this)
     val surface = PlaybackStore.getSurfaceColor(this)
@@ -516,6 +543,27 @@ internal fun MainActivity.showPremiumMenuDialog(
         }
     }
 
+    val resolvedHeaderIconRes = resolveUnifiedHeaderIconRes(headerIcon, headerIconResId)
+    if (resolvedHeaderIconRes != null) {
+        val headerIconBadge = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply {
+                marginEnd = dp(12)
+            }
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(12).toFloat()
+                setColor(Color.argb(if (isLight) 20 else 28, Color.red(accent), Color.green(accent), Color.blue(accent)))
+                setStroke(dp(1), Color.argb(70, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+            addView(ImageView(this@showPremiumMenuDialog).apply {
+                setImageResource(resolvedHeaderIconRes)
+                imageTintList = ColorStateList.valueOf(accent)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                layoutParams = FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER)
+            })
+        }
+        headerRow.addView(headerIconBadge)
+    }
     headerRow.addView(headerTextCol)
     headerRow.addView(btnHeaderNav)
     cardContainer.addView(headerRow)

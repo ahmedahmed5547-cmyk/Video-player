@@ -75,6 +75,12 @@ jobs:
           find app/build/outputs/apk/play/release -name "*.apk" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-play-release.apk" \;
           find app/build/outputs/bundle/playRelease -name "*.aab" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-play-release.aab" \;
           find app/build/outputs/native-debug-symbols/playRelease -name "*.zip" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-native-debug-symbols.zip" \; || true
+          if [ ! -s "dist_outputs/PureVideoPlayer-v${VER}-native-debug-symbols.zip" ]; then
+            LIBS_DIR=$(find app/build/intermediates/merged_native_libs/playRelease -type d -name "lib" | head -n 1 || true)
+            if [ -n "$LIBS_DIR" ] && [ -d "$LIBS_DIR" ]; then
+              (cd "$LIBS_DIR" && zip -r "${GITHUB_WORKSPACE}/dist_outputs/PureVideoPlayer-v${VER}-native-debug-symbols.zip" .) || true
+            fi
+          fi
           find app/build/outputs/mapping/playRelease -name "mapping.txt" -exec cp {} "dist_outputs/PureVideoPlayer-v${VER}-mapping.txt" \; || true
 
       - name: Upload Signed Release APKs & Google Play Bundle (AAB)

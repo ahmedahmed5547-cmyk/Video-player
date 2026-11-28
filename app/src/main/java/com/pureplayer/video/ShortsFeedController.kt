@@ -82,6 +82,53 @@ object ShortsFeedPolicy {
         }
         return shuffled
     }
+
+    /**
+     * Smart No-Repeat Shuffle:
+     * - Prioritizes unseen Shorts first (shuffled randomly).
+     * - Places previously seen Shorts after unseen ones (also shuffled).
+     * - When ALL available Shorts have been seen at least once, resets the cycle (returns cycleReset = true)
+     *   and reshuffles the entire pool randomly while avoiding repeating the immediately preceding clip first.
+     */
+    fun filterShortsSmart(
+        allVideos: List<VideoItem>,
+        lockedFolders: Set<String>,
+        showHidden: Boolean,
+        seenIds: Set<Long>,
+        avoidFirstId: Long = -1L
+    ): Pair<List<VideoItem>, Boolean> {
+        val base = allVideos
+            .asSequence()
+            .filter { it.folderName !in lockedFolders }
+            .filter { showHidden || !it.isHidden }
+            .filter { isShortVideo(it) }
+            .toList()
+        if (base.size <= 1) return Pair(base, false)
+
+        val rng = kotlin.random.Random(System.nanoTime())
+        val unseen = base.filter { it.id !in seenIds }
+        if (unseen.isEmpty()) {
+            // All shorts were seen — start a fresh randomized cycle
+            val fresh = base.shuffled(rng).toMutableList()
+            if (avoidFirstId != -1L && fresh[0].id == avoidFirstId) {
+                val swapIdx = rng.nextInt(1, fresh.size)
+                val tmp = fresh[0]
+                fresh[0] = fresh[swapIdx]
+                fresh[swapIdx] = tmp
+            }
+            return Pair(fresh, true)
+        }
+
+        val unseenShuffled = unseen.shuffled(rng).toMutableList()
+        if (avoidFirstId != -1L && unseenShuffled.size > 1 && unseenShuffled[0].id == avoidFirstId) {
+            val swapIdx = rng.nextInt(1, unseenShuffled.size)
+            val tmp = unseenShuffled[0]
+            unseenShuffled[0] = unseenShuffled[swapIdx]
+            unseenShuffled[swapIdx] = tmp
+        }
+        val seenShuffled = base.filter { it.id in seenIds }.shuffled(kotlin.random.Random(System.nanoTime() xor 0x5A5A5A5AL))
+        return Pair(unseenShuffled + seenShuffled, false)
+    }
 }
 
 /**
@@ -291,15 +338,16 @@ class ShortsFeedController(
         val showHidden = PlaybackStore.isShowHiddenFolders(activity)
         val prevList = shortsList
         val avoidId = if (reshuffle) lastFirstShortId else -1L
+        val seenSnapshot = PlaybackStore.getSeenShortIds(activity)
 
         filterJob?.cancel()
         filterJob = activity.lifecycleScope.launch {
-            val (filtered, diffResult) = withContext(Dispatchers.Default) {
-                val next = ShortsFeedPolicy.filterShorts(
+            val (filtered, cycleReset, diffResult) = withContext(Dispatchers.Default) {
+                val (next, didReset) = ShortsFeedPolicy.filterShortsSmart(
                     allVideos = snapshot,
                     lockedFolders = locked,
                     showHidden = showHidden,
-                    shuffle = true,
+                    seenIds = seenSnapshot,
                     avoidFirstId = avoidId
                 )
                 val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
@@ -309,10 +357,13 @@ class ShortsFeedController(
                     override fun areContentsTheSame(o: Int, n: Int): Boolean =
                         prevList[o].uri == next[n].uri && prevList[o].title == next[n].title && prevList[o].isHidden == next[n].isHidden
                 })
-                Pair(next, diff)
+                Triple(next, didReset, diff)
             }
             if (activity.isFinishing || activity.isDestroyed) return@launch
 
+            if (cycleReset) {
+                PlaybackStore.clearSeenShortIds(activity)
+            }
             isDataDirty = false
             shortsList = filtered
             if (filtered.isNotEmpty()) lastFirstShortId = filtered[0].id
@@ -362,6 +413,7 @@ class ShortsFeedController(
         pauseAllPooledPlayers(seekOthersToZero = true, exceptPos = position)
 
         val video = shortsList[position]
+        PlaybackStore.markShortSeen(activity, video.id)
         val entry = obtainEntryForPosition(position, keepWindow)
         bindEntryToHolder(entry, position, video, holder, autoPlay = true, seekToMs = seekToMs)
 

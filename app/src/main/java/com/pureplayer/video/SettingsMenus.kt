@@ -1072,12 +1072,27 @@ internal fun MainActivity.showAboutAppPage() {
         }
     })
 
-    // Header Row (Title + Back/Close Circle)
+    // Header Row (Unified Icon Badge + Title + Back/Close Circle)
     val headerRow = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(4), 0, dp(4), dp(16))
     }
+    headerRow.addView(FrameLayout(this).apply {
+        layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(12) }
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(12).toFloat()
+            setColor(Color.argb(if (isLight) 20 else 28, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            setStroke(dp(1), Color.argb(70, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+        addView(ImageView(this@showAboutAppPage).apply {
+            setImageResource(R.drawable.ic_lux_info)
+            imageTintList = ColorStateList.valueOf(accent)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            layoutParams = FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER)
+        })
+    })
     headerRow.addView(TextView(this).apply {
         text = getString(R.string.settings_hub_about_title)
         setTextColor(primaryText)
@@ -1273,18 +1288,18 @@ internal fun MainActivity.showAboutAppPage() {
     }
 
     addAboutCard(
-        iconResId = R.drawable.ic_lux_developer,
-        title = getString(R.string.about_developer_label),
-        subtitle = "Ahmed M Moumen",
-        highlighted = true,
-        interactive = false
-    )
-
-    addAboutCard(
         iconResId = R.drawable.ic_lux_scale,
         title = getString(R.string.about_disclaimer_title),
         subtitle = getString(R.string.about_disclaimer_sub),
         highlighted = false,
+        interactive = false
+    )
+
+    addAboutCard(
+        iconResId = R.drawable.ic_lux_developer,
+        title = getString(R.string.about_developer_label),
+        subtitle = "Ahmed M Moumen",
+        highlighted = true,
         interactive = false
     )
 
@@ -1298,10 +1313,18 @@ internal fun MainActivity.showChangelogPage() {
         ChangelogReleaseEntry(
             version = verName,
             date = "2026-11-28",
-            iconEmoji = "🚀",
-            title = getString(R.string.changelog_v90_35_title, verName),
-            description = getString(R.string.changelog_v90_35_desc),
+            iconEmoji = "✨",
+            title = getString(R.string.changelog_v90_36_title, verName),
+            description = getString(R.string.changelog_v90_36_desc),
             isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.35",
+            date = "2026-11-28",
+            iconEmoji = "🚀",
+            title = getString(R.string.changelog_v90_35_title, "90.35"),
+            description = getString(R.string.changelog_v90_35_desc),
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.34",
