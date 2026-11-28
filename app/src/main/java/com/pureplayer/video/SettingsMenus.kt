@@ -286,6 +286,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
         ),
         PremiumMenuItem(
             iconEmoji = "🚗",
+            iconResId = R.drawable.ic_lux_android_auto,
             title = getString(R.string.settings_android_auto_title),
             subtitle = if (PlaybackStore.isAndroidAutoEnabled(this)) getString(R.string.aa_master_on_sub) else getString(R.string.aa_master_off_sub),
             isAccentHighlighted = PlaybackStore.isAndroidAutoEnabled(this),
@@ -338,6 +339,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
     ) else emptyList()) + listOf(
         PremiumMenuItem(
             iconEmoji = "🧹",
+            iconResId = R.drawable.ic_lux_clear_cache,
             title = getString(R.string.clear_cache_title),
             subtitle = getString(R.string.clear_cache_row_sub),
             statusChip = if (AppCacheManager.lastKnownTotalBytes >= 0L) {
@@ -354,6 +356,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
         ),
         PremiumMenuItem(
             iconEmoji = "🔋",
+            iconResId = R.drawable.ic_lux_battery,
             title = getString(R.string.battery_saver_title),
             subtitle = if (BatteryOptimizationManager.isBatterySaverActive(this)) getString(R.string.battery_saver_status_on) else getString(R.string.battery_saver_status_off),
             isAccentHighlighted = BatteryOptimizationManager.isBatterySaverActive(this),
@@ -364,6 +367,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
         ),
         PremiumMenuItem(
             iconEmoji = "ℹ️",
+            iconResId = R.drawable.ic_lux_info,
             title = getString(R.string.settings_hub_about_title),
             subtitle = getString(R.string.settings_hub_about_sub),
             sectionHeader = if (!BuildConfig.ENABLE_IN_APP_UPDATER) getString(R.string.settings_sec_system_updates) else null,
@@ -1051,10 +1055,18 @@ internal fun MainActivity.showChangelogPage() {
         ChangelogReleaseEntry(
             version = verName,
             date = "2026-11-28",
-            iconEmoji = "🎲",
-            title = getString(R.string.changelog_v90_32_title, verName),
-            description = getString(R.string.changelog_v90_32_desc),
+            iconEmoji = "✨",
+            title = getString(R.string.changelog_v90_33_title, verName),
+            description = getString(R.string.changelog_v90_33_desc),
             isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.32",
+            date = "2026-11-28",
+            iconEmoji = "🎲",
+            title = getString(R.string.changelog_v90_32_title, "90.32"),
+            description = getString(R.string.changelog_v90_32_desc),
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.31",
@@ -2216,7 +2228,8 @@ internal fun MainActivity.showBatterySaverSettingsDialog(animateEntrance: Boolea
 
     val items = listOf(
         PremiumMenuItem(
-            iconEmoji = if (manualOn) "🔋" else "⚡",
+            iconEmoji = "🔋",
+            iconResId = R.drawable.ic_lux_battery,
             title = getString(R.string.battery_saver_manual_title),
             subtitle = if (manualOn) getString(R.string.battery_saver_manual_on_sub) else getString(R.string.battery_saver_manual_off_sub),
             isAccentHighlighted = manualOn,
@@ -2228,6 +2241,7 @@ internal fun MainActivity.showBatterySaverSettingsDialog(animateEntrance: Boolea
         ),
         PremiumMenuItem(
             iconEmoji = "🤖",
+            iconResId = R.drawable.ic_lux_play_engine,
             title = getString(R.string.battery_saver_auto_title),
             subtitle = if (autoOn) getString(R.string.battery_saver_auto_on_sub, threshold) else getString(R.string.battery_saver_auto_off_sub),
             isAccentHighlighted = autoOn,
@@ -2239,6 +2253,7 @@ internal fun MainActivity.showBatterySaverSettingsDialog(animateEntrance: Boolea
         ),
         PremiumMenuItem(
             iconEmoji = "📉",
+            iconResId = R.drawable.ic_lux_diagnostics,
             title = getString(R.string.battery_saver_threshold_title),
             subtitle = "$threshold%",
             onClick = {
@@ -2255,6 +2270,7 @@ internal fun MainActivity.showBatterySaverSettingsDialog(animateEntrance: Boolea
         ),
         PremiumMenuItem(
             iconEmoji = "📊",
+            iconResId = R.drawable.ic_lux_battery,
             title = getString(R.string.battery_indicator_title),
             subtitle = if (showIndicator) getString(R.string.enabled_label) else getString(R.string.disabled_label),
             isAccentHighlighted = showIndicator,
@@ -2266,6 +2282,7 @@ internal fun MainActivity.showBatterySaverSettingsDialog(animateEntrance: Boolea
         ),
         PremiumMenuItem(
             iconEmoji = "⚠️",
+            iconResId = R.drawable.ic_lux_info,
             title = getString(R.string.low_battery_alerts_title),
             subtitle = if (lowAlerts) getString(R.string.low_battery_alerts_sub) else getString(R.string.disabled_label),
             isAccentHighlighted = lowAlerts,

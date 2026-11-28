@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Minimal Instagram-style thin-outline trash delete icon (1.8dp stroke, rounded caps/joins) -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M4,7H20M9,7V4.5C9,3.95 9.45,3.5 10,3.5H14C14.55,3.5 15,3.95 15,4.5V7M6,7L7,19.5C7.05,20.35 7.75,21 8.6,21H15.4C16.25,21 16.95,20.35 17,19.5L18,7M10,11V17M14,11V17"
+        android:strokeWidth="1.8"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

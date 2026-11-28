@@ -26,6 +26,7 @@ internal fun MainActivity.showAndroidAutoSettingsPage(animateEntrance: Boolean =
         // 1. Master Android Auto Switch (one tap toggles immediately; no extra dialog)
         PremiumMenuItem(
             iconEmoji = "🚗",
+            iconResId = R.drawable.ic_lux_android_auto,
             title = getString(R.string.aa_master_label),
             subtitle = if (config.enabled) getString(R.string.aa_master_on_sub) else getString(R.string.aa_master_off_sub),
             isAccentHighlighted = config.enabled,
@@ -40,6 +41,7 @@ internal fun MainActivity.showAndroidAutoSettingsPage(animateEntrance: Boolean =
         // 2. Auto-Resume on Car Connect (disabled/greyed out when master switch is OFF)
         PremiumMenuItem(
             iconEmoji = "▶️",
+            iconResId = R.drawable.ic_lux_play_engine,
             title = getString(R.string.aa_auto_resume_title),
             subtitle = if (config.autoResumeOnConnect) getString(R.string.aa_auto_resume_on_sub) else getString(R.string.aa_auto_resume_off_sub),
             isAccentHighlighted = config.enabled && config.autoResumeOnConnect,
@@ -54,6 +56,7 @@ internal fun MainActivity.showAndroidAutoSettingsPage(animateEntrance: Boolean =
         // 3. Audio-Only Mode on Car (disabled/greyed out when master switch is OFF)
         PremiumMenuItem(
             iconEmoji = "🎧",
+            iconResId = R.drawable.ic_lux_audio,
             title = getString(R.string.aa_audio_only_title),
             subtitle = if (config.audioOnlyOnCar) getString(R.string.aa_audio_only_on_sub) else getString(R.string.aa_audio_only_off_sub),
             isAccentHighlighted = config.enabled && config.audioOnlyOnCar,
@@ -68,6 +71,7 @@ internal fun MainActivity.showAndroidAutoSettingsPage(animateEntrance: Boolean =
         // 4. Minimal Car Display (disabled/greyed out when master switch is OFF)
         PremiumMenuItem(
             iconEmoji = "🛡️",
+            iconResId = R.drawable.ic_lux_shield,
             title = getString(R.string.aa_minimal_display_title),
             subtitle = if (config.minimalCarDisplay) getString(R.string.aa_minimal_display_on_sub) else getString(R.string.aa_minimal_display_off_sub),
             isAccentHighlighted = config.enabled && config.minimalCarDisplay,
@@ -82,6 +86,7 @@ internal fun MainActivity.showAndroidAutoSettingsPage(animateEntrance: Boolean =
         // 5. Test / Check Android Auto Connection & Readiness Status
         PremiumMenuItem(
             iconEmoji = "🩺",
+            iconResId = R.drawable.ic_lux_diagnostics,
             title = getString(R.string.aa_test_status_title),
             subtitle = getString(R.string.aa_test_status_sub),
             isAccentHighlighted = true,

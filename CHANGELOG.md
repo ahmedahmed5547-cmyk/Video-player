@@ -1,3 +1,9 @@
+## v90.33 (2026-11-28)
+- **Bug Fix — Resume Last Video FAB**: Fixed animation race that hid `fabResumeLast` when returning to Video Folders, and isolated Shorts full-screen playback (`IS_FROM_SHORTS`) so Shorts never overwrite the last played folder video.
+- **Default Theme — Material You**: Set Material You (`THEME_MATERIAL_YOU`) as the default theme on Android 12+.
+- **Unified Settings Vector Icons**: Replaced emoji icons on Android Auto, Clear cache, Battery Saver, About, and their sub-pages with matching `ic_lux_*` outline vector drawables.
+- **Instant Delete in Shorts**: Added a minimal outline Delete button (`ic_shorts_delete`) to the Shorts action column for immediate deletion and smooth advance to the next Short.
+
 ## v90.32 (2026-11-28)
 - **Randomized Shorts Feed**: Every tap on the Shorts tab now shuffles the eligible Shorts list completely (preventing repeating the exact same opening clip) while preserving your current Short when returning from full-screen.
 - **9th Pro Adaptive Icon (Emerald Prism)**: Added **Emerald Prism** (`LauncherAliasEmerald`, faceted obsidian-emerald crystal with warm gold rim) completing a symmetric 3×3 icon picker grid.

@@ -7,6 +7,10 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import androidx.activity.result.IntentSenderRequest
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -537,6 +541,75 @@ class ShortsFeedController(
         activePosition = -1
     }
 
+    private fun deleteShortImmediately(video: VideoItem, position: Int) {
+        val currentIdx = shortsList.indexOfFirst { it.id == video.id }
+        if (currentIdx == -1) return
+
+        // Direct instant delete when permitted (Android < 11 or All Files Access granted)
+        val canDirectDelete = Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()
+        if (canDirectDelete) {
+            pauseForLifecycle()
+            activity.lifecycleScope.launch {
+                val deleted = withContext(Dispatchers.IO) {
+                    var ok = false
+                    if (video.path.isNotBlank()) {
+                        val f = File(video.path)
+                        if (f.exists() && f.delete()) ok = true
+                    }
+                    runCatching {
+                        if (activity.contentResolver.delete(video.uri, null, null) > 0) ok = true
+                    }
+                    ok
+                }
+                if (activity.isFinishing || activity.isDestroyed) return@launch
+                if (deleted) {
+                    Toast.makeText(activity, activity.getString(R.string.video_deleted_toast), Toast.LENGTH_SHORT).show()
+                    removeDeletedShortAndAdvance(video)
+                } else {
+                    Toast.makeText(activity, activity.getString(R.string.video_delete_failed_toast), Toast.LENGTH_SHORT).show()
+                }
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // System one-tap delete fallback on Android 11+ when All Files Access is not enabled
+            runCatching {
+                activity.pendingShortsDeleteVideo = video
+                val pi = MediaStore.createDeleteRequest(activity.contentResolver, listOf(video.uri))
+                activity.deleteRequestLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+            }.onFailure {
+                activity.pendingShortsDeleteVideo = null
+                Toast.makeText(activity, activity.getString(R.string.video_delete_failed_toast), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    internal fun onShortDeletedExternally(video: VideoItem) {
+        removeDeletedShortAndAdvance(video)
+    }
+
+    private fun removeDeletedShortAndAdvance(video: VideoItem) {
+        val updated = shortsList.toMutableList()
+        val removeAt = updated.indexOfFirst { it.id == video.id }
+        if (removeAt != -1) {
+            updated.removeAt(removeAt)
+            shortsList = updated
+            adapter?.notifyItemRemoved(removeAt)
+        }
+        activity.allDiscoveredVideos = activity.allDiscoveredVideos.filter { it.id != video.id }
+        if (shortsList.isEmpty()) {
+            activePosition = -1
+            recyclerView?.visibility = View.GONE
+            emptyTextView?.visibility = View.VISIBLE
+        } else {
+            val nextPos = (if (removeAt != -1) removeAt else activePosition).coerceIn(0, shortsList.lastIndex)
+            activePosition = nextPos
+            recyclerView?.post {
+                if (activity.isShortsTabActive && isVisibleToUser) {
+                    activateSettledPosition(nextPos, seekToMs = 0L)
+                }
+            }
+        }
+    }
+
     private fun shareShortVideo(video: VideoItem) {
         runCatching {
             val shareUri: Uri = if (video.uri.scheme == "content") {
@@ -578,6 +651,7 @@ class ShortsFeedController(
         val btnMute: FrameLayout
         val ivMuteIcon: ImageView
         val btnFullPlayer: FrameLayout
+        val btnDelete: FrameLayout
         var posterJob: Job? = null
 
         init {
@@ -678,15 +752,18 @@ class ShortsFeedController(
             val (shareBadge, _) = makeMinimalActionBadge(R.drawable.ic_shorts_share, 26, activity.getString(R.string.shorts_share_btn))
             val (muteBadge, muteIv) = makeMinimalActionBadge(R.drawable.ic_shorts_volume_on, 22, activity.getString(R.string.shorts_mute_btn))
             val (fullBadge, _) = makeMinimalActionBadge(R.drawable.ic_shorts_fullscreen, 22, activity.getString(R.string.shorts_open_full_btn))
+            val (deleteBadge, _) = makeMinimalActionBadge(R.drawable.ic_shorts_delete, 22, activity.getString(R.string.shorts_delete_btn))
 
             btnShare = shareBadge
             btnMute = muteBadge
             ivMuteIcon = muteIv
             btnFullPlayer = fullBadge
+            btnDelete = deleteBadge
 
             actionCol.addView(btnShare)
             actionCol.addView(btnMute)
             actionCol.addView(btnFullPlayer)
+            actionCol.addView(btnDelete)
             root.addView(actionCol)
         }
 
@@ -809,8 +886,13 @@ class ShortsFeedController(
                     putExtra("VIDEO_TITLE", video.title)
                     putExtra("VIDEO_URI_STR", video.uri.toString())
                     putExtra("START_POSITION_MS", currentPos)
+                    putExtra("IS_FROM_SHORTS", true)
                 }
                 activity.startActivity(intent)
+            }
+
+            holder.btnDelete.setOnClickListener {
+                deleteShortImmediately(video, position)
             }
         }
     }

@@ -387,7 +387,8 @@ object PlaybackStore {
 
     fun getThemeIndex(context: Context): Int {
         migrateLegacyAppearanceIfNeeded(context)
-        val idx = prefs(context).getInt(KEY_THEME_INDEX, 0).coerceIn(0, 9)
+        val defaultIdx = if (isMaterialYouSupported()) THEME_MATERIAL_YOU else 0
+        val idx = prefs(context).getInt(KEY_THEME_INDEX, defaultIdx).coerceIn(0, 9)
         if (idx == THEME_MATERIAL_YOU && !isMaterialYouSupported()) return 0
         return idx
     }

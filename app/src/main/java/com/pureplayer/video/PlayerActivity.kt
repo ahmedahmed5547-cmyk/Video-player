@@ -121,6 +121,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     private var playlistTitles: MutableList<String> = mutableListOf()
     private var currentPlaylistIndex: Int = -1
     private var isStreamOrIptv: Boolean = false
+    private var isFromShorts: Boolean = false
     private var lastVideoSwitchTimeMs: Long = 0L
     private val videoSwitchGeneration = java.util.concurrent.atomic.AtomicLong(0L)
     private var activeVideoLoadJob: kotlinx.coroutines.Job? = null
@@ -310,7 +311,11 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                         binding.tvCurrentTime.text = formatTime(time)
                         binding.tvTotalTime.text = formatTime(length)
                         currentVideoUri?.let { uri ->
-                            PlaybackStore.saveProgress(this@PlayerActivity, uri, currentVideoTitle, time, length)
+                            if (isFromShorts) {
+                                PlaybackStore.savePosition(this@PlayerActivity, uri, time)
+                            } else {
+                                PlaybackStore.saveProgress(this@PlayerActivity, uri, currentVideoTitle, time, length)
+                            }
                         }
                     }
                 }
@@ -375,6 +380,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         binding.btnAspectRatio.contentDescription = getScaleLabel(currentScaleIndex)
         DefaultPlayerPromptManager.recordVideoPlayed(this)
 
+        isFromShorts = intent.getBooleanExtra("IS_FROM_SHORTS", false)
         extractIntentData(intent)
         if (savedInstanceState != null) {
             val savedUris = savedInstanceState.getStringArrayList(EXTRA_PLAYLIST_URIS)
@@ -2334,7 +2340,11 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         val time = mediaPlayer.time
         val length = mediaPlayer.length
         if (time > 0L) {
-            PlaybackStore.saveProgress(this, uri, currentVideoTitle, time, length)
+            if (isFromShorts) {
+                PlaybackStore.savePosition(this, uri, time)
+            } else {
+                PlaybackStore.saveProgress(this, uri, currentVideoTitle, time, length)
+            }
         }
     }
 

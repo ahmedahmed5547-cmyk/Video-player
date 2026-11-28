@@ -330,12 +330,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val deleteRequestLauncher = registerForActivityResult(
+    internal var pendingShortsDeleteVideo: VideoItem? = null
+
+    internal val deleteRequestLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
+        val shortsDeleted = pendingShortsDeleteVideo
+        pendingShortsDeleteVideo = null
         if (result.resultCode == Activity.RESULT_OK) {
             Toast.makeText(this, getString(R.string.video_deleted_toast), Toast.LENGTH_SHORT).show()
             pendingDeleteVideo = null
+            if (shortsDeleted != null) {
+                shortsFeedController?.onShortDeletedExternally(shortsDeleted)
+            }
             loadVideoFoldersOnly()
         } else {
             pendingDeleteVideo = null
@@ -716,16 +723,17 @@ class MainActivity : AppCompatActivity() {
             val timeFormatted = PlaybackStore.formatTime(positionMs)
             val resumeHint = "$title • ${getString(R.string.resume_fab_format, timeFormatted)}"
             binding.fabResumeLast.contentDescription = resumeHint
-            if (binding.fabResumeLast.visibility != View.VISIBLE) {
-                binding.fabResumeLast.scaleX = 0.5f
-                binding.fabResumeLast.scaleY = 0.5f
+            binding.fabResumeLast.animate().cancel()
+            if (binding.fabResumeLast.visibility != View.VISIBLE || binding.fabResumeLast.alpha < 0.99f) {
+                binding.fabResumeLast.scaleX = 0.85f
+                binding.fabResumeLast.scaleY = 0.85f
                 binding.fabResumeLast.alpha = 0f
                 binding.fabResumeLast.visibility = View.VISIBLE
                 binding.fabResumeLast.animate()
                     .scaleX(1f)
                     .scaleY(1f)
                     .alpha(1f)
-                    .setDuration(280L)
+                    .setDuration(180L)
                     .start()
             }
             binding.fabResumeLast.setOnClickListener {

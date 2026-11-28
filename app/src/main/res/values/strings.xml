@@ -928,4 +928,10 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="changelog_v90_32_title">v%1$s — Randomized Shorts Feed &amp; Emerald Prism Icon</string>
     <string name="changelog_v90_32_desc">• Shorts now shuffles completely every time you tap the Shorts tab (avoiding repeating the same opening clip while preserving your exact short when returning from full-screen).
 • Added a 9th adaptive launcher icon (Emerald Prism) to complete a balanced 3×3 icon grid in Appearance settings.</string>
+    <string name="shorts_delete_btn">Delete Short</string>
+    <string name="changelog_v90_33_title">v%1$s — Resume FAB Fix, Material You Default, Unified Icons &amp; Shorts Delete</string>
+    <string name="changelog_v90_33_desc">• Fixed Resume Last Video button disappearing in Video Folders and isolated it completely from Shorts so it always resumes your last folder video.
+• Set Material You as the default app theme on Android 12+.
+• Unified Settings icons for Android Auto, Clear cache, Battery Saver, and their sub-options with matching minimalist vector icons.
+• Added an instant Delete button inside Shorts with clean transition to the next Short.</string>
 </resources>
