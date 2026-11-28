@@ -259,6 +259,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
             subtitle = "Decoder: $decoderShort • $pipBadge",
             isAccentHighlighted = true,
             sectionHeader = getString(R.string.settings_sec_media_engine),
+            sectionHeaderIconResId = R.drawable.ic_lux_play_engine,
             iconResId = R.drawable.ic_lux_play_engine,
             statusChip = decoderShort,
             onClick = {
@@ -306,6 +307,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
             subtitle = "$currentThemeName • $langSub",
             isAccentHighlighted = true,
             sectionHeader = getString(R.string.settings_sec_interface_theme),
+            sectionHeaderIconResId = R.drawable.ic_lux_palette,
             iconResId = R.drawable.ic_lux_palette,
             onClick = {
                 pushSettingsBackStack { showProSettingsDialog(false) }
@@ -319,6 +321,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
             subtitle = privacySub,
             isAccentHighlighted = hasPin,
             sectionHeader = getString(R.string.settings_sec_privacy_folders),
+            sectionHeaderIconResId = R.drawable.ic_lux_shield,
             iconResId = R.drawable.ic_lux_shield,
             statusChip = if (hasPin) "Active" else null,
             onClick = {
@@ -333,6 +336,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
             title = getString(R.string.settings_hub_updates_title),
             subtitle = "GitHub Release Auto-Updater",
             sectionHeader = getString(R.string.settings_sec_system_updates),
+            sectionHeaderIconResId = R.drawable.ic_lux_update,
             iconResId = R.drawable.ic_lux_update,
             onClick = {
                 pushSettingsBackStack { showProSettingsDialog(false) }
@@ -414,6 +418,7 @@ internal fun MainActivity.showSettingsPlaybackEnginePage(animateEntrance: Boolea
             subtitle = decoderSub,
             isAccentHighlighted = true,
             sectionHeader = getString(R.string.settings_subsec_video_engine),
+            sectionHeaderIconResId = R.drawable.ic_lux_bolt,
             onClick = {
                 pushSettingsBackStack { showSettingsPlaybackEnginePage() }
                 showDefaultDecoderSettingsDialog()
@@ -436,6 +441,7 @@ internal fun MainActivity.showSettingsPlaybackEnginePage(animateEntrance: Boolea
             subtitle = autoPipSub,
             isAccentHighlighted = autoPipOn,
             sectionHeader = getString(R.string.settings_subsec_pip_and_resume),
+            sectionHeaderIconResId = R.drawable.ic_lux_pip,
             toggleChecked = autoPipOn,
             onToggleChanged = { checked ->
                 PlaybackStore.setAutoPipEnabled(this, checked)
@@ -486,6 +492,7 @@ internal fun MainActivity.showSettingsPrivacyFoldersPage(animateEntrance: Boolea
             subtitle = privacySub,
             isAccentHighlighted = true,
             sectionHeader = getString(R.string.settings_subsec_vault_security),
+            sectionHeaderIconResId = R.drawable.ic_lux_lock,
             onClick = {
                 pushSettingsBackStack { showSettingsPrivacyFoldersPage() }
                 openPrivacyControlSection()
@@ -497,6 +504,7 @@ internal fun MainActivity.showSettingsPrivacyFoldersPage(animateEntrance: Boolea
             title = getString(R.string.setting_folder_visibility),
             subtitle = filterSub,
             sectionHeader = getString(R.string.settings_subsec_folder_indexing),
+            sectionHeaderIconResId = R.drawable.ic_lux_folder,
             onClick = {
                 pushSettingsBackStack { showSettingsPrivacyFoldersPage() }
                 showFolderVisibilityModeDialog()
@@ -565,6 +573,7 @@ internal fun MainActivity.showSettingsAppearanceDisplayPage() {
             subtitle = "$modeLabel • $currentThemeName",
             isAccentHighlighted = true,
             sectionHeader = getString(R.string.settings_subsec_theme_colors),
+            sectionHeaderIconResId = R.drawable.ic_lux_palette,
             onClick = {
                 pushSettingsBackStack { showSettingsAppearanceDisplayPage() }
                 showThemeSelectorDialog()
@@ -590,6 +599,7 @@ internal fun MainActivity.showSettingsAppearanceDisplayPage() {
             title = getString(R.string.setting_app_language),
             subtitle = langSub,
             sectionHeader = getString(R.string.settings_subsec_app_locale),
+            sectionHeaderIconResId = R.drawable.ic_lux_globe,
             onClick = {
                 pushSettingsBackStack { showSettingsAppearanceDisplayPage() }
                 showAppLanguageDialog()
@@ -653,6 +663,7 @@ internal fun MainActivity.showSettingsSubtitlesPlaybackPage() {
             subtitle = subLangs,
             isAccentHighlighted = true,
             sectionHeader = getString(R.string.settings_subsec_sub_languages),
+            sectionHeaderIconResId = R.drawable.ic_lux_globe,
             onClick = {
                 pushSettingsBackStack { showSettingsSubtitlesPlaybackPage() }
                 showSubtitleLanguagePriorityDialog()
@@ -664,6 +675,7 @@ internal fun MainActivity.showSettingsSubtitlesPlaybackPage() {
             title = getString(R.string.setting_subtitle_style),
             subtitle = "${subSize}sp • ${getString(R.string.style_bg_opacity_label, subBgOpacity)}",
             sectionHeader = getString(R.string.settings_subsec_sub_appearance),
+            sectionHeaderIconResId = R.drawable.ic_lux_text_style,
             onClick = {
                 pushSettingsBackStack { showSettingsSubtitlesPlaybackPage() }
                 showSubtitleStyleDialog()
@@ -759,6 +771,7 @@ internal fun MainActivity.showSettingsAudioEqualizerPage() {
             subtitle = modeLabel,
             isAccentHighlighted = true,
             sectionHeader = getString(R.string.audio_preset_section_title),
+            sectionHeaderIconResId = R.drawable.ic_lux_audio,
             onClick = {
                 pushSettingsBackStack { showSettingsAudioEqualizerPage() }
                 showAudioSoundModesPage()
@@ -771,6 +784,7 @@ internal fun MainActivity.showSettingsAudioEqualizerPage() {
             subtitle = eqSummary,
             isAccentHighlighted = (currentMode == 7),
             sectionHeader = getString(R.string.audio_eq_customizer_title),
+            sectionHeaderIconResId = R.drawable.ic_lux_equalizer,
             onClick = {
                 pushSettingsBackStack { showSettingsAudioEqualizerPage() }
                 showGraphicEqualizerDialog()
@@ -1313,10 +1327,26 @@ internal fun MainActivity.showChangelogPage() {
         ChangelogReleaseEntry(
             version = verName,
             date = "2026-11-28",
-            iconEmoji = "✨",
-            title = getString(R.string.changelog_v90_36_title, verName),
-            description = getString(R.string.changelog_v90_36_desc),
+            iconEmoji = "🔋",
+            title = getString(R.string.changelog_v90_38_title, verName),
+            description = getString(R.string.changelog_v90_38_desc),
             isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.37",
+            date = "2026-11-28",
+            iconEmoji = "⚡",
+            title = getString(R.string.changelog_v90_37_title, "90.37"),
+            description = getString(R.string.changelog_v90_37_desc),
+            isLatest = false
+        ),
+        ChangelogReleaseEntry(
+            version = "90.36",
+            date = "2026-11-28",
+            iconEmoji = "✨",
+            title = getString(R.string.changelog_v90_36_title, "90.36"),
+            description = getString(R.string.changelog_v90_36_desc),
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.35",

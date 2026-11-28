@@ -41,7 +41,6 @@ data class MediaDisplayFieldsConfig(
  * Calm, minimalist, fully theme-aware "Sort & View Options" sheet:
  * 1) Sort by (Title / Duration / Date / Size) + Direction Pill (Newest/Oldest, A–Z/Z–A, etc.)
  * 2) View Mode (Folder / Tree / Library) | Layout (List / Grid) side-by-side card
- * 3) Collapsible Filters card (Hidden / .nomedia Folders switch)
  * 4) Collapsible Fields chip grid (Thumbnails, Full Name, Extension, Path, Total Videos, etc.)
  *
  * Derives 100% of colors from active V Player theme tokens (Follow System / Light / Dark + all 10 color themes).
@@ -83,7 +82,6 @@ internal fun MainActivity.showCalmSortAndViewSheet() {
         val currentSort = PlaybackStore.getSortOrderMode(this)
         val viewMode = PlaybackStore.getMediaViewMode(this)
         val isGrid = PlaybackStore.isGridLayoutEnabled(this)
-        val showHidden = PlaybackStore.isShowHiddenFolders(this)
         val fields = PlaybackStore.getDisplayFieldsConfig(this)
 
         // Sort category: 0=Title(2/3), 1=Duration(6/7), 2=Date(0/1), 3=Size(4/5)
@@ -389,85 +387,6 @@ internal fun MainActivity.showCalmSortAndViewSheet() {
         splitRow.addView(layoutCol)
         modeLayoutCard.addView(splitRow)
         sheetCard.addView(modeLayoutCard)
-
-        // =====================================================================
-        // Card 3: Collapsible Filters (Hidden / .nomedia Folders switch)
-        // =====================================================================
-        val filtersCard = makeSectionCard()
-        val filtersHeader = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            setOnClickListener {
-                filtersExpanded = !filtersExpanded
-                dialog.setContentView(buildSheetContent())
-            }
-        }
-        filtersHeader.addView(TextView(this).apply {
-            text = getString(R.string.sort_section_filters)
-            textSize = 14.5f
-            setTextColor(primaryText)
-            textAlignment = View.TEXT_ALIGNMENT_VIEW_START
-            setTypeface(typeface, Typeface.BOLD)
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        })
-        filtersHeader.addView(TextView(this).apply {
-            text = if (filtersExpanded) "⌃" else "⌄"
-            textSize = 16f
-            setTextColor(secondaryText)
-            setPadding(dp(8), 0, dp(4), 0)
-        })
-        filtersCard.addView(filtersHeader)
-
-        if (filtersExpanded) {
-            val hiddenRow = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                minimumHeight = dp(48)
-                setPadding(0, dp(10), 0, dp(2))
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            }
-            val tvHidden = TextView(this).apply {
-                text = getString(R.string.filter_show_nomedia_folders)
-                textSize = 14f
-                setTextColor(primaryText)
-                textAlignment = View.TEXT_ALIGNMENT_VIEW_START
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            }
-            val swHidden = androidx.appcompat.widget.SwitchCompat(this).apply {
-                isChecked = showHidden
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }
-            applyThemedSwitchStyle(swHidden, enabled = true)
-            ViewCompat.setAccessibilityDelegate(hiddenRow, object : AccessibilityDelegateCompat() {
-                override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfoCompat) {
-                    super.onInitializeAccessibilityNodeInfo(host, info)
-                    info.className = "android.widget.Switch"
-                    info.isCheckable = true
-                    info.isChecked = swHidden.isChecked
-                }
-            })
-            hiddenRow.contentDescription = getString(R.string.filter_show_nomedia_folders)
-            swHidden.setOnCheckedChangeListener { _, checked ->
-                PlaybackStore.setShowHiddenFolders(this, checked)
-                refreshLiveLibraryAndAdapter()
-                updateResumeLastFab()
-                runCatching { audioLibraryViewModel.refreshAudioLibrary() }
-                shortsFeedController?.markDirtyIfHidden(allDiscoveredVideos)
-                VexoPlaybackService.notifyLibraryChanged(this)
-                if (checked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
-                    dialog.dismiss()
-                    showHiddenFoldersPermissionPromptDialog()
-                } else if (checked) {
-                    videoLibraryViewModel.refreshLibrary(force = true, showLoadingIfEmpty = false, isUserPullRefresh = true)
-                }
-            }
-            hiddenRow.setOnClickListener { swHidden.isChecked = !swHidden.isChecked }
-            hiddenRow.addView(tvHidden)
-            hiddenRow.addView(swHidden)
-            filtersCard.addView(hiddenRow)
-        }
-        sheetCard.addView(filtersCard)
 
         // =====================================================================
         // Card 4: Collapsible Fields Chip Grid (3 clean wrapped rows)

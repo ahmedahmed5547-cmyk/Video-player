@@ -31,9 +31,8 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.recyclerview.widget.DiffUtil
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.PagerSnapHelper
 import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -146,7 +145,7 @@ class ShortsFeedController(
     private val container: FrameLayout
 ) {
     private companion object {
-        const val MAX_POOL_SIZE = 3
+        const val MAX_POOL_SIZE = 2
     }
 
     private data class PooledPlayerEntry(
@@ -157,10 +156,10 @@ class ShortsFeedController(
         var activeListener: Player.Listener? = null
     )
 
+    private var viewPager: ViewPager2? = null
     private var recyclerView: RecyclerView? = null
     private var emptyTextView: TextView? = null
-    private var snapHelper: PagerSnapHelper? = null
-    private var layoutManager: LinearLayoutManager? = null
+    private var pageChangeCallback: ViewPager2.OnPageChangeCallback? = null
     private val playerPool = mutableListOf<PooledPlayerEntry>()
     private var activePosition: Int = -1
     private var lastFirstShortId: Long = -1L
@@ -176,49 +175,48 @@ class ShortsFeedController(
     private fun dp(v: Int): Int = (v * activity.resources.displayMetrics.density).toInt()
 
     private fun ensureInitialized() {
-        if (recyclerView != null) return
+        if (viewPager != null) return
 
-        val rv = RecyclerView(activity).apply {
+        val vp = ViewPager2(activity).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
+            orientation = ViewPager2.ORIENTATION_VERTICAL
+            offscreenPageLimit = ViewPager2.OFFSCREEN_PAGE_LIMIT_DEFAULT // Keeps GPU cool & battery-friendly
+            isUserInputEnabled = true
             setBackgroundColor(Color.BLACK)
+        }
+
+        val internalRv = (vp.getChildAt(0) as? RecyclerView)?.apply {
             overScrollMode = View.OVER_SCROLL_NEVER
             setHasFixedSize(true)
-            setItemViewCacheSize(2) // Keeps prev + next ViewHolders attached for seamless swipes
+            setItemViewCacheSize(1)
             itemAnimator = null
+            isNestedScrollingEnabled = false
         }
-        val lm = LinearLayoutManager(activity, RecyclerView.VERTICAL, false).apply {
-            initialPrefetchItemCount = 2
-        }
-        rv.layoutManager = lm
-        val snap = PagerSnapHelper()
-        snap.attachToRecyclerView(rv)
 
         val ad = ShortsAdapter().apply {
             setHasStableIds(true)
         }
-        rv.adapter = ad
+        vp.adapter = ad
 
-        rv.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
-                when (newState) {
-                    RecyclerView.SCROLL_STATE_DRAGGING -> {
-                        // Immediately silence/pause outgoing video so audio never overlaps during swipe
-                        pauseAllPooledPlayers(seekOthersToZero = false)
-                    }
-                    RecyclerView.SCROLL_STATE_IDLE -> {
-                        if (!isVisibleToUser) return
-                        val snapView = snap.findSnapView(lm) ?: return
-                        val pos = lm.getPosition(snapView)
-                        if (pos != RecyclerView.NO_POSITION) {
-                            activateSettledPosition(pos, seekToMs = -1L)
-                        }
-                    }
+        val callback = object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageScrollStateChanged(state: Int) {
+                if (state == ViewPager2.SCROLL_STATE_DRAGGING) {
+                    // Silence outgoing video immediately without ever blocking swipe input
+                    pauseAllPooledPlayers(seekOthersToZero = false)
                 }
             }
-        })
+
+            override fun onPageSelected(position: Int) {
+                if (!isVisibleToUser || position !in shortsList.indices) return
+                if (position != activePosition) {
+                    activateSettledPosition(position, seekToMs = -1L)
+                }
+            }
+        }
+        vp.registerOnPageChangeCallback(callback)
 
         val tvEmpty = TextView(activity).apply {
             text = activity.getString(R.string.shorts_empty_msg)
@@ -233,13 +231,13 @@ class ShortsFeedController(
         }
 
         container.removeAllViews()
-        container.addView(rv)
+        container.addView(vp)
         container.addView(tvEmpty)
 
-        recyclerView = rv
+        viewPager = vp
+        recyclerView = internalRv
         emptyTextView = tvEmpty
-        snapHelper = snap
-        layoutManager = lm
+        pageChangeCallback = callback
         adapter = ad
     }
 
@@ -249,7 +247,7 @@ class ShortsFeedController(
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
             .build()
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(1_000, 4_000, 250, 500)
+            .setBufferDurationsMs(1_000, 3_000, 250, 500)
             .build()
         val exo = ExoPlayer.Builder(activity)
             .setAudioAttributes(audioAttrs, /* handleAudioFocus = */ true)
@@ -273,9 +271,13 @@ class ShortsFeedController(
         return entry
     }
 
+    private fun effectivePoolLimit(): Int {
+        return if (PlaybackStore.isBatterySaverEnabled(activity)) 1 else MAX_POOL_SIZE
+    }
+
     private fun obtainEntryForPosition(targetPos: Int, keepWindow: Set<Int>): PooledPlayerEntry {
         playerPool.firstOrNull { it.boundPosition == targetPos }?.let { return it }
-        if (playerPool.size < MAX_POOL_SIZE) {
+        if (playerPool.size < effectivePoolLimit()) {
             return createPooledPlayer()
         }
         val recyclable = playerPool.firstOrNull { it.boundPosition !in keepWindow } ?: playerPool.first()
@@ -327,12 +329,20 @@ class ShortsFeedController(
     fun markDirtyIfHidden(allVideos: List<VideoItem>) {
         isDataDirty = true
         if (isVisibleToUser) {
-            refreshDataAsync(allVideos)
+            refreshDataAsync(allVideos, reshuffle = false)
+        }
+    }
+
+    fun onHiddenFoldersPreferenceChanged(allVideos: List<VideoItem>) {
+        isDataDirty = true
+        if (isVisibleToUser) {
+            // Immediately refresh Shorts list so hidden videos appear/disappear without restarting the app
+            refreshDataAsync(allVideos, reshuffle = false)
         }
     }
 
     fun refreshDataAsync(allVideos: List<VideoItem>, reshuffle: Boolean = false) {
-        if (recyclerView == null) return
+        if (viewPager == null) return
         val snapshot = allVideos.toList()
         val locked = PlaybackStore.getLockedFolders(activity)
         val showHidden = PlaybackStore.isShowHiddenFolders(activity)
@@ -374,20 +384,20 @@ class ShortsFeedController(
             if (filtered.isEmpty()) {
                 pauseForLifecycle()
                 activePosition = -1
-                recyclerView?.visibility = View.GONE
+                viewPager?.visibility = View.GONE
                 emptyTextView?.visibility = View.VISIBLE
                 return@launch
             }
 
-            recyclerView?.visibility = View.VISIBLE
+            viewPager?.visibility = View.VISIBLE
             emptyTextView?.visibility = View.GONE
 
             if (isVisibleToUser) {
                 val targetPos = if (reshuffle) 0 else if (activePosition in filtered.indices) activePosition else 0
-                recyclerView?.post {
+                viewPager?.post {
                     if (!isVisibleToUser) return@post
-                    if (reshuffle || activePosition !in filtered.indices) {
-                        recyclerView?.scrollToPosition(0)
+                    if (reshuffle || viewPager?.currentItem != targetPos) {
+                        viewPager?.setCurrentItem(targetPos, false)
                     }
                     activateSettledPosition(targetPos, seekToMs = pendingResumePositionMs)
                     pendingResumePositionMs = -1L
@@ -407,7 +417,14 @@ class ShortsFeedController(
         // Sync single-source-of-truth mute state from PlaybackStore
         isMuted = PlaybackStore.isShortsMuted(activity)
 
-        val keepWindow = setOf(position - 1, position, position + 1).filter { it in shortsList.indices }.toSet()
+        // Battery & thermal optimization: keep ONLY current + next (never 3 concurrent hardware decoders).
+        // When Battery Saver is ON, keep strictly 1 active player with zero background prewarm.
+        val allowPrewarm = !PlaybackStore.isBatterySaverEnabled(activity)
+        val keepWindow = if (allowPrewarm) {
+            setOf(position, position + 1).filter { it in shortsList.indices }.toSet()
+        } else {
+            setOf(position)
+        }
         activePosition = position
 
         pauseAllPooledPlayers(seekOthersToZero = true, exceptPos = position)
@@ -417,12 +434,32 @@ class ShortsFeedController(
         val entry = obtainEntryForPosition(position, keepWindow)
         bindEntryToHolder(entry, position, video, holder, autoPlay = true, seekToMs = seekToMs)
 
-        if (position + 1 in shortsList.indices) {
+        // Endless smooth feed: when reaching the last Short, seamlessly reshuffle a fresh cycle
+        // so swiping up never hits a dead end with no more Shorts.
+        if (position >= shortsList.lastIndex && shortsList.size > 1) {
+            appendNextCycleIfAtEnd(currentVideoId = video.id)
+        }
+
+        if (allowPrewarm && position + 1 in shortsList.indices) {
             prewarmNeighbor(position + 1, keepWindow)
         }
-        if (position - 1 in shortsList.indices) {
-            prewarmNeighbor(position - 1, keepWindow)
+    }
+
+    private fun appendNextCycleIfAtEnd(currentVideoId: Long) {
+        val uniquePool = shortsList.distinctBy { it.id }
+        if (uniquePool.size <= 1) return
+        val rng = kotlin.random.Random(System.nanoTime())
+        val nextBatch = uniquePool.shuffled(rng).toMutableList()
+        if (nextBatch[0].id == currentVideoId && nextBatch.size > 1) {
+            val swapIdx = rng.nextInt(1, nextBatch.size)
+            val tmp = nextBatch[0]
+            nextBatch[0] = nextBatch[swapIdx]
+            nextBatch[swapIdx] = tmp
         }
+        val insertStart = shortsList.size
+        shortsList = shortsList + nextBatch
+        adapter?.notifyItemRangeInserted(insertStart, nextBatch.size)
+        PlaybackStore.clearSeenShortIds(activity)
     }
 
     private fun prewarmNeighbor(neighborPos: Int, keepWindow: Set<Int>) {
@@ -590,6 +627,8 @@ class ShortsFeedController(
 
     fun release() {
         leaveShortsTab()
+        pageChangeCallback?.let { viewPager?.unregisterOnPageChangeCallback(it) }
+        pageChangeCallback = null
         activePosition = -1
     }
 
@@ -676,26 +715,17 @@ class ShortsFeedController(
         activePosition = -1
 
         if (shortsList.isEmpty()) {
-            recyclerView?.visibility = View.GONE
+            viewPager?.visibility = View.GONE
             emptyTextView?.visibility = View.VISIBLE
             return
         }
 
         val nextPos = (if (removeAt != -1) removeAt else 0).coerceIn(0, shortsList.lastIndex)
-        val rv = recyclerView ?: return
-        rv.scrollToPosition(nextPos)
-
-        val activateNext = {
+        val vp = viewPager ?: return
+        vp.setCurrentItem(nextPos, false)
+        vp.post {
             if (activity.isShortsTabActive && isVisibleToUser && nextPos in shortsList.indices) {
                 activateSettledPosition(nextPos, seekToMs = 0L)
-            }
-        }
-        rv.post {
-            val animator = rv.itemAnimator
-            if (animator != null && animator.isRunning) {
-                animator.isRunning { rv.post(activateNext) }
-            } else {
-                activateNext()
             }
         }
     }
@@ -894,7 +924,7 @@ class ShortsFeedController(
     }
 
     private inner class ShortsAdapter : RecyclerView.Adapter<ShortsViewHolder>() {
-        override fun getItemId(position: Int): Long = shortsList.getOrNull(position)?.id ?: position.toLong()
+        override fun getItemId(position: Int): Long = position.toLong()
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ShortsViewHolder {
             val view = LayoutInflater.from(parent.context)
@@ -915,11 +945,11 @@ class ShortsFeedController(
         override fun onBindViewHolder(holder: ShortsViewHolder, position: Int) {
             val video = shortsList[position]
             val accent = PlaybackStore.getAccentColor(activity)
-            val hiddenPrefix = if (video.isHidden) "👁️‍🗨️ " else ""
-            holder.tvTitle.text = "$hiddenPrefix${video.title}"
+            holder.tvTitle.text = video.title
             val dur = PlaybackStore.formatTime(video.duration)
             holder.tvMeta.text = "${video.folderName}  •  $dur"
             holder.updateMuteIcon(isMuted, animate = false)
+            holder.tvPauseOverlay.visibility = View.GONE
 
             holder.posterJob?.cancel()
             holder.showPosterImmediately()
@@ -937,7 +967,10 @@ class ShortsFeedController(
                 holder.playerView.player = null
             }
 
-            holder.playerView.setOnClickListener {
+            // Never let PlayerView consume touch events; handle tap cleanly on root so ViewPager2 catches every swipe
+            holder.playerView.isClickable = false
+            holder.playerView.isFocusable = false
+            holder.root.setOnClickListener {
                 val p = playerPool.firstOrNull { it.boundPosition == activePosition }?.player ?: return@setOnClickListener
                 if (p.isPlaying) {
                     p.pause()

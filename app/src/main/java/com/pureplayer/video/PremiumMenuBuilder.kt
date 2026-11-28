@@ -111,6 +111,7 @@ data class PremiumMenuItem(
     val isAccentHighlighted: Boolean = false,
     val isDanger: Boolean = false,
     val sectionHeader: String? = null,
+    val sectionHeaderIconResId: Int = 0,
     val isInteractive: Boolean = true,
     val isEnabled: Boolean = true,
     val iconResId: Int = 0,
@@ -376,6 +377,32 @@ internal fun MainActivity.applyThemedSwitchStyle(
     )
 }
 
+private val leadingEmojiStripRegex = Regex("^(?:[\\uD83C-\\uDBFF\\uDC00-\\uDFFF\\u2600-\\u27BF\\uFE0F\\u200D]+\\s*)+")
+
+private fun stripLeadingSectionEmoji(raw: String): String {
+    return raw.replace(leadingEmojiStripRegex, "").trim()
+}
+
+private fun resolveSectionHeaderIconRes(sectionHeader: String, explicitResId: Int): Int {
+    if (explicitResId != 0) return explicitResId
+    val lower = stripLeadingSectionEmoji(sectionHeader).lowercase(Locale.ROOT)
+    return when {
+        "player" in lower || "video" in lower || "decoder" in lower || "مشغ" in lower || "فيديو" in lower -> R.drawable.ic_lux_play_engine
+        "pip" in lower || "floating" in lower || "resume" in lower || "نافذ" in lower || "استئناف" in lower -> R.drawable.ic_lux_pip
+        "appearance" in lower || "theme" in lower || "color" in lower || "المظهر" in lower || "سمة" in lower || "ألوان" in lower -> R.drawable.ic_lux_palette
+        "language" in lower || "locale" in lower || "اللغة" in lower -> R.drawable.ic_lux_globe
+        "subtitle" in lower || "ترجم" in lower -> R.drawable.ic_lux_subtitles
+        "privacy" in lower || "vault" in lower || "lock" in lower || "خصوص" in lower || "خزن" in lower -> R.drawable.ic_lux_shield
+        "folder" in lower || "index" in lower || "مجلد" in lower -> R.drawable.ic_lux_folder
+        "audio" in lower || "sound" in lower || "eq" in lower || "صوت" in lower || "موازن" in lower -> R.drawable.ic_lux_audio
+        "auto" in lower || "سيار" in lower -> R.drawable.ic_lux_android_auto
+        "battery" in lower || "بطار" in lower || "طاق" in lower -> R.drawable.ic_lux_battery
+        "cache" in lower || "كاش" in lower -> R.drawable.ic_lux_clear_cache
+        "system" in lower || "update" in lower || "نظام" in lower || "تحديث" in lower -> R.drawable.ic_lux_update
+        else -> R.drawable.ic_lux_settings
+    }
+}
+
 private fun resolveUnifiedHeaderIconRes(headerIcon: String, explicitResId: Int?): Int? {
     if (explicitResId != null) return explicitResId
     return when (headerIcon.trim()) {
@@ -580,16 +607,40 @@ internal fun MainActivity.showPremiumMenuDialog(
 
     for (item in items) {
         if (!item.sectionHeader.isNullOrBlank()) {
+            val cleanSectionTitle = stripLeadingSectionEmoji(item.sectionHeader)
+            val secIconRes = resolveSectionHeaderIconRes(item.sectionHeader, item.sectionHeaderIconResId)
+            val secRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(6), dp(16), dp(6), dp(8))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            }
+            val secIcon = ImageView(this).apply {
+                setImageResource(secIconRes)
+                imageTintList = ColorStateList.valueOf(accent)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                layoutParams = LinearLayout.LayoutParams(dp(18), dp(18)).apply {
+                    marginEnd = dp(8)
+                }
+            }
             val tvSec = TextView(this).apply {
-                text = item.sectionHeader.uppercase(Locale.getDefault())
+                text = cleanSectionTitle.uppercase(Locale.getDefault())
                 setTextColor(accent)
                 textSize = 11.5f
-                letterSpacing = 0.12f
+                letterSpacing = 0.06f
                 setTypeface(typeface, Typeface.BOLD)
-                setPadding(dp(6), dp(14), dp(6), dp(8))
+                maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             }
-            cardContainer.addView(tvSec)
-            animatedRows.add(tvSec)
+            secRow.addView(secIcon)
+            secRow.addView(tvSec)
+            cardContainer.addView(secRow)
+            animatedRows.add(secRow)
         }
 
         val rowCard = LinearLayout(this).apply {

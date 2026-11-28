@@ -1,3 +1,12 @@
+## v90.38 (versionCode 9038)
+- **Battery & Thermal Optimization in Shorts**: Capped concurrent ExoPlayer hardware decoders to 2 (current + next only, dropping previous-clip decoding), switched to strictly 1 player with zero background prewarm when Battery Saver is enabled, reduced offscreen GPU surfaces (`OFFSCREEN_PAGE_LIMIT_DEFAULT`), and tightened `DefaultLoadControl` eco-buffer (`1s–3s`).
+- **Endless Shorts Feed**: Automatically appends a freshly shuffled cycle when reaching the last Short so vertical swiping never hits a dead end with no videos appearing.
+
+## v90.37 (versionCode 9037)
+- **Vertical ViewPager2 Shorts & Responsive Swipes**: Replaced `RecyclerView + PagerSnapHelper` with vertical `ViewPager2` (`offscreenPageLimit = 1`, `isUserInputEnabled = true`), non-blocking tap handling on `root` (with `PlayerView` non-clickable), and instant `onPageSelected` activation so rapid vertical swipes never miss.
+- **Live Hidden Folders Sync for Videos & Shorts**: Toggling "Hidden folders" in the `☰` dropdown immediately refreshes both Videos and Shorts without restarting; removed the duplicate Hidden folders card from "Sort and Layout" (`SortAndViewSheetUi.kt`).
+- **Theme-Tinted Settings Section Header Icons (Zero Text Clipping)**: Stripped all colored emojis from `settings_sec_*` and `settings_subsec_*` strings across locales and rendered every section header in `PremiumMenuBuilder.kt` with a fixed `18dp` theme-tinted vector icon + `8dp` spacing.
+
 ## v90.36 (versionCode 9036)
 - **Smart No-Repeat Shorts Shuffle**: Tracks watched Short IDs in `PlaybackStore` (`vexo_shorts_seen_ids_v1`) so unseen clips always appear first in random order; once every clip has been seen, the cycle resets automatically for a fresh randomized pass.
 - **Unified Settings Header Icons**: Added monochrome vector icon badges next to every Settings page title (matching each section's own `ic_lux_*` icon) and the About screen header.

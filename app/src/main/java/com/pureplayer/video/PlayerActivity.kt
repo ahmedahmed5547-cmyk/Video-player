@@ -373,7 +373,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
         playerOrientationMode = PlaybackStore.getDefaultOrientationIndex(this)
-        binding.btnOrientation.text = getOrientationLabel(playerOrientationMode)
+        binding.btnOrientation.contentDescription = getOrientationLabel(playerOrientationMode)
         currentDecoderIndex = PlaybackStore.getDecoderModeIndex(this)
         binding.btnDecoder.text = getDecoderShortBadge(currentDecoderIndex)
         currentScaleIndex = PlaybackStore.getPlayerAspectModeIndex(this, aspectModes.lastIndex)
@@ -1740,7 +1740,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
     private fun applyEarlyOrientationForCurrentVideo() {
         orientationProbeJob?.cancel()
-        binding.btnOrientation.text = getOrientationLabel(playerOrientationMode)
+        binding.btnOrientation.contentDescription = getOrientationLabel(playerOrientationMode)
 
         when (playerOrientationMode) {
             PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE -> {
@@ -1805,7 +1805,8 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
     private fun showPlayerOrientationModeDialog() {
         val items = listOf(
             PremiumMenuItem(
-                iconEmoji = if (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO) "✅" else "🎬",
+                iconEmoji = "",
+                iconResId = if (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO) R.drawable.ic_lux_check else R.drawable.ic_lux_play_engine,
                 title = getString(R.string.orientation_auto_video),
                 subtitle = getString(R.string.orientation_auto_video_sub),
                 isAccentHighlighted = (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO),
@@ -1817,7 +1818,8 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                 }
             ),
             PremiumMenuItem(
-                iconEmoji = if (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE) "✅" else "🔄",
+                iconEmoji = "",
+                iconResId = if (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE) R.drawable.ic_lux_check else R.drawable.ic_lux_rotate,
                 title = getString(R.string.orientation_follow_device),
                 subtitle = getString(R.string.orientation_follow_device_sub),
                 isAccentHighlighted = (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE),
@@ -1829,7 +1831,8 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                 }
             ),
             PremiumMenuItem(
-                iconEmoji = if (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_LANDSCAPE) "✅" else "↔️",
+                iconEmoji = "",
+                iconResId = if (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_LANDSCAPE) R.drawable.ic_lux_check else R.drawable.ic_lux_rotate,
                 title = getString(R.string.orientation_landscape),
                 subtitle = null,
                 isAccentHighlighted = (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_LANDSCAPE),
@@ -1841,7 +1844,8 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                 }
             ),
             PremiumMenuItem(
-                iconEmoji = if (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_PORTRAIT) "✅" else "↕️",
+                iconEmoji = "",
+                iconResId = if (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_PORTRAIT) R.drawable.ic_lux_check else R.drawable.ic_lux_rotate,
                 title = getString(R.string.orientation_portrait),
                 subtitle = null,
                 isAccentHighlighted = (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_PORTRAIT),
@@ -2261,7 +2265,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         binding.btnPlayPause.imageTintList = ColorStateList.valueOf(accent)
         binding.btnUnlock.imageTintList = ColorStateList.valueOf(accent)
         binding.btnDecoder.setTextColor(accent)
-        binding.btnOrientation.setTextColor(accent)
+        binding.btnOrientation.imageTintList = ColorStateList.valueOf(Color.parseColor("#E6FFFFFF"))
         binding.btnSpeed.setTextColor(accent)
         binding.btnSubFontUp.setTextColor(accent)
         binding.btnResetSubPos.setTextColor(accent)
@@ -2272,7 +2276,6 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         // Style Top & Bottom Quick Pills as sleek glass capsules
         val pillViews = listOf(
             binding.btnDecoder,
-            binding.btnOrientation,
             binding.btnSpeed
         )
         for (pill in pillViews) {
@@ -2610,7 +2613,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             } else {
                 getString(R.string.orientation_landscape)
             }
-            binding.btnOrientation.text = getOrientationLabel(playerOrientationMode)
+            binding.btnOrientation.contentDescription = getOrientationLabel(playerOrientationMode)
             showToastIndicator(label)
             scheduleHideControls()
         }

@@ -110,7 +110,8 @@ internal fun MainActivity.showFolderLockMenu(folder: VideoFolder) {
 
     val items = mutableListOf(
         PremiumMenuItem(
-            iconEmoji = if (isLocked) "🔓" else "🔒",
+            iconEmoji = "",
+                    iconResId = R.drawable.ic_lux_lock,
             title = if (isLocked) getString(R.string.folder_menu_unlock) else getString(R.string.folder_menu_lock),
             subtitle = getString(R.string.folder_lock_item_sub),
             isAccentHighlighted = true,
@@ -132,7 +133,8 @@ internal fun MainActivity.showFolderLockMenu(folder: VideoFolder) {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🛡️",
+            iconEmoji = "",
+                    iconResId = R.drawable.ic_lux_shield,
             title = getString(R.string.privacy_select_locked_folders, PlaybackStore.getLockedFolders(this).size),
             subtitle = getString(R.string.privacy_manage_all_sub),
             onClick = {
@@ -140,7 +142,8 @@ internal fun MainActivity.showFolderLockMenu(folder: VideoFolder) {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🔑",
+            iconEmoji = "",
+                    iconResId = R.drawable.ic_lux_key,
             title = getString(R.string.privacy_change_pin_option),
             subtitle = getString(R.string.privacy_change_pin_sub),
             onClick = {
@@ -156,7 +159,8 @@ internal fun MainActivity.showFolderLockMenu(folder: VideoFolder) {
     if (PlaybackStore.hasPrivacyPin(this)) {
         items.add(
             PremiumMenuItem(
-                iconEmoji = "🗑️",
+                iconEmoji = "",
+                    iconResId = R.drawable.ic_lux_trash,
                 title = getString(R.string.privacy_remove_pin_option),
                 subtitle = getString(R.string.privacy_remove_pin_sub),
                 isDanger = true,
@@ -715,7 +719,8 @@ internal fun MainActivity.showPrivacyDashboardDialog() {
 
     val items = listOf(
         PremiumMenuItem(
-            iconEmoji = "📁",
+            iconEmoji = "",
+                    iconResId = R.drawable.ic_lux_folder,
             title = getString(R.string.privacy_select_locked_folders, lockedCount),
             subtitle = getString(R.string.privacy_locked_folders_dialog_title),
             isAccentHighlighted = true,
@@ -729,7 +734,8 @@ internal fun MainActivity.showPrivacyDashboardDialog() {
             onClick = { pushSettingsBackStack { showPrivacyDashboardDialog() }; showVaultAutoLockDialog() }
         ),
         PremiumMenuItem(
-            iconEmoji = "👆",
+            iconEmoji = "",
+                    iconResId = R.drawable.ic_lux_shield,
             title = getString(R.string.privacy_toggle_biometric_option, bioStatus),
             subtitle = getString(R.string.privacy_biometric_desc),
             onClick = {
@@ -741,13 +747,15 @@ internal fun MainActivity.showPrivacyDashboardDialog() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🔑",
+            iconEmoji = "",
+                    iconResId = R.drawable.ic_lux_key,
             title = getString(R.string.privacy_change_pin_option),
             subtitle = getString(R.string.privacy_change_pin_sub),
             onClick = { pushSettingsBackStack { showPrivacyDashboardDialog() }; showChangePasswordWithCurrentVerifyDialog() }
         ),
         PremiumMenuItem(
-            iconEmoji = "🗑️",
+            iconEmoji = "",
+                    iconResId = R.drawable.ic_lux_trash,
             title = getString(R.string.privacy_remove_pin_option),
             subtitle = getString(R.string.privacy_remove_pin_sub),
             isDanger = true,
@@ -975,7 +983,8 @@ internal fun MainActivity.showFolderVisibilityModeDialog() {
 
     val items = mutableListOf(
         PremiumMenuItem(
-            iconEmoji = "🌐",
+            iconEmoji = "",
+                    iconResId = R.drawable.ic_lux_globe,
             title = getString(R.string.folder_mode_all),
             subtitle = if (currentMode == 0) "✅ " + getString(R.string.active_mode_badge) else getString(R.string.folder_mode_all_sub),
             isAccentHighlighted = (currentMode == 0),
@@ -988,7 +997,8 @@ internal fun MainActivity.showFolderVisibilityModeDialog() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "✅",
+            iconEmoji = "",
+                    iconResId = R.drawable.ic_lux_check,
             title = getString(R.string.folder_mode_selected_only, allowedCount),
             subtitle = if (currentMode == 1) "✅ " + getString(R.string.active_mode_badge) else getString(R.string.folder_picker_dialog_title),
             isAccentHighlighted = (currentMode == 1),
@@ -998,7 +1008,8 @@ internal fun MainActivity.showFolderVisibilityModeDialog() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🎬",
+            iconEmoji = "",
+                    iconResId = R.drawable.ic_lux_play_engine,
             title = getString(R.string.folder_mode_all_videos_flat),
             subtitle = if (currentMode == 2) "✅ " + getString(R.string.active_mode_badge) else getString(R.string.folder_mode_flat_sub),
             isAccentHighlighted = (currentMode == 2),
@@ -1107,7 +1118,8 @@ internal fun MainActivity.showVaultAutoLockDialog() {
 
     val items = listOf(
         PremiumMenuItem(
-            iconEmoji = if (currentMode == PlaybackStore.VAULT_AUTOLOCK_IMMEDIATE) "✅" else "🔒",
+            iconEmoji = "",
+                    iconResId = if (currentMode == PlaybackStore.VAULT_AUTOLOCK_IMMEDIATE) R.drawable.ic_lux_check else R.drawable.ic_lux_lock,
             title = getString(R.string.vault_autolock_immediate),
             subtitle = getString(R.string.vault_autolock_immediate_sub),
             isAccentHighlighted = (currentMode == PlaybackStore.VAULT_AUTOLOCK_IMMEDIATE),
@@ -1117,7 +1129,8 @@ internal fun MainActivity.showVaultAutoLockDialog() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = if (currentMode == PlaybackStore.VAULT_AUTOLOCK_ON_APP_LEAVE) "✅" else "📱",
+            iconEmoji = "",
+                    iconResId = if (currentMode == PlaybackStore.VAULT_AUTOLOCK_ON_APP_LEAVE) R.drawable.ic_lux_check else R.drawable.ic_lux_shield,
             title = getString(R.string.vault_autolock_on_app_leave),
             subtitle = getString(R.string.vault_autolock_on_app_leave_sub),
             isAccentHighlighted = (currentMode == PlaybackStore.VAULT_AUTOLOCK_ON_APP_LEAVE),
@@ -1127,7 +1140,8 @@ internal fun MainActivity.showVaultAutoLockDialog() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = if (currentMode == PlaybackStore.VAULT_AUTOLOCK_AFTER_DELAY) "✅" else "⏱️",
+            iconEmoji = "",
+                    iconResId = if (currentMode == PlaybackStore.VAULT_AUTOLOCK_AFTER_DELAY) R.drawable.ic_lux_check else R.drawable.ic_lux_rotate,
             title = getString(R.string.vault_autolock_after_delay),
             subtitle = getString(R.string.vault_autolock_after_delay_fmt, delayStr),
             isAccentHighlighted = (currentMode == PlaybackStore.VAULT_AUTOLOCK_AFTER_DELAY),
@@ -1152,7 +1166,8 @@ internal fun MainActivity.showVaultAutoLockDelayPickerDialog() {
     val presets = listOf(30, 60, 300, 900, 1800)
     val items = presets.map { sec ->
         PremiumMenuItem(
-            iconEmoji = if (currentSec == sec) "✅" else "⏱️",
+            iconEmoji = "",
+                    iconResId = if (currentSec == sec) R.drawable.ic_lux_check else R.drawable.ic_lux_rotate,
             title = formatVaultDelayLabel(sec),
             subtitle = null,
             isAccentHighlighted = (currentSec == sec),

@@ -1146,16 +1146,16 @@ class MainActivity : AppCompatActivity() {
             val displayPath = enrichedVideo.path.ifEmpty { enrichedVideo.uri.toString() }
 
             val items = listOf(
-                PremiumMenuItem("🎬", getString(R.string.video_detail_name, enrichedVideo.title), enrichedVideo.folderName, true) {
+                PremiumMenuItem("", getString(R.string.video_detail_name, enrichedVideo.title), enrichedVideo.folderName, true, iconResId = R.drawable.ic_lux_play_engine) {
                     settingsBackStack.clear()
                     handleVideoSelection(enrichedVideo.uri, enrichedVideo.title)
                 },
-                PremiumMenuItem("📐", getString(R.string.video_detail_resolution, enrichedVideo.getResolutionLabel()), "$sizeFormatted • $durationFormatted") {
+                PremiumMenuItem("", getString(R.string.video_detail_resolution, enrichedVideo.getResolutionLabel()), "$sizeFormatted • $durationFormatted") {
                     settingsBackStack.clear()
                     handleVideoSelection(enrichedVideo.uri, enrichedVideo.title)
                 },
-                PremiumMenuItem("📍", getString(R.string.video_detail_path, displayPath), null, isInteractive = false),
-                PremiumMenuItem("🗑️", getString(R.string.video_menu_delete), getString(R.string.delete_action), isDanger = true) {
+                PremiumMenuItem("", getString(R.string.video_detail_path, displayPath), null, isInteractive = false, iconResId = R.drawable.ic_lux_folder),
+                PremiumMenuItem("", getString(R.string.video_menu_delete), getString(R.string.delete_action), isDanger = true, iconResId = R.drawable.ic_lux_trash) {
                     settingsBackStack.clear()
                     confirmAndDeleteVideo(enrichedVideo)
                 }
@@ -1692,7 +1692,7 @@ class MainActivity : AppCompatActivity() {
             applyFolderVisibilityAndRefreshUI()
             updateResumeLastFab()
             runCatching { audioLibraryViewModel.refreshAudioLibrary() }
-            shortsFeedController?.markDirtyIfHidden(allDiscoveredVideos)
+            shortsFeedController?.onHiddenFoldersPreferenceChanged(allDiscoveredVideos)
             VexoPlaybackService.notifyLibraryChanged(this)
             if (savedScroll != null) {
                 binding.recyclerView.post {
@@ -2480,6 +2480,7 @@ class MainActivity : AppCompatActivity() {
                             allDiscoveredVideos = state.videos
                             allDiscoveredFolders = state.folders
                             applyFolderVisibilityAndRefreshUI()
+                            shortsFeedController?.markDirtyIfHidden(allDiscoveredVideos)
                             updateResumeLastFab()
                         }
                     }
