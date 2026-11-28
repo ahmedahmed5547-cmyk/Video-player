@@ -317,7 +317,8 @@ internal fun MainActivity.checkForGitHubUpdatesNow(repoSlug: String) {
 
         val items = listOf(
             PremiumMenuItem(
-                iconEmoji = "⬇️",
+                iconEmoji = "",
+                iconResId = R.drawable.ic_lux_download,
                 title = getString(R.string.update_download_direct_btn),
                 subtitle = apkDownloadUrl.substringAfter("github.com/"),
                 isAccentHighlighted = true,
@@ -326,7 +327,8 @@ internal fun MainActivity.checkForGitHubUpdatesNow(repoSlug: String) {
                 }
             ),
             PremiumMenuItem(
-                iconEmoji = "🌐",
+                iconEmoji = "",
+                iconResId = R.drawable.ic_lux_globe,
                 title = getString(R.string.update_open_actions_btn),
                 subtitle = actionsRunUrl.substringAfter("github.com/"),
                 onClick = {
@@ -336,7 +338,8 @@ internal fun MainActivity.checkForGitHubUpdatesNow(repoSlug: String) {
                 }
             ),
             PremiumMenuItem(
-                iconEmoji = "⚙️",
+                iconEmoji = "",
+                iconResId = R.drawable.ic_lux_settings,
                 title = getString(R.string.update_change_repo_btn, repoSlug),
                 subtitle = getString(R.string.update_repo_setup_desc),
                 onClick = {

@@ -104,9 +104,10 @@ internal fun MainActivity.showResumeBehaviorSettingsDialog() {
     val currentMode = PlaybackStore.getResumeAskMode(this)
     val items = listOf(
         PremiumMenuItem(
-            iconEmoji = "❓",
+            iconEmoji = "",
+            iconResId = if (currentMode == 0) R.drawable.ic_lux_check else R.drawable.ic_lux_info,
             title = getString(R.string.resume_mode_ask_always),
-            subtitle = if (currentMode == 0) "✅ " + getString(R.string.active_mode_badge) else null,
+            subtitle = if (currentMode == 0) getString(R.string.active_mode_badge) else null,
             isAccentHighlighted = (currentMode == 0),
             onClick = {
                 PlaybackStore.setResumeAskMode(this, 0)
@@ -114,9 +115,10 @@ internal fun MainActivity.showResumeBehaviorSettingsDialog() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "▶️",
+            iconEmoji = "",
+            iconResId = if (currentMode == 1) R.drawable.ic_lux_check else R.drawable.ic_lux_resume,
             title = getString(R.string.resume_mode_always_resume),
-            subtitle = if (currentMode == 1) "✅ " + getString(R.string.active_mode_badge) else null,
+            subtitle = if (currentMode == 1) getString(R.string.active_mode_badge) else null,
             isAccentHighlighted = (currentMode == 1),
             onClick = {
                 PlaybackStore.setResumeAskMode(this, 1)
@@ -124,9 +126,10 @@ internal fun MainActivity.showResumeBehaviorSettingsDialog() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🔄",
+            iconEmoji = "",
+            iconResId = if (currentMode == 2) R.drawable.ic_lux_check else R.drawable.ic_lux_rotate,
             title = getString(R.string.resume_mode_always_restart),
-            subtitle = if (currentMode == 2) "✅ " + getString(R.string.active_mode_badge) else null,
+            subtitle = if (currentMode == 2) getString(R.string.active_mode_badge) else null,
             isAccentHighlighted = (currentMode == 2),
             onClick = {
                 PlaybackStore.setResumeAskMode(this, 2)
@@ -405,7 +408,8 @@ internal fun MainActivity.showSettingsPlaybackEnginePage(animateEntrance: Boolea
 
     val items = listOf(
         PremiumMenuItem(
-            iconEmoji = "⚡",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_bolt,
             title = getString(R.string.decoder_dialog_title),
             subtitle = decoderSub,
             isAccentHighlighted = true,
@@ -416,7 +420,8 @@ internal fun MainActivity.showSettingsPlaybackEnginePage(animateEntrance: Boolea
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🔄",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_rotate,
             title = getString(R.string.setting_default_orientation),
             subtitle = orientSub,
             onClick = {
@@ -425,7 +430,8 @@ internal fun MainActivity.showSettingsPlaybackEnginePage(animateEntrance: Boolea
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🖼️",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_pip,
             title = getString(R.string.setting_auto_pip_title),
             subtitle = autoPipSub,
             isAccentHighlighted = autoPipOn,
@@ -437,7 +443,8 @@ internal fun MainActivity.showSettingsPlaybackEnginePage(animateEntrance: Boolea
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "⏯️",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_resume,
             title = getString(R.string.setting_resume_behavior_title),
             subtitle = resumeSub,
             onClick = {
@@ -473,7 +480,8 @@ internal fun MainActivity.showSettingsPrivacyFoldersPage(animateEntrance: Boolea
 
     val items = listOf(
         PremiumMenuItem(
-            iconEmoji = "🔒",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_lock,
             title = getString(R.string.setting_privacy_section),
             subtitle = privacySub,
             isAccentHighlighted = true,
@@ -484,7 +492,8 @@ internal fun MainActivity.showSettingsPrivacyFoldersPage(animateEntrance: Boolea
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "📂",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_folder,
             title = getString(R.string.setting_folder_visibility),
             subtitle = filterSub,
             sectionHeader = getString(R.string.settings_subsec_folder_indexing),
@@ -494,7 +503,8 @@ internal fun MainActivity.showSettingsPrivacyFoldersPage(animateEntrance: Boolea
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "⚡",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_rotate,
             title = getString(R.string.setting_rescan_media_now),
             subtitle = getString(R.string.setting_rescan_media_sub),
             onClick = {
@@ -503,7 +513,8 @@ internal fun MainActivity.showSettingsPrivacyFoldersPage(animateEntrance: Boolea
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🔐",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_shield,
             title = getString(R.string.setting_allow_untrusted_ssl_title),
             subtitle = if (PlaybackStore.isAllowUntrustedSsl(this)) getString(R.string.setting_allow_untrusted_ssl_on) else getString(R.string.setting_allow_untrusted_ssl_off),
             isAccentHighlighted = PlaybackStore.isAllowUntrustedSsl(this),
@@ -548,7 +559,8 @@ internal fun MainActivity.showSettingsAppearanceDisplayPage() {
     }
     val items = listOf(
         PremiumMenuItem(
-            iconEmoji = "🎨",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_palette,
             title = getString(R.string.setting_app_theme),
             subtitle = "$modeLabel • $currentThemeName",
             isAccentHighlighted = true,
@@ -559,7 +571,8 @@ internal fun MainActivity.showSettingsAppearanceDisplayPage() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🎯",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_app_icon,
             title = getString(R.string.setting_app_icon_title),
             subtitle = getString(
                 AppIconManager.allOptions.firstOrNull { it.id == PlaybackStore.getAppIconStyle(this) }?.titleResId
@@ -572,7 +585,8 @@ internal fun MainActivity.showSettingsAppearanceDisplayPage() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🌐",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_globe,
             title = getString(R.string.setting_app_language),
             subtitle = langSub,
             sectionHeader = getString(R.string.settings_subsec_app_locale),
@@ -603,17 +617,18 @@ internal fun MainActivity.getDecoderModeDisplayName(modeIdx: Int): String {
 internal fun MainActivity.showDefaultDecoderSettingsDialog() {
     val currentIdx = PlaybackStore.getDecoderModeIndex(this)
     val options = listOf(
-        Triple(PlaybackStore.DECODER_MODE_AUTO, "🤖", Pair(getString(R.string.decoder_auto_title), getString(R.string.decoder_auto_sub))),
-        Triple(0, "⚡", Pair(getString(R.string.decoder_hw_plus_title), getString(R.string.decoder_hw_plus_sub))),
-        Triple(1, "🔧", Pair(getString(R.string.decoder_hw_title), getString(R.string.decoder_hw_sub))),
-        Triple(2, "💻", Pair(getString(R.string.decoder_sw_title), getString(R.string.decoder_sw_sub)))
+        Triple(PlaybackStore.DECODER_MODE_AUTO, R.drawable.ic_lux_play_engine, Pair(getString(R.string.decoder_auto_title), getString(R.string.decoder_auto_sub))),
+        Triple(0, R.drawable.ic_lux_bolt, Pair(getString(R.string.decoder_hw_plus_title), getString(R.string.decoder_hw_plus_sub))),
+        Triple(1, R.drawable.ic_lux_settings, Pair(getString(R.string.decoder_hw_title), getString(R.string.decoder_hw_sub))),
+        Triple(2, R.drawable.ic_lux_diagnostics, Pair(getString(R.string.decoder_sw_title), getString(R.string.decoder_sw_sub)))
     )
-    val items = options.map { (idx, emoji, texts) ->
+    val items = options.map { (idx, iconRes, texts) ->
         val isSel = (idx == currentIdx)
         PremiumMenuItem(
-            iconEmoji = emoji,
+            iconEmoji = "",
+            iconResId = if (isSel) R.drawable.ic_lux_check else iconRes,
             title = texts.first,
-            subtitle = if (isSel) "✅ ${getString(R.string.active_mode_badge)} • ${texts.second}" else texts.second,
+            subtitle = if (isSel) "${getString(R.string.active_mode_badge)} • ${texts.second}" else texts.second,
             isAccentHighlighted = isSel,
             onClick = {
                 PlaybackStore.setDecoderModeIndex(this, idx)
@@ -632,7 +647,8 @@ internal fun MainActivity.showSettingsSubtitlesPlaybackPage() {
 
     val items = listOf(
         PremiumMenuItem(
-            iconEmoji = "🌐",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_globe,
             title = getString(R.string.setting_subtitle_languages),
             subtitle = subLangs,
             isAccentHighlighted = true,
@@ -643,7 +659,8 @@ internal fun MainActivity.showSettingsSubtitlesPlaybackPage() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🔤",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_text_style,
             title = getString(R.string.setting_subtitle_style),
             subtitle = "${subSize}sp • ${getString(R.string.style_bg_opacity_label, subBgOpacity)}",
             sectionHeader = getString(R.string.settings_subsec_sub_appearance),
@@ -653,7 +670,8 @@ internal fun MainActivity.showSettingsSubtitlesPlaybackPage() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "✨",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_translate,
             title = getString(R.string.setting_sub_auto_translate_title),
             subtitle = if (PlaybackStore.isAutoTranslateEnabled(this)) {
                 "${getString(R.string.enabled_label)} • ${PlaybackStore.getAutoTranslateTargetLang(this).uppercase()} • ${getAutoTranslateProviderLabel(PlaybackStore.getAutoTranslateProvider(this))}"
@@ -667,7 +685,8 @@ internal fun MainActivity.showSettingsSubtitlesPlaybackPage() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = if (PlaybackStore.isSubtitlePositionLocked(this)) "🔒" else "🔓",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_lock,
             title = getString(R.string.setting_lock_sub_position),
             subtitle = if (PlaybackStore.isSubtitlePositionLocked(this)) getString(R.string.sub_pos_locked_on) else getString(R.string.sub_pos_locked_off),
             isAccentHighlighted = PlaybackStore.isSubtitlePositionLocked(this),
@@ -679,7 +698,8 @@ internal fun MainActivity.showSettingsSubtitlesPlaybackPage() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🗑️",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_trash,
             title = getString(R.string.setting_confirm_sub_delete_title),
             subtitle = getString(R.string.setting_confirm_sub_delete_sub),
             toggleChecked = PlaybackStore.isConfirmBeforeDeletingSubtitles(this),
@@ -688,7 +708,8 @@ internal fun MainActivity.showSettingsSubtitlesPlaybackPage() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🎯",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_target,
             title = getString(R.string.setting_reset_sub_position),
             subtitle = getString(R.string.sub_position_reset_toast),
             onClick = {
@@ -708,14 +729,14 @@ internal fun MainActivity.showSettingsSubtitlesPlaybackPage() {
 
 internal fun MainActivity.getAudioModeDisplayName(mode: Int): String {
     return when (mode) {
-        1 -> "🎬 " + getString(R.string.audio_mode_cinematic)
-        2 -> "🏛️ " + getString(R.string.audio_mode_hall)
-        3 -> "🗣️ " + getString(R.string.audio_mode_voice)
-        4 -> "🎸 " + getString(R.string.audio_mode_bass)
-        5 -> "🏟️ " + getString(R.string.audio_mode_stadium)
-        6 -> "🌙 " + getString(R.string.audio_mode_night)
-        7 -> "🎛️ " + getString(R.string.audio_mode_custom)
-        else -> "🎵 " + getString(R.string.audio_mode_standard)
+        1 -> getString(R.string.audio_mode_cinematic)
+        2 -> getString(R.string.audio_mode_hall)
+        3 -> getString(R.string.audio_mode_voice)
+        4 -> getString(R.string.audio_mode_bass)
+        5 -> getString(R.string.audio_mode_stadium)
+        6 -> getString(R.string.audio_mode_night)
+        7 -> getString(R.string.audio_mode_custom)
+        else -> getString(R.string.audio_mode_standard)
     }
 }
 
@@ -732,7 +753,8 @@ internal fun MainActivity.showSettingsAudioEqualizerPage() {
 
     val items = listOf(
         PremiumMenuItem(
-            iconEmoji = "🎭",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_audio,
             title = getString(R.string.audio_preset_section_title),
             subtitle = modeLabel,
             isAccentHighlighted = true,
@@ -743,7 +765,8 @@ internal fun MainActivity.showSettingsAudioEqualizerPage() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🎚️",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_equalizer,
             title = getString(R.string.audio_eq_customizer_title),
             subtitle = eqSummary,
             isAccentHighlighted = (currentMode == 7),
@@ -754,7 +777,8 @@ internal fun MainActivity.showSettingsAudioEqualizerPage() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🔄",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_rotate,
             title = getString(R.string.audio_reset_default_title),
             subtitle = getString(R.string.audio_reset_default_sub),
             onClick = {
@@ -785,11 +809,12 @@ internal fun MainActivity.showAudioSoundModesPage() {
         Triple(6, "🌙", Pair(getString(R.string.audio_mode_night), getString(R.string.audio_mode_night_sub)))
     )
 
-    val items = modes.map { (modeIdx, emoji, texts) ->
+    val items = modes.map { (modeIdx, _, texts) ->
         val isSelected = (modeIdx == activeMode)
-        val subText = if (isSelected) "✅ ${getString(R.string.active_mode_badge)} • ${texts.second}" else texts.second
+        val subText = if (isSelected) "${getString(R.string.active_mode_badge)} • ${texts.second}" else texts.second
         PremiumMenuItem(
-            iconEmoji = emoji,
+            iconEmoji = "",
+            iconResId = if (isSelected) R.drawable.ic_lux_check else R.drawable.ic_lux_audio,
             title = texts.first,
             subtitle = subText,
             isAccentHighlighted = isSelected,
@@ -1001,51 +1026,269 @@ internal fun MainActivity.showGraphicEqualizerDialog() {
 }
 
 internal fun MainActivity.showAboutAppPage() {
-    val items = listOf(
-        PremiumMenuItem(
-            iconEmoji = "📋",
-            title = getString(R.string.about_changelog_title),
-            subtitle = getString(R.string.about_changelog_sub),
-            isAccentHighlighted = true,
-            isInteractive = true,
-            onClick = {
-                pushSettingsBackStack { showAboutAppPage() }
-                showChangelogPage()
-            }
-        ),
+    val accent = PlaybackStore.getAccentColor(this)
+    val surface = PlaybackStore.getSurfaceColor(this)
+    val bg = PlaybackStore.getBackgroundColor(this)
+    val isLight = PlaybackStore.isLightThemeActive(this)
+    val primaryText = PlaybackStore.getPrimaryTextColor(this)
+    val secondaryText = PlaybackStore.getSecondaryTextColor(this)
+    val hairlineColor = Color.argb(if (isLight) 68 else 42, Color.red(secondaryText), Color.green(secondaryText), Color.blue(secondaryText))
 
-        PremiumMenuItem(
-            iconEmoji = "🔒",
-            title = getString(R.string.about_privacy_policy_title),
-            subtitle = getString(R.string.about_privacy_policy_sub),
-            isAccentHighlighted = true,
-            isInteractive = true,
-            onClick = {
-                pushSettingsBackStack { showAboutAppPage() }
-                showPrivacyPolicyFullPage()
-            }
-        ),
-        PremiumMenuItem(
-            iconEmoji = "⚖️",
-            title = getString(R.string.about_disclaimer_title),
-            subtitle = getString(R.string.about_disclaimer_sub),
-            isInteractive = false
-        ),
-        PremiumMenuItem(
-            iconEmoji = "👨‍💻",
-            title = getString(R.string.about_developer_label),
-            subtitle = "Ahmed M Moumen",
-            isAccentHighlighted = true,
-            isInteractive = false
+    val outerScroll = ScrollView(this).apply {
+        isVerticalScrollBarEnabled = false
+        isFillViewport = true
+        setBackgroundColor(bg)
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
         )
+    }
+
+    val (winWidthDp, _) = FoldableWindowMetricsHelper.computeCurrentWindowDp(this)
+    val effectiveWidthDp = FoldableAdaptiveMath.computeEffectiveMenuWidthDp(winWidthDp)
+    val innerPadDp = FoldableAdaptiveMath.computeMenuInnerPaddingDp(winWidthDp)
+    val cardWidthPx = if (effectiveWidthDp > 0) dp(effectiveWidthDp) else ViewGroup.LayoutParams.MATCH_PARENT
+
+    val container = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        tag = "vexo_responsive_menu_card"
+        setPadding(dp(innerPadDp), dp(22), dp(innerPadDp), dp(36))
+        setBackgroundColor(bg)
+        layoutParams = FrameLayout.LayoutParams(cardWidthPx, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL)
+    }
+    outerScroll.addView(container)
+
+    val animatedRows = mutableListOf<View>()
+
+    // Top handle pill
+    container.addView(View(this).apply {
+        layoutParams = LinearLayout.LayoutParams(dp(40), dp(4)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            bottomMargin = dp(16)
+        }
+        background = GradientDrawable().apply {
+            cornerRadius = dp(4).toFloat()
+            setColor(Color.argb(165, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+    })
+
+    // Header Row (Title + Back/Close Circle)
+    val headerRow = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(4), 0, dp(4), dp(16))
+    }
+    headerRow.addView(TextView(this).apply {
+        text = getString(R.string.settings_hub_about_title)
+        setTextColor(primaryText)
+        textSize = 20f
+        letterSpacing = 0.03f
+        setTypeface(typeface, Typeface.BOLD)
+        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+    })
+    val hasParentInStackTop = settingsBackStack.isNotEmpty()
+    headerRow.addView(ImageView(this).apply {
+        setImageResource(if (hasParentInStackTop) R.drawable.ic_arrow_back_modern else R.drawable.ic_close_modern)
+        imageTintList = ColorStateList.valueOf(primaryText)
+        scaleType = ImageView.ScaleType.CENTER_INSIDE
+        setPadding(dp(10), dp(10), dp(10), dp(10))
+        contentDescription = getString(if (hasParentInStackTop) R.string.back else R.string.close)
+        layoutParams = LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) }
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(if (isLight) Color.parseColor("#E2E8F0") else Color.parseColor("#1AFFFFFF"))
+            setStroke(dp(1), hairlineColor)
+        }
+        setOnClickListener { navigateBackInSettingsOrClose() }
+    })
+    container.addView(headerRow)
+
+    // Hero Brand Card (App Icon + V Player + Subtitle + Engine Capabilities Pill)
+    val heroCard = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_HORIZONTAL
+        setPadding(dp(20), dp(24), dp(20), dp(22))
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply {
+            bottomMargin = dp(18)
+        }
+        background = GradientDrawable().apply {
+            cornerRadius = dp(22).toFloat()
+            setColor(surface)
+            setStroke(dp(1), Color.argb(75, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+    }
+
+    val iconFrame = FrameLayout(this).apply {
+        layoutParams = LinearLayout.LayoutParams(dp(72), dp(72)).apply { bottomMargin = dp(14) }
+        background = GradientDrawable().apply {
+            cornerRadius = dp(20).toFloat()
+            setColor(Color.argb(24, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            setStroke(dp(1), Color.argb(90, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+        clipToOutline = true
+        outlineProvider = object : android.view.ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: android.graphics.Outline) {
+                outline.setRoundRect(0, 0, view.width, view.height, dp(20).toFloat())
+            }
+        }
+    }
+    iconFrame.addView(ImageView(this).apply {
+        setImageResource(R.mipmap.ic_launcher)
+        scaleType = ImageView.ScaleType.CENTER_CROP
+        layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+    })
+    heroCard.addView(iconFrame)
+
+    heroCard.addView(TextView(this).apply {
+        text = getString(R.string.app_name)
+        setTextColor(primaryText)
+        textSize = 22f
+        letterSpacing = 0.03f
+        setTypeface(typeface, Typeface.BOLD)
+        gravity = Gravity.CENTER
+    })
+
+    heroCard.addView(TextView(this).apply {
+        text = getString(R.string.app_subtitle)
+        setTextColor(secondaryText)
+        textSize = 13f
+        gravity = Gravity.CENTER
+        setPadding(0, dp(4), 0, dp(14))
+    })
+
+    // Subtle capability pill (no version number outside Changelog)
+    heroCard.addView(TextView(this).apply {
+        text = "Media3  •  LibVLC  •  4K HDR  •  IPTV"
+        setTextColor(accent)
+        textSize = 11.5f
+        letterSpacing = 0.05f
+        setTypeface(typeface, Typeface.BOLD)
+        setPadding(dp(14), dp(6), dp(14), dp(6))
+        background = GradientDrawable().apply {
+            cornerRadius = dp(999).toFloat()
+            setColor(Color.argb(if (isLight) 20 else 28, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            setStroke(dp(1), Color.argb(70, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+    })
+    container.addView(heroCard)
+    animatedRows.add(heroCard)
+
+    fun addAboutCard(
+        iconResId: Int,
+        title: String,
+        subtitle: String,
+        highlighted: Boolean = false,
+        interactive: Boolean = false,
+        onClick: (() -> Unit)? = null
+    ) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(60)
+            setPadding(dp(16), dp(14), dp(14), dp(14))
+            isClickable = interactive
+            isFocusable = interactive
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dp(10)
+            }
+            background = GradientDrawable().apply {
+                cornerRadius = dp(18).toFloat()
+                setColor(surface)
+                setStroke(
+                    dp(1),
+                    if (highlighted) Color.argb(85, Color.red(accent), Color.green(accent), Color.blue(accent)) else hairlineColor
+                )
+            }
+        }
+        val iconBadge = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(14) }
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(Color.argb(if (isLight) 20 else 28, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            }
+            addView(ImageView(this@showAboutAppPage).apply {
+                setImageResource(iconResId)
+                imageTintList = ColorStateList.valueOf(accent)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                layoutParams = FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER)
+            })
+        }
+        val textCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        textCol.addView(TextView(this).apply {
+            text = title
+            setTextColor(primaryText)
+            textSize = 15f
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        textCol.addView(TextView(this).apply {
+            text = subtitle
+            setTextColor(if (highlighted && !interactive) accent else secondaryText)
+            textSize = 12.5f
+            setTypeface(typeface, if (highlighted && !interactive) Typeface.BOLD else Typeface.NORMAL)
+            setPadding(0, dp(3), 0, 0)
+        })
+        row.addView(iconBadge)
+        row.addView(textCol)
+        if (interactive) {
+            row.addView(ImageView(this).apply {
+                setImageResource(R.drawable.ic_lux_chevron)
+                imageTintList = ColorStateList.valueOf(secondaryText)
+                layoutParams = LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginStart = dp(8) }
+            })
+            row.setOnClickListener { onClick?.invoke() }
+        }
+        container.addView(row)
+        animatedRows.add(row)
+    }
+
+    addAboutCard(
+        iconResId = R.drawable.ic_lux_changelog,
+        title = getString(R.string.about_changelog_title),
+        subtitle = getString(R.string.about_changelog_sub),
+        highlighted = true,
+        interactive = true
+    ) {
+        pushSettingsBackStack { showAboutAppPage() }
+        showChangelogPage()
+    }
+
+    addAboutCard(
+        iconResId = R.drawable.ic_lux_shield,
+        title = getString(R.string.about_privacy_policy_title),
+        subtitle = getString(R.string.about_privacy_policy_sub),
+        highlighted = true,
+        interactive = true
+    ) {
+        pushSettingsBackStack { showAboutAppPage() }
+        showPrivacyPolicyFullPage()
+    }
+
+    addAboutCard(
+        iconResId = R.drawable.ic_lux_developer,
+        title = getString(R.string.about_developer_label),
+        subtitle = "Ahmed M Moumen",
+        highlighted = true,
+        interactive = false
     )
 
-    showPremiumMenuDialog(
-        headerIcon = "ℹ️",
-        title = getString(R.string.settings_hub_about_title),
-        subtitle = "${getString(R.string.app_name)} • ${getString(R.string.app_subtitle)}",
-        items = items
+    addAboutCard(
+        iconResId = R.drawable.ic_lux_scale,
+        title = getString(R.string.about_disclaimer_title),
+        subtitle = getString(R.string.about_disclaimer_sub),
+        highlighted = false,
+        interactive = false
     )
+
+    presentInFullScreenHost(outerScroll, container, animatedRows, bg, animateEntrance = true)
 }
 
 internal fun MainActivity.showChangelogPage() {
@@ -1056,9 +1299,17 @@ internal fun MainActivity.showChangelogPage() {
             version = verName,
             date = "2026-11-28",
             iconEmoji = "✨",
-            title = getString(R.string.changelog_v90_33_title, verName),
-            description = getString(R.string.changelog_v90_33_desc),
+            title = getString(R.string.changelog_v90_34_title, verName),
+            description = getString(R.string.changelog_v90_34_desc),
             isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.33",
+            date = "2026-11-28",
+            iconEmoji = "⚡",
+            title = getString(R.string.changelog_v90_33_title, "90.33"),
+            description = getString(R.string.changelog_v90_33_desc),
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.32",
@@ -1334,12 +1585,13 @@ internal fun MainActivity.showAppLanguageDialog() {
         Triple("ko", "🇰🇷", Pair(getString(R.string.lang_korean), "한국어"))
     )
 
-    val items = supportedAppLangs.map { (tag, flag, names) ->
+    val items = supportedAppLangs.map { (tag, _, names) ->
         val isSel = (currentTag == tag)
         PremiumMenuItem(
-            iconEmoji = flag,
+            iconEmoji = "",
+            iconResId = if (isSel) R.drawable.ic_lux_check else R.drawable.ic_lux_globe,
             title = names.first,
-            subtitle = if (isSel) "✅ ${getString(R.string.active_mode_badge)} • ${names.second}" else names.second,
+            subtitle = if (isSel) "${getString(R.string.active_mode_badge)} • ${names.second}" else names.second,
             isAccentHighlighted = isSel,
             onClick = {
                 PlaybackStore.setAppLanguageTag(this, tag)
@@ -1953,28 +2205,32 @@ internal fun MainActivity.showDefaultOrientationDialog() {
     val current = PlaybackStore.getDefaultOrientationIndex(this)
     val items = listOf(
         PremiumMenuItem(
-            iconEmoji = if (current == PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO) "✅" else "🎬",
+            iconEmoji = "",
+            iconResId = if (current == PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO) R.drawable.ic_lux_check else R.drawable.ic_lux_play_engine,
             title = getString(R.string.orientation_auto_video),
             subtitle = getString(R.string.orientation_auto_video_sub),
             isAccentHighlighted = (current == PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO),
             onClick = { PlaybackStore.setDefaultOrientationIndex(this, PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO); popSettingsBackStack() }
         ),
         PremiumMenuItem(
-            iconEmoji = if (current == PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE) "✅" else "🔄",
+            iconEmoji = "",
+            iconResId = if (current == PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE) R.drawable.ic_lux_check else R.drawable.ic_lux_rotate,
             title = getString(R.string.orientation_follow_device),
             subtitle = getString(R.string.orientation_follow_device_sub),
             isAccentHighlighted = (current == PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE),
             onClick = { PlaybackStore.setDefaultOrientationIndex(this, PlaybackStore.ORIENTATION_MODE_FOLLOW_DEVICE); popSettingsBackStack() }
         ),
         PremiumMenuItem(
-            iconEmoji = if (current == PlaybackStore.ORIENTATION_MODE_LANDSCAPE) "✅" else "↔️",
+            iconEmoji = "",
+            iconResId = if (current == PlaybackStore.ORIENTATION_MODE_LANDSCAPE) R.drawable.ic_lux_check else R.drawable.ic_lux_rotate,
             title = getString(R.string.orientation_landscape),
             subtitle = null,
             isAccentHighlighted = (current == PlaybackStore.ORIENTATION_MODE_LANDSCAPE),
             onClick = { PlaybackStore.setDefaultOrientationIndex(this, PlaybackStore.ORIENTATION_MODE_LANDSCAPE); popSettingsBackStack() }
         ),
         PremiumMenuItem(
-            iconEmoji = if (current == PlaybackStore.ORIENTATION_MODE_PORTRAIT) "✅" else "↕️",
+            iconEmoji = "",
+            iconResId = if (current == PlaybackStore.ORIENTATION_MODE_PORTRAIT) R.drawable.ic_lux_check else R.drawable.ic_lux_rotate,
             title = getString(R.string.orientation_portrait),
             subtitle = null,
             isAccentHighlighted = (current == PlaybackStore.ORIENTATION_MODE_PORTRAIT),
@@ -2332,7 +2588,8 @@ internal fun MainActivity.showSubtitleAutoTranslateSettingsPage() {
 
     val items = listOf(
         PremiumMenuItem(
-            iconEmoji = "✨",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_translate,
             title = getString(R.string.setting_sub_auto_translate_toggle),
             subtitle = if (enabled) getString(R.string.enabled_label) else getString(R.string.disabled_label),
             isAccentHighlighted = enabled,
@@ -2342,7 +2599,8 @@ internal fun MainActivity.showSubtitleAutoTranslateSettingsPage() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "❓",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_info,
             title = getString(R.string.setting_sub_auto_translate_ask),
             subtitle = if (askFirst) getString(R.string.enabled_label) else getString(R.string.disabled_label),
             isAccentHighlighted = askFirst,
@@ -2352,7 +2610,8 @@ internal fun MainActivity.showSubtitleAutoTranslateSettingsPage() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🌐",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_globe,
             title = getString(R.string.setting_sub_auto_translate_target),
             subtitle = "$targetDisplay (${targetLang.uppercase()})",
             onClick = {
@@ -2361,7 +2620,8 @@ internal fun MainActivity.showSubtitleAutoTranslateSettingsPage() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "⚙️",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_settings,
             title = getString(R.string.setting_sub_auto_translate_provider),
             subtitle = getAutoTranslateProviderLabel(provider),
             onClick = {
@@ -2370,13 +2630,15 @@ internal fun MainActivity.showSubtitleAutoTranslateSettingsPage() {
             }
         ),
         PremiumMenuItem(
-            iconEmoji = "🔑",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_key,
             title = getString(R.string.setting_sub_auto_translate_api_key),
             subtitle = keyPreview,
             onClick = { showAutoTranslateApiKeyDialog() }
         ),
         PremiumMenuItem(
-            iconEmoji = "📝",
+            iconEmoji = "",
+            iconResId = R.drawable.ic_lux_text_style,
             title = getString(R.string.setting_sub_arabic_style),
             subtitle = if (arStyle == "simple") getString(R.string.sub_tr_ar_style_simple) else getString(R.string.sub_tr_ar_style_msa),
             onClick = {
@@ -2403,7 +2665,8 @@ internal fun MainActivity.showAutoTranslateTargetLanguageDialog() {
     val items = langs.map { code ->
         val name = SubtitleAutoTranslator.getLanguageDisplayName(code, isArUi)
         PremiumMenuItem(
-            iconEmoji = if (code == current) "✅" else "🌐",
+            iconEmoji = "",
+            iconResId = if (code == current) R.drawable.ic_lux_check else R.drawable.ic_lux_globe,
             title = name,
             subtitle = code.uppercase(),
             isAccentHighlighted = (code == current),
@@ -2431,7 +2694,8 @@ internal fun MainActivity.showAutoTranslateProviderDialog() {
     )
     val items = providers.map { (id, title, sub) ->
         PremiumMenuItem(
-            iconEmoji = if (id == current) "✅" else "⚙️",
+            iconEmoji = "",
+            iconResId = if (id == current) R.drawable.ic_lux_check else R.drawable.ic_lux_settings,
             title = title,
             subtitle = sub,
             isAccentHighlighted = (id == current),

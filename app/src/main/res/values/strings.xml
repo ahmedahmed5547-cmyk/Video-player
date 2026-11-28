@@ -934,4 +934,6 @@ Any series, movie, or channel you play will appear here automatically so you can
 • Set Material You as the default app theme on Android 12+.
 • Unified Settings icons for Android Auto, Clear cache, Battery Saver, and their sub-options with matching minimalist vector icons.
 • Added an instant Delete button inside Shorts with clean transition to the next Short.</string>
+    <string name="changelog_v90_34_title">v%1$s — Instant Shorts Auto-Advance &amp; Unified Icons</string>
+    <string name="changelog_v90_34_desc">• Fixed black screen after deleting a Short so the next Short plays immediately.\n• Unified every Settings sub-menu and the top 3-bar dropdown menu with monochrome outline vector icons.\n• Redesigned the About screen with a cohesive hero card and matching vector rows.</string>
 </resources>

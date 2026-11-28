@@ -548,7 +548,7 @@ class ShortsFeedController(
         // Direct instant delete when permitted (Android < 11 or All Files Access granted)
         val canDirectDelete = Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()
         if (canDirectDelete) {
-            pauseForLifecycle()
+            playerPool.forEach { it.player.playWhenReady = false }
             activity.lifecycleScope.launch {
                 val deleted = withContext(Dispatchers.IO) {
                     var ok = false
@@ -567,6 +567,9 @@ class ShortsFeedController(
                     removeDeletedShortAndAdvance(video)
                 } else {
                     Toast.makeText(activity, activity.getString(R.string.video_delete_failed_toast), Toast.LENGTH_SHORT).show()
+                    if (activity.isShortsTabActive && isVisibleToUser && currentIdx in shortsList.indices) {
+                        activateSettledPosition(currentIdx, seekToMs = -1L)
+                    }
                 }
             }
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -589,23 +592,58 @@ class ShortsFeedController(
     private fun removeDeletedShortAndAdvance(video: VideoItem) {
         val updated = shortsList.toMutableList()
         val removeAt = updated.indexOfFirst { it.id == video.id }
+
+        // 1. Cleanly release/reset any pooled player bound to the deleted video and shift higher indices down
+        //    so the pre-warmed next Short (previously at removeAt + 1) is immediately ready at removeAt.
+        for (entry in playerPool) {
+            if (entry.boundUri == video.uri || (removeAt != -1 && entry.boundPosition == removeAt)) {
+                entry.activeListener?.let { entry.player.removeListener(it) }
+                entry.activeListener = null
+                entry.player.playWhenReady = false
+                entry.player.stop()
+                entry.player.clearMediaItems()
+                entry.boundPosition = -1
+                entry.boundUri = null
+                entry.firstFrameRendered = false
+            } else if (removeAt != -1 && entry.boundPosition > removeAt) {
+                entry.boundPosition -= 1
+            }
+        }
+
+        // Detach any stale PlayerView reference on the outgoing ViewHolder so it never flashes black
         if (removeAt != -1) {
+            (recyclerView?.findViewHolderForAdapterPosition(removeAt) as? ShortsViewHolder)?.let { oldHolder ->
+                oldHolder.playerView.player = null
+            }
             updated.removeAt(removeAt)
             shortsList = updated
             adapter?.notifyItemRemoved(removeAt)
         }
+
         activity.allDiscoveredVideos = activity.allDiscoveredVideos.filter { it.id != video.id }
+        activePosition = -1
+
         if (shortsList.isEmpty()) {
-            activePosition = -1
             recyclerView?.visibility = View.GONE
             emptyTextView?.visibility = View.VISIBLE
-        } else {
-            val nextPos = (if (removeAt != -1) removeAt else activePosition).coerceIn(0, shortsList.lastIndex)
-            activePosition = nextPos
-            recyclerView?.post {
-                if (activity.isShortsTabActive && isVisibleToUser) {
-                    activateSettledPosition(nextPos, seekToMs = 0L)
-                }
+            return
+        }
+
+        val nextPos = (if (removeAt != -1) removeAt else 0).coerceIn(0, shortsList.lastIndex)
+        val rv = recyclerView ?: return
+        rv.scrollToPosition(nextPos)
+
+        val activateNext = {
+            if (activity.isShortsTabActive && isVisibleToUser && nextPos in shortsList.indices) {
+                activateSettledPosition(nextPos, seekToMs = 0L)
+            }
+        }
+        rv.post {
+            val animator = rv.itemAnimator
+            if (animator != null && animator.isRunning) {
+                animator.isRunning { rv.post(activateNext) }
+            } else {
+                activateNext()
             }
         }
     }

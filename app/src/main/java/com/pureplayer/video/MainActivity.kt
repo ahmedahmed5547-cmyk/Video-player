@@ -1583,22 +1583,37 @@ class MainActivity : AppCompatActivity() {
             })
         }
 
-        fun addActionRow(icon: String, label: String, onClick: () -> Unit) {
+        fun makeDropdownIconBadge(iconResId: Int): FrameLayout {
+            return FrameLayout(this).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(34), dp(34)).apply {
+                    marginEnd = dp(12)
+                }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dp(10).toFloat()
+                    setColor(Color.argb(if (isLight) 22 else 30, Color.red(accent), Color.green(accent), Color.blue(accent)))
+                }
+                addView(ImageView(this@MainActivity).apply {
+                    setImageResource(iconResId)
+                    imageTintList = ColorStateList.valueOf(accent)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    layoutParams = FrameLayout.LayoutParams(dp(19), dp(19), Gravity.CENTER)
+                })
+            }
+        }
+
+        fun addActionRow(iconResId: Int, label: String, onClick: () -> Unit) {
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 isFocusable = true
                 isClickable = true
                 minimumHeight = dp(48)
-                setPadding(dp(12), dp(10), dp(12), dp(10))
+                setPadding(dp(10), dp(9), dp(12), dp(9))
                 background = makeThemedRowBackground()
                 contentDescription = label
             }
-            val tvIcon = TextView(this).apply {
-                text = icon
-                textSize = 16f
-                setPadding(0, 0, dp(12), 0)
-            }
+            val iconBadge = makeDropdownIconBadge(iconResId)
             val tvLabel = TextView(this).apply {
                 text = label
                 setTextColor(primaryText)
@@ -1606,7 +1621,7 @@ class MainActivity : AppCompatActivity() {
                 setTypeface(typeface, Typeface.BOLD)
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
-            row.addView(tvIcon)
+            row.addView(iconBadge)
             row.addView(tvLabel)
             row.setOnClickListener {
                 popup.dismiss()
@@ -1616,20 +1631,20 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 1. Settings
-        addActionRow("⚙️", getString(R.string.top_menu_settings)) {
+        addActionRow(R.drawable.ic_lux_settings, getString(R.string.top_menu_settings)) {
             showProSettingsDialog(clearStack = true)
         }
         addDivider()
 
         // 2. Sort and Layout
-        addActionRow("🔃", getString(R.string.top_menu_sort)) {
+        addActionRow(R.drawable.ic_lux_sort, getString(R.string.top_menu_sort)) {
             settingsBackStack.clear()
             showSortAndLayoutDialog()
         }
         addDivider()
 
         // 3. Open File
-        addActionRow("📂", getString(R.string.top_menu_open_files)) {
+        addActionRow(R.drawable.ic_lux_folder, getString(R.string.top_menu_open_files)) {
             openDocumentLauncher.launch(arrayOf("video/*", "application/x-matroska"))
         }
         addDivider()
@@ -1642,15 +1657,11 @@ class MainActivity : AppCompatActivity() {
             isFocusable = true
             isClickable = true
             minimumHeight = dp(48)
-            setPadding(dp(12), dp(8), dp(10), dp(8))
+            setPadding(dp(10), dp(8), dp(10), dp(8))
             background = makeThemedRowBackground()
             contentDescription = getString(R.string.menu_hidden_folders_title)
         }
-        val tvHiddenIcon = TextView(this).apply {
-            text = "👁️"
-            textSize = 16f
-            setPadding(0, 0, dp(12), 0)
-        }
+        val tvHiddenIcon = makeDropdownIconBadge(R.drawable.ic_lux_eye)
         val tvHiddenLabel = TextView(this).apply {
             text = getString(R.string.menu_hidden_folders_title)
             setTextColor(primaryText)

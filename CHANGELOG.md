@@ -1,3 +1,8 @@
+## v90.34 (versionCode 9034)
+- **Shorts Instant Delete Fix**: Eliminated the black screen after deleting a Short by resetting the deleted player slot, shifting pre-warmed pool positions, and immediately auto-playing the next Short once the list settles.
+- **Unified Settings & Top Dropdown Icons**: Replaced all colored emoji icons across every Settings sub-menu (Video Player & Decoder, Audio, Subtitles, Appearance, Privacy, Updates) and the 3-bar top dropdown menu with minimalist monochrome outline vector icons (`ic_lux_*`).
+- **Redesigned About Screen**: Built a cohesive, theme-matched About screen featuring the app icon hero card, capability badge (`Media3 • LibVLC • 4K HDR • IPTV`), and unified vector rows.
+
 ## v90.33 (2026-11-28)
 - **Bug Fix — Resume Last Video FAB**: Fixed animation race that hid `fabResumeLast` when returning to Video Folders, and isolated Shorts full-screen playback (`IS_FROM_SHORTS`) so Shorts never overwrite the last played folder video.
 - **Default Theme — Material You**: Set Material You (`THEME_MATERIAL_YOU`) as the default theme on Android 12+.
