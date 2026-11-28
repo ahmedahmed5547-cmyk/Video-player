@@ -920,4 +920,7 @@ Any series, movie, or channel you play will appear here automatically so you can
 • Improved overall smoothness with DiffUtil, stable IDs, off-main-thread Shorts filtering, and in-memory Display Fields caching.
 • Added Settings → Clear cache with per-category size breakdown and checkboxes while keeping all user data, IPTV, Vault, and videos 100% safe.
 • Set Obsidian Dark as the primary default app icon (with Cyber Poly kept available in the 8-icon picker).</string>
+    <string name="changelog_v90_31_title">v%1$s — Shorts Full-Screen Audio Fix &amp; Clean Shorts Overlay</string>
+    <string name="changelog_v90_31_desc">• Fixed missing audio when returning from full-screen player back to Shorts: cleanly hands off AudioFocus, restores exact playback position &amp; mute state, re-enables audio tracks, and resumes immediately with zero black flash.
+• Hidden the bottom Resume Last Video button automatically whenever Shorts is active (including after returning from full-screen or rotation) with a smooth fade when switching back to Videos.</string>
 </resources>

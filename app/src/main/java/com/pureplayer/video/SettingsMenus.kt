@@ -1051,10 +1051,18 @@ internal fun MainActivity.showChangelogPage() {
         ChangelogReleaseEntry(
             version = verName,
             date = "2026-11-28",
-            iconEmoji = "🚀",
-            title = getString(R.string.changelog_v90_30_title, verName),
-            description = getString(R.string.changelog_v90_30_desc),
+            iconEmoji = "🔊",
+            title = getString(R.string.changelog_v90_31_title, verName),
+            description = getString(R.string.changelog_v90_31_desc),
             isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.30",
+            date = "2026-11-28",
+            iconEmoji = "🚀",
+            title = getString(R.string.changelog_v90_30_title, "90.30"),
+            description = getString(R.string.changelog_v90_30_desc),
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.29",

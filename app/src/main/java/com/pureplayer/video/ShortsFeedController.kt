@@ -74,8 +74,8 @@ object ShortsFeedPolicy {
  *   with playWhenReady = false so frame 0 is already decoded before the user swipes.
  * - TextureView + transparent shutter + cached first-frame poster overlay that fades out (120ms)
  *   ONLY when Player.Listener.onRenderedFirstFrame() fires — zero black flash on swipe or re-entry.
- * - Tuned fast-start local DefaultLoadControl (bufferForPlaybackMs = 250ms).
- * - Pauses active audio immediately when dragging starts so audio NEVER overlaps.
+ * - Single source of truth for Mute state in PlaybackStore + clean AudioFocus handoff across
+ *   full-screen PlayerActivity -> Back -> Shorts (restores exact position, audio track, and volume).
  * - Releases ALL pooled players cleanly on tab leave / onPause / onStop / onDestroy (zero leaks).
  */
 class ShortsFeedController(
@@ -100,8 +100,10 @@ class ShortsFeedController(
     private var layoutManager: LinearLayoutManager? = null
     private val playerPool = mutableListOf<PooledPlayerEntry>()
     private var activePosition: Int = -1
-    private var isMuted: Boolean = false
+    private var isMuted: Boolean = PlaybackStore.isShortsMuted(activity)
     private var isVisibleToUser: Boolean = false
+    private var returningFromFullScreenUri: Uri? = null
+    private var pendingResumePositionMs: Long = 0L
     private var shortsList: List<VideoItem> = emptyList()
     private var adapter: ShortsAdapter? = null
     private var filterJob: Job? = null
@@ -147,7 +149,7 @@ class ShortsFeedController(
                         val snapView = snap.findSnapView(lm) ?: return
                         val pos = lm.getPosition(snapView)
                         if (pos != RecyclerView.NO_POSITION) {
-                            activateSettledPosition(pos)
+                            activateSettledPosition(pos, seekToMs = -1L)
                         }
                     }
                 }
@@ -186,13 +188,19 @@ class ShortsFeedController(
             .setBufferDurationsMs(1_000, 4_000, 250, 500)
             .build()
         val exo = ExoPlayer.Builder(activity)
-            .setAudioAttributes(audioAttrs, true)
+            .setAudioAttributes(audioAttrs, /* handleAudioFocus = */ true)
             .setLoadControl(loadControl)
             .setHandleAudioBecomingNoisy(true)
             .build()
             .apply {
                 repeatMode = Player.REPEAT_MODE_ONE
                 videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+                // Ensure audio track is never left disabled by any external track selection state
+                trackSelectionParameters = trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+                    .build()
                 volume = 0f
                 playWhenReady = false
             }
@@ -202,13 +210,10 @@ class ShortsFeedController(
     }
 
     private fun obtainEntryForPosition(targetPos: Int, keepWindow: Set<Int>): PooledPlayerEntry {
-        // 1. Reuse existing pre-warmed entry for this exact position
         playerPool.firstOrNull { it.boundPosition == targetPos }?.let { return it }
-        // 2. Allocate new player if pool hasn't reached hard cap (3)
         if (playerPool.size < MAX_POOL_SIZE) {
             return createPooledPlayer()
         }
-        // 3. Recycle a player whose position is outside {current-1, current, current+1}
         val recyclable = playerPool.firstOrNull { it.boundPosition !in keepWindow } ?: playerPool.first()
         detachPlayerFromAnyView(recyclable.player)
         recyclable.activeListener?.let { recyclable.player.removeListener(it) }
@@ -246,6 +251,7 @@ class ShortsFeedController(
 
     fun showAndPlay(allVideos: List<VideoItem>) {
         ensureInitialized()
+        isMuted = PlaybackStore.isShortsMuted(activity)
         isVisibleToUser = true
         refreshDataAsync(allVideos)
     }
@@ -286,7 +292,7 @@ class ShortsFeedController(
             adapter?.let { diffResult.dispatchUpdatesTo(it) }
 
             if (filtered.isEmpty()) {
-                pauseAndDetachSurface()
+                pauseForLifecycle()
                 activePosition = -1
                 recyclerView?.visibility = View.GONE
                 emptyTextView?.visibility = View.VISIBLE
@@ -303,31 +309,33 @@ class ShortsFeedController(
                     if (activePosition !in filtered.indices) {
                         recyclerView?.scrollToPosition(0)
                     }
-                    activateSettledPosition(targetPos)
+                    activateSettledPosition(targetPos, seekToMs = pendingResumePositionMs)
+                    pendingResumePositionMs = -1L
                 }
             }
         }
     }
 
-    private fun activateSettledPosition(position: Int) {
+    private fun activateSettledPosition(position: Int, seekToMs: Long) {
         if (!isVisibleToUser || position !in shortsList.indices) return
         val rv = recyclerView ?: return
         val holder = rv.findViewHolderForAdapterPosition(position) as? ShortsViewHolder ?: run {
-            rv.post { if (isVisibleToUser) activateSettledPosition(position) }
+            rv.post { if (isVisibleToUser) activateSettledPosition(position, seekToMs) }
             return
         }
+
+        // Sync single-source-of-truth mute state from PlaybackStore
+        isMuted = PlaybackStore.isShortsMuted(activity)
 
         val keepWindow = setOf(position - 1, position, position + 1).filter { it in shortsList.indices }.toSet()
         activePosition = position
 
-        // Pause & rewind all non-active pooled players so only the visible short plays audio
         pauseAllPooledPlayers(seekOthersToZero = true, exceptPos = position)
 
         val video = shortsList[position]
         val entry = obtainEntryForPosition(position, keepWindow)
-        bindEntryToHolder(entry, position, video, holder, autoPlay = true)
+        bindEntryToHolder(entry, position, video, holder, autoPlay = true, seekToMs = seekToMs)
 
-        // Pre-warm next (+1) and previous (-1) neighbors paused so frame 0 is decoded before swipe!
         if (position + 1 in shortsList.indices) {
             prewarmNeighbor(position + 1, keepWindow)
         }
@@ -341,7 +349,7 @@ class ShortsFeedController(
         val video = shortsList[neighborPos]
         val entry = obtainEntryForPosition(neighborPos, keepWindow)
         val holder = recyclerView?.findViewHolderForAdapterPosition(neighborPos) as? ShortsViewHolder
-        bindEntryToHolder(entry, neighborPos, video, holder, autoPlay = false)
+        bindEntryToHolder(entry, neighborPos, video, holder, autoPlay = false, seekToMs = -1L)
     }
 
     private fun bindEntryToHolder(
@@ -349,22 +357,35 @@ class ShortsFeedController(
         position: Int,
         video: VideoItem,
         holder: ShortsViewHolder?,
-        autoPlay: Boolean
+        autoPlay: Boolean,
+        seekToMs: Long
     ) {
         val player = entry.player
         val needsPrepare = (entry.boundUri != video.uri || player.playbackState == Player.STATE_IDLE)
+
+        // Always guarantee audio track is enabled & AudioFocus attributes are active
+        player.trackSelectionParameters = player.trackSelectionParameters
+            .buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+            .build()
 
         if (needsPrepare) {
             entry.boundPosition = position
             entry.boundUri = video.uri
             entry.firstFrameRendered = false
             player.setMediaItem(MediaItem.fromUri(video.uri))
+            if (seekToMs > 0L) {
+                player.seekTo(seekToMs)
+            }
             player.prepare()
         } else {
             entry.boundPosition = position
+            if (seekToMs > 0L) {
+                player.seekTo(seekToMs)
+            }
         }
 
-        // Attach Player.Listener to fade out poster ONLY when first frame actually renders
         entry.activeListener?.let { player.removeListener(it) }
         val listener = object : Player.Listener {
             override fun onRenderedFirstFrame() {
@@ -390,8 +411,15 @@ class ShortsFeedController(
         }
 
         if (autoPlay) {
+            // Re-assert audio attributes & focus and apply single-source-of-truth volume
+            val audioAttrs = AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                .build()
+            player.setAudioAttributes(audioAttrs, /* handleAudioFocus = */ true)
             player.volume = if (isMuted) 0f else 1f
             player.playWhenReady = true
+            player.play()
         } else {
             player.volume = 0f
             player.playWhenReady = false
@@ -399,12 +427,35 @@ class ShortsFeedController(
     }
 
     /**
-     * Releases all pooled ExoPlayer instances and detaches every PlayerView surface cleanly
-     * when leaving Shorts or when the app goes to background (onPause / onStop).
-     * Poster thumbnails remain visible so re-entering Shorts has zero black flash.
+     * Called when Activity pauses/stops or launches full-screen PlayerActivity while Shorts tab is active.
+     * Saves current position and cleanly releases all pooled players & surfaces so PlayerActivity owns audio.
+     */
+    fun pauseForLifecycle() {
+        val activeEntry = playerPool.firstOrNull { it.boundPosition == activePosition }
+        if (activeEntry != null && activeEntry.player.currentPosition > 0L) {
+            pendingResumePositionMs = activeEntry.player.currentPosition
+        }
+        releasePoolAndDetachSurfaces()
+    }
+
+    /**
+     * Called when user explicitly leaves the Shorts tab for another tab (Videos / Audio / Vault / IPTV).
+     */
+    fun leaveShortsTab() {
+        isVisibleToUser = false
+        returningFromFullScreenUri = null
+        pendingResumePositionMs = -1L
+        releasePoolAndDetachSurfaces()
+    }
+
+    /**
+     * Compatibility alias used by CacheManagerUi before clearing cache.
      */
     fun pauseAndDetachSurface() {
-        isVisibleToUser = false
+        pauseForLifecycle()
+    }
+
+    private fun releasePoolAndDetachSurfaces() {
         filterJob?.cancel()
         val rv = recyclerView
         if (rv != null) {
@@ -421,15 +472,43 @@ class ShortsFeedController(
         playerPool.clear()
     }
 
-    fun resumeIfVisible() {
-        if (isVisibleToUser && shortsList.isNotEmpty()) {
+    /**
+     * Called from MainActivity.onResume(): if Shorts tab is active (e.g. returning from full-screen
+     * PlayerActivity or background), cleanly recreates the player with AudioFocus, restores exact
+     * playback position & mute state, and resumes immediately with sound & zero black flash.
+     */
+    fun onHostResumed(allVideos: List<VideoItem>) {
+        if (!activity.isShortsTabActive) return
+        ensureInitialized()
+        isVisibleToUser = true
+        isMuted = PlaybackStore.isShortsMuted(activity)
+
+        // If returning from full-screen PlayerActivity, pull the latest saved position for that Short
+        val fsUri = returningFromFullScreenUri
+        if (fsUri != null) {
+            val savedFromFullScreen = PlaybackStore.getSavedPosition(activity, fsUri)
+            if (savedFromFullScreen > 0L) {
+                pendingResumePositionMs = savedFromFullScreen
+            }
+            returningFromFullScreenUri = null
+        }
+
+        if (shortsList.isEmpty() || isDataDirty) {
+            refreshDataAsync(allVideos)
+        } else {
             val pos = if (activePosition in shortsList.indices) activePosition else 0
-            activateSettledPosition(pos)
+            val seekMs = pendingResumePositionMs
+            pendingResumePositionMs = -1L
+            recyclerView?.post {
+                if (activity.isShortsTabActive && isVisibleToUser) {
+                    activateSettledPosition(pos, seekToMs = seekMs)
+                }
+            }
         }
     }
 
     fun release() {
-        pauseAndDetachSurface()
+        leaveShortsTab()
         activePosition = -1
     }
 
@@ -482,7 +561,6 @@ class ShortsFeedController(
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
 
-            // Bottom gradient scrim for crisp readable labels
             val scrim = View(activity).apply {
                 background = GradientDrawable(
                     GradientDrawable.Orientation.BOTTOM_TOP,
@@ -496,7 +574,6 @@ class ShortsFeedController(
             }
             root.addView(scrim)
 
-            // Center play/pause tap indicator
             tvPauseOverlay = TextView(activity).apply {
                 text = "▶"
                 textSize = 32f
@@ -511,7 +588,6 @@ class ShortsFeedController(
             }
             root.addView(tvPauseOverlay)
 
-            // Bottom-start video info overlay
             val infoCol = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(16), dp(12), dp(82), dp(20))
@@ -539,7 +615,6 @@ class ShortsFeedController(
             infoCol.addView(tvMeta)
             root.addView(infoCol)
 
-            // Calm Instagram-style side action stack (20dp vertical spacing, 40% black circles)
             val actionCol = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
@@ -554,7 +629,7 @@ class ShortsFeedController(
             fun makeMinimalActionBadge(iconRes: Int, iconSizeDp: Int, desc: String): Pair<FrameLayout, ImageView> {
                 val badgeBg = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(Color.argb(102, 0, 0, 0)) // ~40% black subtle circle
+                    setColor(Color.argb(102, 0, 0, 0))
                 }
                 val badge = FrameLayout(activity).apply {
                     contentDescription = desc
@@ -654,12 +729,10 @@ class ShortsFeedController(
             holder.tvMeta.text = "${video.folderName}  •  $dur"
             holder.updateMuteIcon(isMuted, animate = false)
 
-            // Load cached first-frame poster off the main thread so zero black flash ever appears
             holder.posterJob?.cancel()
             holder.showPosterImmediately()
             holder.posterJob = VideoThumbnailLoader.loadVideoThumbnail(activity, video, holder.ivPoster, accent)
 
-            // If this position already has a pre-warmed player in the pool, attach it immediately
             val existingEntry = playerPool.firstOrNull { it.boundPosition == position && it.boundUri == video.uri }
             if (existingEntry != null) {
                 if (holder.playerView.player != existingEntry.player) {
@@ -678,6 +751,7 @@ class ShortsFeedController(
                     p.pause()
                     holder.tvPauseOverlay.visibility = View.VISIBLE
                 } else {
+                    p.volume = if (isMuted) 0f else 1f
                     p.play()
                     holder.tvPauseOverlay.visibility = View.GONE
                 }
@@ -689,17 +763,27 @@ class ShortsFeedController(
 
             holder.btnMute.setOnClickListener {
                 isMuted = !isMuted
+                PlaybackStore.setShortsMuted(activity, isMuted)
                 val activePlayer = playerPool.firstOrNull { it.boundPosition == activePosition }?.player
                 activePlayer?.volume = if (isMuted) 0f else 1f
                 holder.updateMuteIcon(isMuted, animate = true)
             }
 
             holder.btnFullPlayer.setOnClickListener {
-                pauseAndDetachSurface()
+                val activePlayer = playerPool.firstOrNull { it.boundPosition == activePosition }?.player
+                val currentPos = activePlayer?.currentPosition?.coerceAtLeast(0L) ?: 0L
+                returningFromFullScreenUri = video.uri
+                pendingResumePositionMs = currentPos
+                if (currentPos > 0L) {
+                    PlaybackStore.savePosition(activity, video.uri, currentPos)
+                }
+                // Hand off audio ownership cleanly to PlayerActivity
+                pauseForLifecycle()
                 val intent = Intent(activity, PlayerActivity::class.java).apply {
                     data = video.uri
                     putExtra("VIDEO_TITLE", video.title)
                     putExtra("VIDEO_URI_STR", video.uri.toString())
+                    putExtra("START_POSITION_MS", currentPos)
                 }
                 activity.startActivity(intent)
             }

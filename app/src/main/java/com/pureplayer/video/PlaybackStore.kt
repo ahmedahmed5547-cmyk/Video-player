@@ -142,6 +142,7 @@ object PlaybackStore {
     private const val KEY_DEFAULT_PROMPT_DONT_ASK = "vexo_default_prompt_dont_ask_v1"
     private const val KEY_DEFAULT_PROMPT_LAST_SHOWN_MS = "vexo_default_prompt_last_shown_ms_v1"
     private const val KEY_MEDIA_VIEW_MODE = "vexo_media_view_mode_v1"
+    private const val KEY_SHORTS_MUTED = "vexo_shorts_muted_v1"
     const val VIEW_MODE_FOLDER = 0
     const val VIEW_MODE_TREE = 1
     const val VIEW_MODE_LIBRARY = 2
@@ -1211,6 +1212,13 @@ object PlaybackStore {
             .putBoolean(KEY_FIELD_DATE, cfg.showDate)
             .putBoolean(KEY_FIELD_PROGRESS, cfg.showProgress)
             .apply()
+    }
+
+    fun isShortsMuted(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_SHORTS_MUTED, false)
+
+    fun setShortsMuted(context: Context, muted: Boolean) {
+        prefs(context).edit().putBoolean(KEY_SHORTS_MUTED, muted).apply()
     }
 
     fun formatTime(timeMs: Long): String {

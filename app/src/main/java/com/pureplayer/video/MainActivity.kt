@@ -182,7 +182,7 @@ class MainActivity : AppCompatActivity() {
                 binding.audioTabContainer.visibility = View.GONE
                 binding.shortsTabContainer.visibility = View.GONE
                 isShortsTabActive = false
-                shortsFeedController?.pauseAndDetachSurface()
+                shortsFeedController?.leaveShortsTab()
                 binding.iptvRecyclerView.visibility = View.GONE
                 binding.swipeRefresh.visibility = View.VISIBLE
                 updateBottomTabsVisualState()
@@ -354,6 +354,7 @@ class MainActivity : AppCompatActivity() {
             currentMainTab = if (savedTab == 1) 0 else savedTab
             isInVaultTab = false
             isInIptvTab = (currentMainTab == 2)
+            isShortsTabActive = savedInstanceState.getBoolean("STATE_IS_SHORTS_TAB", false)
             isShowingFolderVideos = savedInstanceState.getBoolean("STATE_SHOWING_FOLDER", false)
             currentOpenedFolderName = savedInstanceState.getString("STATE_OPENED_FOLDER_NAME", null)
             iptvNavLevel = savedInstanceState.getInt("STATE_IPTV_LEVEL", 0)
@@ -409,6 +410,7 @@ class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putInt("STATE_MAIN_TAB", currentMainTab)
+        outState.putBoolean("STATE_IS_SHORTS_TAB", isShortsTabActive)
         outState.putBoolean("STATE_SHOWING_FOLDER", isShowingFolderVideos)
         outState.putString("STATE_OPENED_FOLDER_NAME", currentOpenedFolder?.name ?: currentOpenedFolderName)
         outState.putInt("STATE_IPTV_LEVEL", iptvNavLevel)
@@ -421,7 +423,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        shortsFeedController?.pauseAndDetachSurface()
+        shortsFeedController?.pauseForLifecycle()
         if (isVaultSessionUnlocked) {
             val now = android.os.SystemClock.elapsedRealtime()
             if (vaultLeftTimestampMs == 0L) vaultLeftTimestampMs = now
@@ -515,7 +517,8 @@ class MainActivity : AppCompatActivity() {
         restoreSystemBarsAndInsets()
         applyUserTheme()
         DefaultPlayerPromptManager.maybeShowPrompt(this)
-        shortsFeedController?.resumeIfVisible()
+        shortsFeedController?.onHostResumed(allDiscoveredVideos)
+        updateResumeLastFab()
         if (currentMainTab == 2) {
             // In IPTV tab: refresh visible items without full list reset
             if (adapter.itemCount > 0) adapter.notifyItemRangeChanged(0, adapter.itemCount)
@@ -677,6 +680,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     internal fun updateResumeLastFab() {
+        // Navigation-state guard: NEVER show Resume Last Video button over Shorts (or Audio/IPTV/Vault)
+        if (isShortsTabActive || isAudioTabHighlighted || isInVaultTab || currentMainTab == 2) {
+            if (binding.fabResumeLast.visibility == View.VISIBLE) {
+                binding.fabResumeLast.animate().cancel()
+                binding.fabResumeLast.animate()
+                    .alpha(0f)
+                    .setDuration(160L)
+                    .withEndAction { binding.fabResumeLast.visibility = View.GONE }
+                    .start()
+            } else {
+                binding.fabResumeLast.visibility = View.GONE
+            }
+            return
+        }
         val lastVideo = PlaybackStore.getLastPlayedVideo(this)
         if (lastVideo != null) {
             val (uri, title, positionMs) = lastVideo
@@ -1773,7 +1790,7 @@ class MainActivity : AppCompatActivity() {
             val wasInShorts = isShortsTabActive
             if (wasInShorts) {
                 isShortsTabActive = false
-                shortsFeedController?.pauseAndDetachSurface()
+                shortsFeedController?.leaveShortsTab()
                 binding.shortsTabContainer.visibility = View.GONE
             }
             if (currentMainTab != 0 || isAudioTabHighlighted || wasInShorts) {
@@ -1814,7 +1831,7 @@ class MainActivity : AppCompatActivity() {
             val wasInShorts = isShortsTabActive
             if (wasInShorts) {
                 isShortsTabActive = false
-                shortsFeedController?.pauseAndDetachSurface()
+                shortsFeedController?.leaveShortsTab()
                 binding.shortsTabContainer.visibility = View.GONE
             }
             if (currentMainTab == 1 && isVaultSessionUnlocked && !isAudioTabHighlighted && !wasInShorts) {
@@ -1897,7 +1914,7 @@ class MainActivity : AppCompatActivity() {
             val wasInShorts = isShortsTabActive
             if (wasInShorts) {
                 isShortsTabActive = false
-                shortsFeedController?.pauseAndDetachSurface()
+                shortsFeedController?.leaveShortsTab()
                 binding.shortsTabContainer.visibility = View.GONE
             }
             if (currentMainTab != 2 || isAudioTabHighlighted) {
@@ -1967,7 +1984,7 @@ class MainActivity : AppCompatActivity() {
             binding.swipeRefresh.visibility = View.GONE
             binding.iptvRecyclerView.visibility = View.GONE
             binding.audioTabContainer.visibility = View.GONE
-            binding.fabResumeLast.visibility = View.GONE
+            updateResumeLastFab()
             binding.shortsTabContainer.alpha = 0f
             binding.shortsTabContainer.visibility = View.VISIBLE
             binding.shortsTabContainer.animate().alpha(1f).setDuration(200L).start()
@@ -1992,7 +2009,7 @@ class MainActivity : AppCompatActivity() {
                 setSubtleIptvSyncIndicatorVisible(false)
             }
             isShortsTabActive = false
-            shortsFeedController?.pauseAndDetachSurface()
+            shortsFeedController?.leaveShortsTab()
             binding.shortsTabContainer.visibility = View.GONE
             isAudioTabHighlighted = true
             binding.iptvHeaderBar.visibility = View.GONE

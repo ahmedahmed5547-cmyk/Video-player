@@ -1,3 +1,7 @@
+## v90.31 (2026-11-28)
+- **Bug Fix — Shorts Full-Screen → Back Audio Loss**: Separated `leaveShortsTab()` from `pauseForLifecycle()` so returning from `PlayerActivity` triggers `onHostResumed()`, cleanly recreating the pooled `ExoPlayer` with `handleAudioFocus = true`, explicit audio-track enablement, persisted mute state (`vexo_shorts_muted_v1`), and exact resume position from `PlaybackStore`.
+- **Bug Fix — Resume Last Video Button Over Shorts**: Drove `fabResumeLast` visibility directly from navigation state (`isShortsTabActive`, `isAudioTabHighlighted`, `isInVaultTab`, `currentMainTab`) with smooth 160ms fade-out in Shorts and `STATE_IS_SHORTS_TAB` preservation across rotation/recreation.
+
 ## v90.30 (2026-11-28)
 - **Bug Fix — Shorts → Videos Tab Freeze & Missing Folders**: Fixed the state bug in `MainActivity` where clearing `isShortsTabActive` before checking `currentMainTab != 0` left `swipeRefresh` stuck at `View.GONE` when returning from Shorts to Videos; added Back-press exit from Shorts and proper `pauseAndDetachSurface()` on tab switch / `onPause` / `onStop`.
 - **UI — Minimal Instagram-Style Shorts Action Icons**: Replaced emoji buttons in `ShortsFeedController` with thin-stroke (`1.8dp`) outline vector drawables (`ic_shorts_share`, `ic_shorts_volume_on`, `ic_shorts_volume_off`, `ic_shorts_fullscreen`) inside subtle 40% black circular badges with 20dp spacing, press scale-down, and mute crossfade.
