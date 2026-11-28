@@ -366,7 +366,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
     )
 }
 
-internal fun MainActivity.showSettingsPlaybackEnginePage() {
+internal fun MainActivity.showSettingsPlaybackEnginePage(animateEntrance: Boolean = true) {
     val decoderSub = getDecoderModeDisplayName(PlaybackStore.getDecoderModeIndex(this))
     val orientIdx = PlaybackStore.getDefaultOrientationIndex(this)
     val orientSub = when (orientIdx) {
@@ -376,7 +376,7 @@ internal fun MainActivity.showSettingsPlaybackEnginePage() {
         else -> getString(R.string.orientation_landscape)
     }
     val autoPipOn = PlaybackStore.isAutoPipEnabled(this)
-    val autoPipSub = if (autoPipOn) "✅ " + getString(R.string.setting_auto_pip_on) else "🚫 " + getString(R.string.setting_auto_pip_off)
+    val autoPipSub = if (autoPipOn) getString(R.string.setting_auto_pip_on) else getString(R.string.setting_auto_pip_off)
     val resumeSub = when (PlaybackStore.getResumeAskMode(this)) {
         1 -> getString(R.string.resume_mode_always_resume)
         2 -> getString(R.string.resume_mode_always_restart)
@@ -410,12 +410,10 @@ internal fun MainActivity.showSettingsPlaybackEnginePage() {
             subtitle = autoPipSub,
             isAccentHighlighted = autoPipOn,
             sectionHeader = getString(R.string.settings_subsec_pip_and_resume),
-            onClick = {
-                val nextState = !autoPipOn
-                PlaybackStore.setAutoPipEnabled(this, nextState)
-                val msg = if (nextState) getString(R.string.setting_auto_pip_on) else getString(R.string.setting_auto_pip_off)
-                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-                showSettingsPlaybackEnginePage()
+            toggleChecked = autoPipOn,
+            onToggleChanged = { checked ->
+                PlaybackStore.setAutoPipEnabled(this, checked)
+                showSettingsPlaybackEnginePage(animateEntrance = false)
             }
         ),
         PremiumMenuItem(
@@ -433,11 +431,12 @@ internal fun MainActivity.showSettingsPlaybackEnginePage() {
         headerIcon = "🎬",
         title = getString(R.string.settings_hub_playback_engine_title),
         subtitle = "$decoderSub • $orientSub",
-        items = items
+        items = items,
+        animateEntrance = animateEntrance
     )
 }
 
-internal fun MainActivity.showSettingsPrivacyFoldersPage() {
+internal fun MainActivity.showSettingsPrivacyFoldersPage(animateEntrance: Boolean = true) {
     val hasPin = PlaybackStore.hasPrivacyPin(this)
     val lockedCount = PlaybackStore.getLockedFolders(this).size
     val privacySub = if (hasPin) {
@@ -488,10 +487,11 @@ internal fun MainActivity.showSettingsPrivacyFoldersPage() {
             title = getString(R.string.setting_allow_untrusted_ssl_title),
             subtitle = if (PlaybackStore.isAllowUntrustedSsl(this)) getString(R.string.setting_allow_untrusted_ssl_on) else getString(R.string.setting_allow_untrusted_ssl_off),
             isAccentHighlighted = PlaybackStore.isAllowUntrustedSsl(this),
-            onClick = {
-                val nextVal = !PlaybackStore.isAllowUntrustedSsl(this)
-                PlaybackStore.setAllowUntrustedSsl(this, nextVal)
-                showSettingsPrivacyFoldersPage()
+            toggleChecked = PlaybackStore.isAllowUntrustedSsl(this),
+            onToggleChanged = { checked ->
+                PlaybackStore.setAllowUntrustedSsl(this, checked)
+                XtreamCodesClient.allowUntrustedSslFallback = checked
+                showSettingsPrivacyFoldersPage(animateEntrance = false)
             }
         )
     )
@@ -500,7 +500,8 @@ internal fun MainActivity.showSettingsPrivacyFoldersPage() {
         headerIcon = "🛡️",
         title = getString(R.string.settings_hub_privacy_title),
         subtitle = privacySub,
-        items = items
+        items = items,
+        animateEntrance = animateEntrance
     )
 }
 
@@ -2166,7 +2167,7 @@ internal fun androidx.appcompat.app.AppCompatActivity.showVexoAudioEffectsStudio
 }
 
 
-internal fun MainActivity.showBatterySaverSettingsDialog() {
+internal fun MainActivity.showBatterySaverSettingsDialog(animateEntrance: Boolean = true) {
     val manualOn = BatteryOptimizationManager.isManualBatterySaverEnabled(this)
     val autoOn = BatteryOptimizationManager.isAutoBatterySaverEnabled(this)
     val threshold = BatteryOptimizationManager.getAutoThresholdPercent(this)
@@ -2179,9 +2180,10 @@ internal fun MainActivity.showBatterySaverSettingsDialog() {
             title = getString(R.string.battery_saver_manual_title),
             subtitle = if (manualOn) getString(R.string.battery_saver_manual_on_sub) else getString(R.string.battery_saver_manual_off_sub),
             isAccentHighlighted = manualOn,
-            onClick = {
-                BatteryOptimizationManager.setManualBatterySaverEnabled(this, !manualOn)
-                showBatterySaverSettingsDialog()
+            toggleChecked = manualOn,
+            onToggleChanged = { checked ->
+                BatteryOptimizationManager.setManualBatterySaverEnabled(this, checked)
+                showBatterySaverSettingsDialog(animateEntrance = false)
             }
         ),
         PremiumMenuItem(
@@ -2189,9 +2191,10 @@ internal fun MainActivity.showBatterySaverSettingsDialog() {
             title = getString(R.string.battery_saver_auto_title),
             subtitle = if (autoOn) getString(R.string.battery_saver_auto_on_sub, threshold) else getString(R.string.battery_saver_auto_off_sub),
             isAccentHighlighted = autoOn,
-            onClick = {
-                BatteryOptimizationManager.setAutoBatterySaverEnabled(this, !autoOn)
-                showBatterySaverSettingsDialog()
+            toggleChecked = autoOn,
+            onToggleChanged = { checked ->
+                BatteryOptimizationManager.setAutoBatterySaverEnabled(this, checked)
+                showBatterySaverSettingsDialog(animateEntrance = false)
             }
         ),
         PremiumMenuItem(
@@ -2215,9 +2218,10 @@ internal fun MainActivity.showBatterySaverSettingsDialog() {
             title = getString(R.string.battery_indicator_title),
             subtitle = if (showIndicator) getString(R.string.enabled_label) else getString(R.string.disabled_label),
             isAccentHighlighted = showIndicator,
-            onClick = {
-                BatteryOptimizationManager.setPlayerBatteryIndicatorEnabled(this, !showIndicator)
-                showBatterySaverSettingsDialog()
+            toggleChecked = showIndicator,
+            onToggleChanged = { checked ->
+                BatteryOptimizationManager.setPlayerBatteryIndicatorEnabled(this, checked)
+                showBatterySaverSettingsDialog(animateEntrance = false)
             }
         ),
         PremiumMenuItem(
@@ -2225,9 +2229,10 @@ internal fun MainActivity.showBatterySaverSettingsDialog() {
             title = getString(R.string.low_battery_alerts_title),
             subtitle = if (lowAlerts) getString(R.string.low_battery_alerts_sub) else getString(R.string.disabled_label),
             isAccentHighlighted = lowAlerts,
-            onClick = {
-                BatteryOptimizationManager.setLowBatteryAlertsEnabled(this, !lowAlerts)
-                showBatterySaverSettingsDialog()
+            toggleChecked = lowAlerts,
+            onToggleChanged = { checked ->
+                BatteryOptimizationManager.setLowBatteryAlertsEnabled(this, checked)
+                showBatterySaverSettingsDialog(animateEntrance = false)
             }
         )
     )
@@ -2237,7 +2242,8 @@ internal fun MainActivity.showBatterySaverSettingsDialog() {
         title = getString(R.string.battery_saver_title),
         subtitle = if (BatteryOptimizationManager.isBatterySaverActive(this)) getString(R.string.battery_saver_status_on) else getString(R.string.battery_saver_status_off),
         items = items,
-        showHeaderVersionBadge = false
+        showHeaderVersionBadge = false,
+        animateEntrance = animateEntrance
     )
 }
 

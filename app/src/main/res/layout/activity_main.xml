@@ -520,7 +520,7 @@
         app:layout_constraintBottom_toTopOf="@id/bottomNavBar"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/toolbarCard" />
+        app:layout_constraintTop_toBottomOf="@id/topBar" />
 
     <!-- In-Place Audio Library Tab (hosted above persistent bottomNavBar so bottom bar never hides or flickers) -->
     <LinearLayout

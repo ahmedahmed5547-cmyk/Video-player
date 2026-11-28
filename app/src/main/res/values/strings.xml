@@ -399,9 +399,9 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="decoder_sw_title">SW Decoder (Software CPU Engine)</string>
     <string name="decoder_sw_sub">Multi-core CPU decoding — fixes unsupported codecs or frame glitches</string>
     <string name="decoder_switched_toast">⚡ Decoder switched to: %1$s</string>
-    <string name="setting_auto_pip_title">Auto Floating Window on Exit (YouTube-Style PiP)</string>
-    <string name="setting_auto_pip_on">Enabled — Automatically enters floating window when leaving app</string>
-    <string name="setting_auto_pip_off">Disabled — Video pauses normally when leaving app</string>
+    <string name="setting_auto_pip_title">Auto Floating</string>
+    <string name="setting_auto_pip_on">Automatically enters floating window when leaving app</string>
+    <string name="setting_auto_pip_off">Video pauses normally when leaving app</string>
     <string name="lang_french">French (Français)</string>
     <string name="lang_spanish">Spanish (Español)</string>
     <string name="lang_german">German (Deutsch)</string>
@@ -435,8 +435,8 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="setting_rescan_done_toast">✅ Video library refreshed</string>
     <string name="style_text_opacity_label">Text Opacity: %1$d%%</string>
     <string name="setting_allow_untrusted_ssl_title">Allow Untrusted SSL Certificates (IPTV Fallback)</string>
-    <string name="setting_allow_untrusted_ssl_on">Enabled — Retries self-signed IPTV HTTPS servers after SSL failure</string>
-    <string name="setting_allow_untrusted_ssl_off">Disabled (Recommended) — Strict standard SSL certificate verification</string>
+    <string name="setting_allow_untrusted_ssl_on">Retries self-signed IPTV HTTPS servers after SSL failure</string>
+    <string name="setting_allow_untrusted_ssl_off">Strict standard SSL verification (Recommended)</string>
     <string name="iptv_err_keystore_encryption">⚠️ Hardware KeyStore encryption failed; password was not saved and existing credentials were preserved.</string>
     <string name="privacy_pin_locked_wait_toast">⏳ Too many failed attempts. Please wait %1$d seconds before trying again.</string>
     <string name="iptv_err_reenter_password">🔑 Please re-enter the password to refresh this source.</string>

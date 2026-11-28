@@ -399,9 +399,9 @@
     <string name="decoder_sw_title">مشفّر SW (المعالج البرمجي CPU)</string>
     <string name="decoder_sw_sub">فك التشفير برمجياً لحل مشاكل الصيغ النادرة أو تقطيع بعض الملفات</string>
     <string name="decoder_switched_toast">⚡ تم التحويل إلى مشفّر: %1$s</string>
-    <string name="setting_auto_pip_title">النافذة العائمة التلقائية عند الخروج (مثل يوتيوب)</string>
-    <string name="setting_auto_pip_on">مفعّل — يتحول الفيديو لنافذة عائمة تلقائياً عند الخروج من التطبيق</string>
-    <string name="setting_auto_pip_off">معطّل — يتوقف الفيديو مؤقتاً عند الخروج من التطبيق</string>
+    <string name="setting_auto_pip_title">النافذة العائمة التلقائية</string>
+    <string name="setting_auto_pip_on">يتحول الفيديو لنافذة عائمة تلقائياً عند الخروج من التطبيق</string>
+    <string name="setting_auto_pip_off">يتوقف الفيديو مؤقتاً عند الخروج من التطبيق</string>
     <string name="lang_french">الفرنسية (Français)</string>
     <string name="lang_spanish">الإسبانية (Español)</string>
     <string name="lang_german">الألمانية (Deutsch)</string>
@@ -435,8 +435,8 @@
     <string name="setting_rescan_done_toast">✅ تم تحديث فهرس الفيديوهات بنجاح</string>
     <string name="style_text_opacity_label">شفافية نص الترجمة (Text Opacity): %1$d%%</string>
     <string name="setting_allow_untrusted_ssl_title">السماح بشهادات SSL غير موثوقة (لسيرفرات IPTV)</string>
-    <string name="setting_allow_untrusted_ssl_on">مفعّل — يعيد المحاولة مع شهادات IPTV الذاتية عند فشل SSL القياسي</string>
-    <string name="setting_allow_untrusted_ssl_off">معطّل (مستحسن) — التحقق القياسي الآمن من شهادات SSL</string>
+    <string name="setting_allow_untrusted_ssl_on">يعيد المحاولة مع شهادات IPTV الذاتية عند فشل SSL القياسي</string>
+    <string name="setting_allow_untrusted_ssl_off">التحقق القياسي الآمن من شهادات SSL (مستحسن)</string>
     <string name="iptv_err_keystore_encryption">⚠️ فشل تشفير كلمة المرور عبر Android KeyStore؛ لم يتم حفظ كلمة المرور وتم الحفاظ على بيانات الاعتماد السابقة.</string>
     <string name="privacy_pin_locked_wait_toast">⏳ محاولات خاطئة متكررة. يرجى الانتظار %1$d ثانية قبل المحاولة مجددًا.</string>
     <string name="iptv_err_reenter_password">🔑 أعد إدخال كلمة المرور لتحديث هذا المصدر.</string>
