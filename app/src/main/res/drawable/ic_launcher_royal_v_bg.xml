@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Deep AMOLED Obsidian Faceted Background (Royal V Gold) -->
+    <path android:fillColor="#0B0F17" android:pathData="M0,0 H108 V108 H0 Z" />
+    <path android:fillColor="#111723" android:pathData="M0,0 L54,0 L30,36 Z" />
+    <path android:fillColor="#151C2B" android:pathData="M54,0 L108,0 L78,34 Z" />
+    <path android:fillColor="#0F141F" android:pathData="M54,0 L78,34 L30,36 Z" />
+    <path android:fillColor="#0D121C" android:pathData="M0,0 L30,36 L0,72 Z" />
+    <path android:fillColor="#131926" android:pathData="M108,0 L108,68 L78,34 Z" />
+    <path android:fillColor="#121824" android:pathData="M30,36 L78,34 L54,74 Z" />
+    <path android:fillColor="#090C13" android:pathData="M0,72 L30,36 L32,108 L0,108 Z" />
+    <path android:fillColor="#0F1521" android:pathData="M30,36 L54,74 L32,108 Z" />
+    <path android:fillColor="#111723" android:pathData="M78,34 L108,68 L108,108 L76,108 Z" />
+    <path android:fillColor="#0D121D" android:pathData="M78,34 L76,108 L54,74 Z" />
+    <path android:fillColor="#0B1019" android:pathData="M32,108 L54,74 L76,108 Z" />
+</vector>

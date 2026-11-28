@@ -15,6 +15,8 @@ object AppIconManager {
     private const val TAG = "AppIconManager"
 
     const val STYLE_DEFAULT = "default"
+    const val STYLE_CRYSTAL = "crystal_prism"
+    const val STYLE_ROYAL_V = "royal_v_gold"
     const val STYLE_MATERIAL_YOU = "material_you"
     const val STYLE_GLASS_LIGHT = "glass_light"
     const val STYLE_GLASS_DARK = "glass_dark"
@@ -36,6 +38,20 @@ object AppIconManager {
             mipmapResId = R.mipmap.ic_launcher,
             titleResId = R.string.icon_style_default,
             subtitleResId = R.string.icon_style_default_sub
+        ),
+        AppIconOption(
+            id = STYLE_CRYSTAL,
+            aliasClassName = "com.pureplayer.video.LauncherAliasCrystal",
+            mipmapResId = R.mipmap.ic_launcher_crystal,
+            titleResId = R.string.icon_style_crystal,
+            subtitleResId = R.string.icon_style_crystal_sub
+        ),
+        AppIconOption(
+            id = STYLE_ROYAL_V,
+            aliasClassName = "com.pureplayer.video.LauncherAliasRoyalV",
+            mipmapResId = R.mipmap.ic_launcher_royal_v,
+            titleResId = R.string.icon_style_royal_v,
+            subtitleResId = R.string.icon_style_royal_v_sub
         ),
         AppIconOption(
             id = STYLE_MATERIAL_YOU,
@@ -76,6 +92,8 @@ object AppIconManager {
 
     val allAliasClassNames: List<String> = listOf(
         "com.pureplayer.video.LauncherAliasDefault",
+        "com.pureplayer.video.LauncherAliasCrystal",
+        "com.pureplayer.video.LauncherAliasRoyalV",
         "com.pureplayer.video.LauncherAliasMaterialYou",
         "com.pureplayer.video.LauncherAliasGlassLight",
         "com.pureplayer.video.LauncherAliasGlassDark",
@@ -85,6 +103,8 @@ object AppIconManager {
 
     private val styleToAlias: Map<String, String> = mapOf(
         STYLE_DEFAULT to "com.pureplayer.video.LauncherAliasDefault",
+        STYLE_CRYSTAL to "com.pureplayer.video.LauncherAliasCrystal",
+        STYLE_ROYAL_V to "com.pureplayer.video.LauncherAliasRoyalV",
         STYLE_MATERIAL_YOU to "com.pureplayer.video.LauncherAliasMaterialYou",
         STYLE_GLASS_LIGHT to "com.pureplayer.video.LauncherAliasGlassLight",
         STYLE_GLASS_DARK to "com.pureplayer.video.LauncherAliasGlassDark",

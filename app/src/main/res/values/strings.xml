@@ -837,4 +837,70 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="changelog_v90_28_title">v%1$s — Android Auto Switches, Theme Consistency &amp; Hidden Files Default OFF</string>
     <string name="changelog_v90_28_desc">• Replaced Android Auto toggle rows with instant, theme-aware Switch controls matching the top menu\'s Hidden folders switch, with TalkBack &amp; RTL support and disabled dependent options when Android Auto is off.
 • Changed Hidden folders / Show hidden files to default to OFF everywhere (fresh installs and upgrades via one-time migration) and filtered hidden paths across videos, search, Continue Watching, audio library, and Android Auto with immediate refresh.</string>
+    <!-- v90.29 Aspect Persistence, Full Multi-Language, Low-Poly Icon, Default Player Prompt & Translate Picker -->
+    <string name="default_player_prompt_title">Make V Player your default video player</string>
+    <string name="default_player_prompt_message">Open all your videos directly in V Player with one tap.\n\nIn system settings, open Video player (or Opening links) and select V Player.</string>
+    <string name="default_player_btn_set">Set as Default</string>
+    <string name="default_player_btn_later">Later</string>
+    <string name="default_player_btn_dont_ask">Don\'t ask again</string>
+    <string name="default_player_steps_toast">Select Video player / Opening links and choose V Player</string>
+    <string name="sub_tr_picker_title">Translate subtitle to</string>
+    <string name="sub_tr_picker_subtitle">Choose target language (app language suggested)</string>
+    <string name="sub_tr_picker_suggested_sub">Suggested (your language)</string>
+    <string name="sub_tr_already_same_lang">Subtitle is already in %1$s — no translation needed</string>
+    <string name="sub_tr_from_result_sub">Download (%1$s) &amp; translate: %2$s</string>
+    <string name="sub_results_count_fmt">%1$d Subtitles Found</string>
+    <string name="changelog_v90_29_title">v%1$s — Persistent Aspect Ratio, 15 Languages, Low-Poly Icon &amp; Smart Prompts</string>
+    <string name="changelog_v90_29_desc">• Fixed Aspect Ratio / Resize Mode persistence: your chosen mode (Fit, Fill, 16:9, 4:3, Original) is now saved permanently and re-applied automatically after LibVLC Vout, rotation, resume, and video switches.
+• Added full translations for all 15 supported languages (including RTL support for Arabic &amp; Urdu) with immediate locale switching and API &lt; 33 persistence.
+• Upgraded default launcher icon to an original 3D Low-Poly Cyber Blue faceted design (Adaptive foreground/background, Android 13+ Monochrome, all mipmap sizes, and 512×512 Play Store icon).
+• Added a non-intrusive, theme-aware "Make V Player your default video player" prompt after natural usage with Set as Default, Later, and Don\'t ask again actions.
+• Enhanced "Translate to My language" in subtitle search and menu with a target language picker, same-language detection, and zero APK size bloat.</string>
+    <string name="icon_style_crystal">Crystal Prism</string>
+    <string name="icon_style_crystal_sub">Faceted aqua &amp; violet crystal play icon</string>
+    <string name="icon_style_royal_v">Royal V Gold</string>
+    <string name="icon_style_royal_v_sub">Luxury gold V &amp; cyber-blue prism icon</string>
+    <!-- Calm Sort & View Options Sheet -->
+    <string name="sort_view_options_title">Sort &amp; View Options</string>
+    <string name="sort_chip_title">Title</string>
+    <string name="sort_chip_duration">Duration</string>
+    <string name="sort_chip_date">Date</string>
+    <string name="sort_chip_size">Size</string>
+    <string name="sort_dir_newest">Newest</string>
+    <string name="sort_dir_oldest">Oldest</string>
+    <string name="sort_dir_az">A–Z</string>
+    <string name="sort_dir_za">Z–A</string>
+    <string name="sort_dir_largest">Largest</string>
+    <string name="sort_dir_smallest">Smallest</string>
+    <string name="sort_dir_longest">Longest</string>
+    <string name="sort_dir_shortest">Shortest</string>
+    <string name="layout_chip_list">List</string>
+    <string name="layout_chip_grid">Grid</string>
+    <string name="sort_section_filters">Filters</string>
+    <string name="sort_section_view_mode">View Mode</string>
+    <string name="view_mode_folder">Folder</string>
+    <string name="view_mode_tree">Tree</string>
+    <string name="view_mode_library">Library</string>
+    <string name="filter_show_nomedia_folders">Show .nomedia / Hidden Folders</string>
+    <string name="sort_section_fields">Fields</string>
+    <string name="field_thumbnails">Video Thumbnails</string>
+    <string name="field_full_name">Full Name</string>
+    <string name="field_file_ext">File Extension</string>
+    <string name="field_path">Path</string>
+    <string name="field_total_videos">Total Videos</string>
+    <string name="field_total_duration">Total Duration</string>
+    <string name="field_folder_size">Folder Size</string>
+    <string name="field_file_size">File Size</string>
+    <string name="field_resolution">Resolution</string>
+    <string name="field_date">Date</string>
+    <string name="field_progress_bar">Progress Bar</string>
+    <string name="decoder_auto_short">AUTO</string>
+    <string name="decoder_auto_title">Auto (Smart per video)</string>
+    <string name="decoder_auto_sub">Automatically selects HW+, HW, or SW based on each video (Default)</string>
+    <string name="tab_shorts">Shorts</string>
+    <string name="shorts_empty_msg">No short videos found on your device</string>
+    <string name="shorts_share_btn">Share Short</string>
+    <string name="shorts_share_failed">Unable to share this video</string>
+    <string name="shorts_mute_btn">Mute / Unmute</string>
+    <string name="shorts_open_full_btn">Open in full player</string>
 </resources>

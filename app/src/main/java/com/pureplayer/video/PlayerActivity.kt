@@ -371,8 +371,9 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         binding.btnOrientation.text = getOrientationLabel(playerOrientationMode)
         currentDecoderIndex = PlaybackStore.getDecoderModeIndex(this)
         binding.btnDecoder.text = getDecoderShortBadge(currentDecoderIndex)
-        currentScaleIndex = 0
+        currentScaleIndex = PlaybackStore.getPlayerAspectModeIndex(this, aspectModes.lastIndex)
         binding.btnAspectRatio.contentDescription = getScaleLabel(currentScaleIndex)
+        DefaultPlayerPromptManager.recordVideoPlayed(this)
 
         extractIntentData(intent)
         if (savedInstanceState != null) {
@@ -454,6 +455,11 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
         mediaPlayer.setEventListener { event ->
             when (event.type) {
+                MediaPlayer.Event.Vout -> {
+                    if (event.voutCount > 0) {
+                        binding.videoSurfaceFrame.post { changeSurfaceLayout() }
+                    }
+                }
                 MediaPlayer.Event.Playing -> {
                     binding.videoSurfaceFrame.post { changeSurfaceLayout() }
                     binding.playerLoadingBar.visibility = View.GONE
@@ -1894,7 +1900,13 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                 showToastIndicator(getString(R.string.resume_from_format, formatTime(pendingStartPositionMs)))
             }
 
-            when (currentDecoderIndex) {
+            val effectiveDecoder = HiddenMediaAndPlaylistHelper.resolveEffectiveDecoderMode(
+                configuredMode = currentDecoderIndex,
+                uriString = uri.toString(),
+                title = currentVideoTitle,
+                isStreamOrIptv = isStreamOrIptv
+            )
+            when (effectiveDecoder) {
                 0 -> {
                     // HW+ (Hardware Accelerated Plus)
                     media.setHWDecoderEnabled(true, true)
@@ -2621,6 +2633,8 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
         binding.btnAspectRatio.setOnClickListener {
             currentScaleIndex = (currentScaleIndex + 1) % aspectModes.size
+            PlaybackStore.setPlayerAspectModeIndex(this, currentScaleIndex)
+            binding.btnAspectRatio.contentDescription = getScaleLabel(currentScaleIndex)
             changeSurfaceLayout()
             showToastIndicator(getScaleLabel(currentScaleIndex))
             scheduleHideControls()
@@ -3097,7 +3111,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                 isAccentHighlighted = true,
                 onClick = { runAutomaticMultiSourceSubtitleSearch(customQuery = null) }
             ),
-            // 2. Translate subtitle to my language (right after Auto search)
+            // 2. Translate subtitle to my language (opens language picker with app/device language suggested)
             PremiumMenuItem(
                 iconEmoji = "✨",
                 title = getString(R.string.sub_menu_translate_to_my_lang),
@@ -3110,12 +3124,10 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
                 onClick = {
                     val srcCues = originalSubtitleCues.ifEmpty { externalSubtitleCues }
                     if (srcCues.isNotEmpty()) {
-                        startSubtitleAutoTranslation(
+                        showTranslateTargetLanguagePicker(
                             sourceFile = currentSubtitleSourceFile,
                             sourceCues = srcCues,
-                            sourceLang = currentSubtitleSourceLang.ifBlank { "auto" },
-                            targetLang = targetLang,
-                            forceRetranslate = lastTranslatedTexts.isNotEmpty()
+                            sourceLang = currentSubtitleSourceLang.ifBlank { "auto" }
                         )
                     } else {
                         runAutomaticMultiSourceSubtitleSearch(customQuery = null)
@@ -3785,42 +3797,132 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         dialog.show()
     }
 
-    private fun showManualSubtitleResultsDialog(results: List<SubtitleResultItem>) {
-        if (results.size <= 1) return
-        val items = results.take(12).mapIndexed { idx, item ->
-            val badge = when (item.matchQuality) {
-                MatchQuality.HASH_MATCH -> "★ HASH"
-                MatchQuality.EXACT_TITLE -> "✓ EXACT"
-                MatchQuality.FUZZY_TITLE -> "~ MATCH"
-            }
+    private fun resolveSuggestedTranslateTargetLang(): String {
+        val appTag = PlaybackStore.getAppLanguageTag(this).substringBefore("-").lowercase(Locale.ROOT)
+        if (appTag.isNotBlank()) return appTag
+        val stored = PlaybackStore.getAutoTranslateTargetLang(this).lowercase(Locale.ROOT)
+        if (stored.isNotBlank()) return stored
+        return Locale.getDefault().language.lowercase(Locale.ROOT).ifBlank { "en" }
+    }
+
+    private fun showTranslateTargetLanguagePicker(
+        sourceFile: File?,
+        sourceCues: List<SubtitleCue>,
+        sourceLang: String
+    ) {
+        val suggestedLang = resolveSuggestedTranslateTargetLang()
+        val isArUi = Locale.getDefault().language.equals("ar", ignoreCase = true) ||
+            PlaybackStore.getAppLanguageTag(this).startsWith("ar", ignoreCase = true)
+        val langCodes = listOf("ar", "en", "fr", "es", "de", "tr", "ru", "pt", "it", "hi", "ur", "id", "zh", "ja", "ko")
+        val orderedCodes = (listOf(suggestedLang) + langCodes.filter { it != suggestedLang }).distinct()
+
+        val items = orderedCodes.map { code ->
+            val name = SubtitleAutoTranslator.getLanguageDisplayName(code, isArUi)
+            val isSuggested = code.equals(suggestedLang, ignoreCase = true)
             PremiumMenuItem(
-                iconEmoji = "💬",
-                title = "${idx + 1}. ${item.title}",
-                subtitle = "${item.languageCode.uppercase()} • ${item.providerName} • $badge",
-                isAccentHighlighted = (idx == 0),
+                iconEmoji = if (isSuggested) "⭐" else "🌐",
+                title = name,
+                subtitle = if (isSuggested) getString(R.string.sub_tr_picker_suggested_sub) else code.uppercase(Locale.ROOT),
+                isAccentHighlighted = isSuggested,
+                onClick = {
+                    val detectedSrc = if (sourceLang.isBlank() || sourceLang.equals("auto", ignoreCase = true)) {
+                        SubtitleAutoTranslator.detectSourceLanguage(sourceCues)
+                    } else {
+                        sourceLang.lowercase(Locale.ROOT)
+                    }
+                    if (detectedSrc.equals(code, ignoreCase = true)) {
+                        showToastIndicator(getString(R.string.sub_tr_already_same_lang, name))
+                        return@PremiumMenuItem
+                    }
+                    PlaybackStore.setAutoTranslateTargetLang(this@PlayerActivity, code)
+                    startSubtitleAutoTranslation(
+                        sourceFile = sourceFile,
+                        sourceCues = sourceCues,
+                        sourceLang = detectedSrc.ifBlank { "auto" },
+                        targetLang = code,
+                        forceRetranslate = true
+                    )
+                }
+            )
+        }
+
+        showPlayerPremiumMenu(
+            headerIcon = "✨",
+            title = getString(R.string.sub_tr_picker_title),
+            subtitle = getString(R.string.sub_tr_picker_subtitle),
+            items = items
+        )
+    }
+
+    private fun showManualSubtitleResultsDialog(results: List<SubtitleResultItem>) {
+        if (results.isEmpty()) return
+        val items = mutableListOf<PremiumMenuItem>()
+        val firstResult = results.first()
+        items.add(
+            PremiumMenuItem(
+                iconEmoji = "✨",
+                title = getString(R.string.sub_menu_translate_to_my_lang),
+                subtitle = getString(R.string.sub_tr_from_result_sub, firstResult.languageCode.uppercase(Locale.ROOT), firstResult.title),
+                isAccentHighlighted = true,
                 onClick = {
                     binding.playerLoadingBar.visibility = View.VISIBLE
                     lifecycleScope.launch {
-                        val pair = SubtitleSearchEngine.downloadAndCacheSubtitle(this@PlayerActivity, item)
+                        val pair = SubtitleSearchEngine.downloadAndCacheSubtitle(this@PlayerActivity, firstResult)
                         binding.playerLoadingBar.visibility = View.GONE
                         if (pair != null && pair.second.isNotEmpty()) {
-                            currentVideoUri?.let { vUri ->
-                                PlaybackStore.saveVideoSubtitleCachePath(this@PlayerActivity, vUri, pair.first.absolutePath)
-                            }
-                            applyLoadedSubtitleCues(pair.second)
-                            showToastIndicator(getString(R.string.sub_loaded_count_format, pair.second.size))
+                            currentSubtitleSourceFile = pair.first
+                            currentSubtitleSourceLang = firstResult.languageCode.lowercase(Locale.ROOT)
+                            showTranslateTargetLanguagePicker(
+                                sourceFile = pair.first,
+                                sourceCues = pair.second,
+                                sourceLang = firstResult.languageCode.lowercase(Locale.ROOT)
+                            )
                         } else {
                             showToastIndicator(getString(R.string.sub_err_corrupted))
                         }
                     }
                 }
             )
+        )
+
+        results.take(12).forEachIndexed { idx, item ->
+            val badge = when (item.matchQuality) {
+                MatchQuality.HASH_MATCH -> "★ HASH"
+                MatchQuality.EXACT_TITLE -> "✓ EXACT"
+                MatchQuality.FUZZY_TITLE -> "~ MATCH"
+            }
+            items.add(
+                PremiumMenuItem(
+                    iconEmoji = "💬",
+                    title = "${idx + 1}. ${item.title}",
+                    subtitle = "${item.languageCode.uppercase(Locale.ROOT)} • ${item.providerName} • $badge",
+                    isAccentHighlighted = (idx == 0),
+                    onClick = {
+                        binding.playerLoadingBar.visibility = View.VISIBLE
+                        lifecycleScope.launch {
+                            val pair = SubtitleSearchEngine.downloadAndCacheSubtitle(this@PlayerActivity, item)
+                            binding.playerLoadingBar.visibility = View.GONE
+                            if (pair != null && pair.second.isNotEmpty()) {
+                                currentSubtitleSourceFile = pair.first
+                                currentSubtitleSourceLang = item.languageCode.lowercase(Locale.ROOT)
+                                currentVideoUri?.let { vUri ->
+                                    PlaybackStore.saveVideoSubtitleCachePath(this@PlayerActivity, vUri, pair.first.absolutePath)
+                                }
+                                applyLoadedSubtitleCues(pair.second)
+                                showToastIndicator(getString(R.string.sub_loaded_count_format, pair.second.size))
+                            } else {
+                                showToastIndicator(getString(R.string.sub_err_corrupted))
+                            }
+                        }
+                    }
+                )
+            )
         }
 
         showPlayerPremiumMenu(
             headerIcon = "✅",
             title = getString(R.string.sub_results_dialog_title),
-            subtitle = "${results.size} Subtitles Found",
+            subtitle = getString(R.string.sub_results_count_fmt, results.size),
             items = items
         )
     }
@@ -4321,6 +4423,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
 
     private fun showDecoderModeSelectorDialog() {
         val options = listOf(
+            Triple(PlaybackStore.DECODER_MODE_AUTO, "🤖", Pair(getString(R.string.decoder_auto_title), getString(R.string.decoder_auto_sub))),
             Triple(0, "⚡", Pair(getString(R.string.decoder_hw_plus_title), getString(R.string.decoder_hw_plus_sub))),
             Triple(1, "🔧", Pair(getString(R.string.decoder_hw_title), getString(R.string.decoder_hw_sub))),
             Triple(2, "💻", Pair(getString(R.string.decoder_sw_title), getString(R.string.decoder_sw_sub)))

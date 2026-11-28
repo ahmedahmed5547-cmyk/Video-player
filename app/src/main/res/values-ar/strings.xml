@@ -837,4 +837,72 @@
     <string name="changelog_v90_28_title">الإصدار %1$s — مفاتيح Android Auto وافتراضي الملفات المخفية</string>
     <string name="changelog_v90_28_desc">• تحويل خيارات إعدادات Android Auto إلى مفاتيح Switch فورية متوافقة مع جميع السمات (الضوئية والداكنة والألوان العشرة) وبنفس تصميم مفتاح المجلدات المخفية مع دعم RTL وTalkBack وتعطيل الخيارات التابعة عند الإيقاف.
 • جعل «المجلدات المخفية» متوقفة افتراضياً في كل مكان (التثبيت الجديد والترقية بترحيل لمرة واحدة) ومنع ظهور الملفات المخفية في الفيديوهات والبحث والاستئناف ومكتبة الصوتيات وAndroid Auto مع التحديث الفوري بدون إعادة تشغيل.</string>
+    <!-- v90.29 ثبات أبعاد الشاشة، اللغات الـ 15، الأيقونة المضلعة، المشغل الافتراضي، وقائمة لغة الترجمة -->
+    <string name="default_player_prompt_title">اجعل V Player مشغّل الفيديو الافتراضي</string>
+    <string name="default_player_prompt_message">افتح جميع فيديوهاتك مباشرة في V Player بضغطة واحدة.
+
+من إعدادات النظام، اختر «مشغّل الفيديو» (أو «فتح الروابط») ثم حدّد V Player.</string>
+    <string name="default_player_btn_set">تعيين كافتراضي</string>
+    <string name="default_player_btn_later">لاحقًا</string>
+    <string name="default_player_btn_dont_ask">لا تسألني مرة أخرى</string>
+    <string name="default_player_steps_toast">اختر «مشغّل الفيديو» أو «فتح الروابط» ثم حدّد V Player</string>
+    <string name="sub_tr_picker_title">ترجمة الترجمة إلى</string>
+    <string name="sub_tr_picker_subtitle">اختر اللغة المطلوبة (لغة التطبيق مقترحة افتراضياً)</string>
+    <string name="sub_tr_picker_suggested_sub">مقترح (لغتك الحالية)</string>
+    <string name="sub_tr_already_same_lang">الترجمة بالفعل باللغة %1$s — لا حاجة للترجمة</string>
+    <string name="sub_tr_from_result_sub">تنزيل (%1$s) وترجمة: %2$s</string>
+    <string name="sub_results_count_fmt">تم العثور على %1$d ترجمة</string>
+    <string name="changelog_v90_29_title">الإصدار %1$s — ثبات أبعاد الشاشة، 15 لغة، الأيقونة المضلّعة، والمشغل الافتراضي</string>
+    <string name="changelog_v90_29_desc">• إصلاح ثبات أبعاد الشاشة (Fit / Fill / 16:9 / 4:3 / Original): يتم حفظ اختيارك دائماً وإعادة تطبيقه تلقائياً بعد حدث LibVLC Vout وعند التدوير وتبديل الفيديوهات والرجوع من الخلفية.
+• إضافة ملفات ترجمة لجميع اللغات الـ 15 في الإعدادات (مع دعم RTL للعربية والأردو) وتطبيق فوري وثابت بعد إعادة التشغيل.
+• تحديث أيقونة التطبيق إلى تصميم مضلّع ثلاثي الأبعاد (Low-Poly) مع Adaptive Icon وMonochrome لأندرويد 13+ وجميع مقاسات mipmap وأيقونة المتجر 512×512.
+• إضافة رسالة عصرية متوافقة مع جميع السمات لاقتراح تعيين V Player كمشغّل افتراضي بعد الاستخدام الطبيعي (تعيين كافتراضي / لاحقاً / لا تسألني مرة أخرى).
+• تحسين خيار «ترجمة إلى لغتي» في البحث وقائمة الترجمات بإضافة قائمة اختيار اللغة واكتشاف تطابق اللغة بدون زيادة حجم التطبيق.</string>
+    <string name="icon_style_crystal">الكريستال المتدرّج</string>
+    <string name="icon_style_crystal_sub">أوجه كريستالية سماوية وبنفسجية مضلّعة</string>
+    <string name="icon_style_royal_v">V الذهبي الفاخر</string>
+    <string name="icon_style_royal_v_sub">شعار V ذهبي ومثلث تشغيل أزرق داكن</string>
+    <!-- واجهة خيارات الفرز والعرض الهادئة -->
+    <string name="sort_view_options_title">خيارات الفرز والعرض</string>
+    <string name="sort_chip_title">الاسم</string>
+    <string name="sort_chip_duration">المدة</string>
+    <string name="sort_chip_date">التاريخ</string>
+    <string name="sort_chip_size">الحجم</string>
+    <string name="sort_dir_newest">الأحدث</string>
+    <string name="sort_dir_oldest">الأقدم</string>
+    <string name="sort_dir_az">أ–ي</string>
+    <string name="sort_dir_za">ي–أ</string>
+    <string name="sort_dir_largest">الأكبر</string>
+    <string name="sort_dir_smallest">الأصغر</string>
+    <string name="sort_dir_longest">الأطول</string>
+    <string name="sort_dir_shortest">الأقصر</string>
+    <string name="layout_chip_list">قائمة</string>
+    <string name="layout_chip_grid">شبكة</string>
+    <string name="sort_section_filters">الفلاتر</string>
+    <string name="sort_section_view_mode">وضع العرض</string>
+    <string name="view_mode_folder">مجلدات</string>
+    <string name="view_mode_tree">شجري</string>
+    <string name="view_mode_library">المكتبة</string>
+    <string name="filter_show_nomedia_folders">إظهار مجلدات .nomedia والمخفية</string>
+    <string name="sort_section_fields">الحقول المعروضة</string>
+    <string name="field_thumbnails">المصغرات</string>
+    <string name="field_full_name">الاسم الكامل</string>
+    <string name="field_file_ext">امتداد الملف</string>
+    <string name="field_path">المسار</string>
+    <string name="field_total_videos">عدد الفيديوهات</string>
+    <string name="field_total_duration">المدة الإجمالية</string>
+    <string name="field_folder_size">حجم المجلد</string>
+    <string name="field_file_size">حجم الملف</string>
+    <string name="field_resolution">الدقة</string>
+    <string name="field_date">التاريخ</string>
+    <string name="field_progress_bar">شريط التقدم</string>
+    <string name="decoder_auto_short">تلقائي</string>
+    <string name="decoder_auto_title">تلقائي (ذكي حسب الفيديو)</string>
+    <string name="decoder_auto_sub">يختار HW+ أو HW أو SW تلقائياً حسب نوع كل فيديو (الافتراضي)</string>
+    <string name="tab_shorts">شورتس</string>
+    <string name="shorts_empty_msg">لا توجد فيديوهات قصيرة (شورتس) على جهازك حالياً</string>
+    <string name="shorts_share_btn">مشاركة الشورت</string>
+    <string name="shorts_share_failed">تعذّر مشاركة هذا الفيديو</string>
+    <string name="shorts_mute_btn">كتم / تشغيل الصوت</string>
+    <string name="shorts_open_full_btn">فتح في المشغّل الكامل</string>
 </resources>

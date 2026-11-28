@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp"
-    android:viewportWidth="108" android:viewportHeight="108">
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Clean Faceted Monochrome Prism Play Triangle for Android 13+ Themed Icons -->
     <path
         android:fillColor="#000000"
-        android:pathData="M42,34L74,54L42,74Z" />
+        android:pathData="M35,28 L79,54 L35,80 Z M44,43 L44,65 L63,54 Z" />
 </vector>

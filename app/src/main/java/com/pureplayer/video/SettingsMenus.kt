@@ -169,124 +169,7 @@ internal fun MainActivity.applySortAndLayoutChangeToActiveScreen() {
 }
 
 internal fun MainActivity.showSortAndLayoutDialog() {
-    val isGrid = PlaybackStore.isGridLayoutEnabled(this)
-    val sortMode = PlaybackStore.getSortOrderMode(this)
-
-    val items = listOf(
-        // Section 1: Media Layout (List vs Grid)
-        PremiumMenuItem(
-            iconEmoji = "📋",
-            title = getString(R.string.layout_mode_list),
-            subtitle = if (!isGrid) "✅ " + getString(R.string.active_mode_badge) else getString(R.string.layout_mode_list_sub),
-            isAccentHighlighted = !isGrid,
-            sectionHeader = getString(R.string.section_media_layout),
-            onClick = {
-                PlaybackStore.setGridLayoutEnabled(this, false)
-                updateRecyclerLayoutManager()
-                applySortAndLayoutChangeToActiveScreen()
-                popSettingsBackStack()
-            }
-        ),
-        PremiumMenuItem(
-            iconEmoji = "🔲",
-            title = getString(R.string.layout_mode_grid),
-            subtitle = if (isGrid) "✅ " + getString(R.string.active_mode_badge) else getString(R.string.layout_mode_grid_sub),
-            isAccentHighlighted = isGrid,
-            onClick = {
-                PlaybackStore.setGridLayoutEnabled(this, true)
-                updateRecyclerLayoutManager()
-                applySortAndLayoutChangeToActiveScreen()
-                popSettingsBackStack()
-            }
-        ),
-        // Section 2: Sort By
-        PremiumMenuItem(
-            iconEmoji = "📅",
-            title = getString(R.string.sort_date_newest),
-            subtitle = if (sortMode == 0) "✅ " + getString(R.string.active_mode_badge) else null,
-            isAccentHighlighted = (sortMode == 0),
-            sectionHeader = getString(R.string.section_sort_by),
-            onClick = {
-                PlaybackStore.setSortOrderMode(this, 0)
-                applySortAndLayoutChangeToActiveScreen()
-                popSettingsBackStack()
-            }
-        ),
-        PremiumMenuItem(
-            iconEmoji = "🕰️",
-            title = getString(R.string.sort_date_oldest),
-            subtitle = if (sortMode == 1) "✅ " + getString(R.string.active_mode_badge) else null,
-            isAccentHighlighted = (sortMode == 1),
-            onClick = {
-                PlaybackStore.setSortOrderMode(this, 1)
-                applySortAndLayoutChangeToActiveScreen()
-                popSettingsBackStack()
-            }
-        ),
-        PremiumMenuItem(
-            iconEmoji = "🔤",
-            title = getString(R.string.sort_name_az),
-            subtitle = if (sortMode == 2) "✅ " + getString(R.string.active_mode_badge) else null,
-            isAccentHighlighted = (sortMode == 2),
-            onClick = {
-                PlaybackStore.setSortOrderMode(this, 2)
-                applySortAndLayoutChangeToActiveScreen()
-                popSettingsBackStack()
-            }
-        ),
-        PremiumMenuItem(
-            iconEmoji = "🔤",
-            title = getString(R.string.sort_name_za),
-            subtitle = if (sortMode == 3) "✅ " + getString(R.string.active_mode_badge) else null,
-            isAccentHighlighted = (sortMode == 3),
-            onClick = {
-                PlaybackStore.setSortOrderMode(this, 3)
-                applySortAndLayoutChangeToActiveScreen()
-                popSettingsBackStack()
-            }
-        ),
-        PremiumMenuItem(
-            iconEmoji = "💾",
-            title = getString(R.string.sort_size_largest),
-            subtitle = if (sortMode == 4) "✅ " + getString(R.string.active_mode_badge) else null,
-            isAccentHighlighted = (sortMode == 4),
-            onClick = {
-                PlaybackStore.setSortOrderMode(this, 4)
-                applySortAndLayoutChangeToActiveScreen()
-                popSettingsBackStack()
-            }
-        ),
-        PremiumMenuItem(
-            iconEmoji = "💾",
-            title = getString(R.string.sort_size_smallest),
-            subtitle = if (sortMode == 5) "✅ " + getString(R.string.active_mode_badge) else null,
-            isAccentHighlighted = (sortMode == 5),
-            onClick = {
-                PlaybackStore.setSortOrderMode(this, 5)
-                applySortAndLayoutChangeToActiveScreen()
-                popSettingsBackStack()
-            }
-        ),
-        PremiumMenuItem(
-            iconEmoji = "⏱️",
-            title = getString(R.string.sort_duration_longest),
-            subtitle = if (sortMode == 6) "✅ " + getString(R.string.active_mode_badge) else null,
-            isAccentHighlighted = (sortMode == 6),
-            onClick = {
-                PlaybackStore.setSortOrderMode(this, 6)
-                applySortAndLayoutChangeToActiveScreen()
-                popSettingsBackStack()
-            }
-        )
-    )
-
-    val currentLayoutName = if (isGrid) getString(R.string.layout_mode_grid) else getString(R.string.layout_mode_list)
-    showPremiumMenuDialog(
-        headerIcon = "📐",
-        title = getString(R.string.sort_and_layout_title),
-        subtitle = currentLayoutName,
-        items = items
-    )
+    showCalmSortAndViewSheet()
 }
 
 internal fun MainActivity.sortVideosList(videos: List<VideoItem>, sortMode: Int): List<VideoItem> {
@@ -298,6 +181,7 @@ internal fun MainActivity.sortVideosList(videos: List<VideoItem>, sortMode: Int)
         4 -> videos.sortedByDescending { it.size }
         5 -> videos.sortedBy { it.size }
         6 -> videos.sortedByDescending { it.duration }
+        7 -> videos.sortedBy { it.duration }
         else -> videos.sortedByDescending { it.dateAddedSec }
     }
 }
@@ -355,6 +239,7 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
 
 
     val decoderShort = when (PlaybackStore.getDecoderModeIndex(this)) {
+        PlaybackStore.DECODER_MODE_AUTO -> getString(R.string.decoder_auto_short)
         1 -> "HW"
         2 -> "SW"
         else -> "HW+"
@@ -687,6 +572,7 @@ internal fun MainActivity.showSettingsAppearanceDisplayPage() {
 
 internal fun MainActivity.getDecoderModeDisplayName(modeIdx: Int): String {
     return when (modeIdx) {
+        PlaybackStore.DECODER_MODE_AUTO -> getString(R.string.decoder_auto_short) + " • " + getString(R.string.decoder_auto_title)
         1 -> "HW • " + getString(R.string.decoder_hw_title)
         2 -> "SW • " + getString(R.string.decoder_sw_title)
         else -> "HW+ • " + getString(R.string.decoder_hw_plus_title)
@@ -696,6 +582,7 @@ internal fun MainActivity.getDecoderModeDisplayName(modeIdx: Int): String {
 internal fun MainActivity.showDefaultDecoderSettingsDialog() {
     val currentIdx = PlaybackStore.getDecoderModeIndex(this)
     val options = listOf(
+        Triple(PlaybackStore.DECODER_MODE_AUTO, "🤖", Pair(getString(R.string.decoder_auto_title), getString(R.string.decoder_auto_sub))),
         Triple(0, "⚡", Pair(getString(R.string.decoder_hw_plus_title), getString(R.string.decoder_hw_plus_sub))),
         Triple(1, "🔧", Pair(getString(R.string.decoder_hw_title), getString(R.string.decoder_hw_sub))),
         Triple(2, "💻", Pair(getString(R.string.decoder_sw_title), getString(R.string.decoder_sw_sub)))
@@ -1146,11 +1033,19 @@ internal fun MainActivity.showChangelogPage() {
     val allConfiguredReleases = listOf(
         ChangelogReleaseEntry(
             version = verName,
+            date = "2026-11-27",
+            iconEmoji = "💎",
+            title = getString(R.string.changelog_v90_29_title, verName),
+            description = getString(R.string.changelog_v90_29_desc),
+            isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.28",
             date = "2026-11-25",
             iconEmoji = "🎛️",
-            title = getString(R.string.changelog_v90_28_title, verName),
+            title = getString(R.string.changelog_v90_28_title, "90.28"),
             description = getString(R.string.changelog_v90_28_desc),
-            isLatest = true
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.27",
@@ -1395,7 +1290,10 @@ internal fun MainActivity.showAppLanguageDialog() {
             isAccentHighlighted = isSel,
             onClick = {
                 PlaybackStore.setAppLanguageTag(this, tag)
-                popSettingsBackStack()
+                settingsBackStack.clear()
+                closeActiveFullScreenDialogSmoothly {
+                    recreate()
+                }
             }
         )
     }

@@ -155,6 +155,8 @@ class MainActivity : AppCompatActivity() {
     // 0 = Video Folders, 1 = Private Vault, 2 = IPTV
     internal var currentMainTab = 0
     internal var isInVaultTab = false
+    internal var isShortsTabActive = false
+    internal var shortsFeedController: ShortsFeedController? = null
     internal var vaultLeftTimestampMs: Long = 0L
     internal var isBiometricPromptInFlight: Boolean = false
     internal var isLaunchingVaultPlayer: Boolean = false
@@ -178,6 +180,9 @@ class MainActivity : AppCompatActivity() {
                 isShowingFolderVideos = false
                 currentOpenedFolder = null
                 binding.audioTabContainer.visibility = View.GONE
+                binding.shortsTabContainer.visibility = View.GONE
+                isShortsTabActive = false
+                shortsFeedController?.pausePlayback()
                 binding.iptvRecyclerView.visibility = View.GONE
                 binding.swipeRefresh.visibility = View.VISIBLE
                 updateBottomTabsVisualState()
@@ -264,7 +269,7 @@ class MainActivity : AppCompatActivity() {
     internal var currentAnimatedAccentColor = Color.parseColor("#38BDF8")
 
     // Supports Android 14+ "Allow Limited Access" (READ_MEDIA_VISUAL_USER_SELECTED) as well as Full Access!
-    private val audioLibraryViewModel: AudioLibraryViewModel by lazy {
+    internal val audioLibraryViewModel: AudioLibraryViewModel by lazy {
         ViewModelProvider(this)[AudioLibraryViewModel::class.java]
     }
     private val audioPermissionLauncher = registerForActivityResult(
@@ -340,6 +345,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) DefaultPlayerPromptManager.recordAppSession(this)
         AppIconManager.ensureSavedIconApplied(this)
         if (savedInstanceState != null) {
             val savedTab = savedInstanceState.getInt("STATE_MAIN_TAB", 0)
@@ -435,6 +441,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        shortsFeedController?.release()
         activeTopDropdownPopup?.dismiss()
         activeFullScreenDialog?.setOnCancelListener(null)
         if (activeFullScreenDialog?.isShowing == true) {
@@ -506,6 +513,8 @@ class MainActivity : AppCompatActivity() {
         }
         restoreSystemBarsAndInsets()
         applyUserTheme()
+        DefaultPlayerPromptManager.maybeShowPrompt(this)
+        shortsFeedController?.resumeIfVisible()
         if (currentMainTab == 2) {
             // In IPTV tab: refresh visible items without full list reset
             if (adapter.itemCount > 0) adapter.notifyItemRangeChanged(0, adapter.itemCount)
@@ -732,8 +741,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val activeTabKey = if (isAudioTabHighlighted) 3 else currentMainTab
+        val activeTabKey = when {
+            isShortsTabActive -> 4
+            isAudioTabHighlighted -> 3
+            else -> currentMainTab
+        }
         val isVideos = (activeTabKey == 0)
+        val isShorts = (activeTabKey == 4)
         val isAudio = (activeTabKey == 3)
         val isVault = (activeTabKey == 1)
         val isIptv = (activeTabKey == 2)
@@ -779,6 +793,11 @@ class MainActivity : AppCompatActivity() {
             binding.tabVideos, binding.pillTabVideos, binding.ivTabVideos,
             isVideos, R.drawable.ic_nav_video_filled, R.drawable.ic_nav_video_outlined,
             getString(R.string.tab_video_folders_compact)
+        )
+        applyTabState(
+            binding.tabShorts, binding.pillTabShorts, binding.ivTabShorts,
+            isShorts, R.drawable.ic_nav_shorts_filled, R.drawable.ic_nav_shorts_outline,
+            getString(R.string.tab_shorts)
         )
         applyTabState(
             binding.tabAudio, binding.pillTabAudio, binding.ivTabAudio,
@@ -1388,7 +1407,7 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    private fun showHiddenFoldersPermissionPromptDialog() {
+    internal fun showHiddenFoldersPermissionPromptDialog() {
         val accent = PlaybackStore.getAccentColor(this)
         val surface = PlaybackStore.getSurfaceColor(this)
         val primaryText = PlaybackStore.getPrimaryTextColor(this)
@@ -1636,6 +1655,7 @@ class MainActivity : AppCompatActivity() {
             applyFolderVisibilityAndRefreshUI()
             updateResumeLastFab()
             runCatching { audioLibraryViewModel.refreshAudioLibrary() }
+            shortsFeedController?.refreshData(allDiscoveredVideos)
             VexoPlaybackService.notifyLibraryChanged(this)
             if (savedScroll != null) {
                 binding.recyclerView.post {
@@ -1749,6 +1769,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.tabVideos.setOnClickListener {
+            if (isShortsTabActive) { isShortsTabActive = false; shortsFeedController?.pausePlayback(); binding.shortsTabContainer.visibility = View.GONE }
             if (currentMainTab != 0 || isAudioTabHighlighted) {
                 saveCurrentTabUiState()
                 if (currentMainTab == 2) {
@@ -1784,6 +1805,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.tabVault.setOnClickListener {
+            if (isShortsTabActive) { isShortsTabActive = false; shortsFeedController?.pausePlayback(); binding.shortsTabContainer.visibility = View.GONE }
             if (currentMainTab == 1 && isVaultSessionUnlocked && !isAudioTabHighlighted) {
                 if (isShowingFolderVideos) {
                     savedVaultFolder = null
@@ -1861,6 +1883,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.tabIptv.setOnClickListener {
+            if (isShortsTabActive) { isShortsTabActive = false; shortsFeedController?.pausePlayback(); binding.shortsTabContainer.visibility = View.GONE }
             if (currentMainTab != 2 || isAudioTabHighlighted) {
                 saveCurrentTabUiState()
                 VideoThumbnailLoader.cancelAllPending()
@@ -1905,6 +1928,40 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.tabShorts.setOnClickListener {
+            if (isShortsTabActive) {
+                shortsFeedController?.showAndPlay(allDiscoveredVideos)
+                return@setOnClickListener
+            }
+            saveCurrentTabUiState()
+            VideoThumbnailLoader.cancelAllPending()
+            if (isInVaultTab) onLeavingVaultSection()
+            if (currentMainTab == 2) {
+                iptvSessionSyncGuard.onLeaveMainIptvSection()
+                setSubtleIptvSyncIndicatorVisible(false)
+            }
+            isAudioTabHighlighted = false
+            isInVaultTab = false
+            isInIptvTab = false
+            isShortsTabActive = true
+            binding.iptvHeaderBar.visibility = View.GONE
+            binding.emptyLayout.visibility = View.GONE
+            selectionViewModel.exitSelection()
+            updateVaultScreenSecurityFlag(false)
+            binding.swipeRefresh.visibility = View.GONE
+            binding.iptvRecyclerView.visibility = View.GONE
+            binding.audioTabContainer.visibility = View.GONE
+            binding.fabResumeLast.visibility = View.GONE
+            binding.shortsTabContainer.visibility = View.VISIBLE
+            binding.tvToolbarTitle.text = getString(R.string.tab_shorts)
+            binding.btnBackFolder.visibility = View.GONE
+            updateBottomTabsVisualState()
+            if (shortsFeedController == null) {
+                shortsFeedController = ShortsFeedController(this, binding.shortsTabContainer)
+            }
+            shortsFeedController?.showAndPlay(allDiscoveredVideos)
+        }
+
         binding.tabAudio.setOnClickListener {
             if (isAudioTabHighlighted) {
                 binding.audioTabListView.smoothScrollToPosition(0)
@@ -1916,6 +1973,9 @@ class MainActivity : AppCompatActivity() {
                 iptvSessionSyncGuard.onLeaveMainIptvSection()
                 setSubtleIptvSyncIndicatorVisible(false)
             }
+            isShortsTabActive = false
+            shortsFeedController?.pausePlayback()
+            binding.shortsTabContainer.visibility = View.GONE
             isAudioTabHighlighted = true
             binding.iptvHeaderBar.visibility = View.GONE
             binding.emptyLayout.visibility = View.GONE
@@ -2220,7 +2280,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         val filterMode = PlaybackStore.getFolderFilterMode(this)
-        if (filterMode == 2) {
+        val viewMode = PlaybackStore.getMediaViewMode(this)
+        if (filterMode == 2 || viewMode == PlaybackStore.VIEW_MODE_LIBRARY) {
             binding.tvToolbarTitle.text = "${getString(R.string.app_name)} (${publicVideosFlat.size})"
             binding.btnBackFolder.visibility = View.GONE
             adapter.submitVideos(publicVideosFlat)
@@ -2272,6 +2333,7 @@ class MainActivity : AppCompatActivity() {
         publicFoldersOnly = sortFoldersList(basePublicFolders, sortMode)
         val visiblePublicNames = publicFoldersOnly.map { it.name }.toSet()
         publicVideosFlat = sortVideosList(hiddenFilteredVideos.filter { it.folderName in visiblePublicNames }, sortMode)
+        shortsFeedController?.refreshData(allDiscoveredVideos)
 
         val activeFoldersList = if (isInVaultTab) vaultFoldersOnly else publicFoldersOnly
 

@@ -1057,4 +1057,39 @@ class PurePlayerUnitTests {
         val outOfRange = AndroidAutoUxPolicy.paginate(bigList, page = 9, pageSize = 15, maxCap = 25)
         assertTrue(outOfRange.isEmpty())
     }
+
+    @Test
+    fun defaultPlayerPromptPolicy_respectsUsageThresholdsCooldownAndFlags() {
+        val now = 1_700_000_000_000L
+        // Never show on first launch (0 plays, 1 session)
+        assertFalse(DefaultPlayerPromptPolicy.shouldShowPrompt(false, false, 0, 1, 0L, now))
+        // Never show if already default or user tapped Don't ask again
+        assertFalse(DefaultPlayerPromptPolicy.shouldShowPrompt(true, false, 5, 3, 0L, now))
+        assertFalse(DefaultPlayerPromptPolicy.shouldShowPrompt(false, true, 5, 3, 0L, now))
+        // Eligible after 3 video plays or 2 sessions + 1 play
+        assertTrue(DefaultPlayerPromptPolicy.shouldShowPrompt(false, false, 3, 1, 0L, now))
+        assertTrue(DefaultPlayerPromptPolicy.shouldShowPrompt(false, false, 1, 2, 0L, now))
+        // Respects 7-day cooldown after "Later"
+        assertFalse(DefaultPlayerPromptPolicy.shouldShowPrompt(false, false, 5, 4, now - 1000L, now))
+        assertTrue(DefaultPlayerPromptPolicy.shouldShowPrompt(false, false, 5, 4, now - DefaultPlayerPromptPolicy.LATER_COOLDOWN_MS - 1L, now))
+    }
+
+    @Test
+    fun autoDecoder_picksPerVideoAndKeepsManualChoiceFixed() {
+        // Manual choices always stay fixed regardless of file type
+        assertEquals(0, HiddenMediaAndPlaylistHelper.resolveEffectiveDecoderMode(0, "file:///a.avi", "a.avi", false))
+        assertEquals(1, HiddenMediaAndPlaylistHelper.resolveEffectiveDecoderMode(1, "file:///a.mkv", "a.mkv", false))
+        assertEquals(2, HiddenMediaAndPlaylistHelper.resolveEffectiveDecoderMode(2, "file:///a.mp4", "a.mp4", false))
+        // Auto (3) adapts per video
+        assertEquals(1, HiddenMediaAndPlaylistHelper.resolveEffectiveDecoderMode(3, "file:///clip.mp4", "clip.mp4", false))
+        assertEquals(2, HiddenMediaAndPlaylistHelper.resolveEffectiveDecoderMode(3, "file:///old.avi", "old.avi", false))
+        assertEquals(0, HiddenMediaAndPlaylistHelper.resolveEffectiveDecoderMode(3, "file:///movie.mkv", "movie.mkv", false))
+        assertEquals(0, HiddenMediaAndPlaylistHelper.resolveEffectiveDecoderMode(3, "http://iptv/live.ts", "Live TV", true))
+    }
+
+    @Test
+    fun shortsFeedPolicy_constantsVerified() {
+        assertEquals(180_000L, ShortsFeedPolicy.MAX_SHORT_DURATION_MS)
+        assertEquals(300_000L, ShortsFeedPolicy.MAX_VERTICAL_SHORT_MS)
+    }
 }

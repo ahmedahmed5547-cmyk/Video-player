@@ -561,14 +561,38 @@ class MediaAdapter(
                         binding.tvNewBadge.visibility = View.GONE
                     }
 
+                    val fieldsCfg = PlaybackStore.getDisplayFieldsConfig(ctx)
+                    val isTreeMode = PlaybackStore.getMediaViewMode(ctx) == PlaybackStore.VIEW_MODE_TREE
+                    binding.thumbContainer.visibility = if (fieldsCfg.showThumbnails) View.VISIBLE else View.GONE
+                    binding.tvTitle.maxLines = if (fieldsCfg.showFullName) 4 else 2
                     binding.tvDurationBadge.text = "${item.videos.size}"
-                    binding.tvDurationBadge.visibility = View.VISIBLE
-                    thumbJob = VideoThumbnailLoader.loadFolderCollageThumbnail(ctx, item, binding.ivIcon, accentColor)
+                    binding.tvDurationBadge.visibility = if (fieldsCfg.showTotalVideos) View.VISIBLE else View.GONE
+                    if (fieldsCfg.showThumbnails) {
+                        thumbJob = VideoThumbnailLoader.loadFolderCollageThumbnail(ctx, item, binding.ivIcon, accentColor)
+                    }
 
                     val hiddenPrefix = if (item.isHidden) "👁️‍🗨️ " else ""
                     binding.tvTitle.text = if (isVaultMode) "🛡️ ${item.name}" else "$hiddenPrefix${item.name}"
-                    val hiddenTag = if (item.isHidden) "  •  " + ctx.getString(R.string.hidden_item_badge) else ""
-                    binding.tvSubtitle.text = ctx.getString(R.string.videos_count_format, item.videos.size) + hiddenTag
+                    val folderParts = mutableListOf<String>()
+                    if (fieldsCfg.showTotalVideos) {
+                        folderParts.add(ctx.getString(R.string.videos_count_format, item.videos.size))
+                    }
+                    if (fieldsCfg.showTotalDuration) {
+                        val totalDur = item.videos.sumOf { it.duration.coerceAtLeast(0L) }
+                        if (totalDur > 0L) folderParts.add(formatDuration(totalDur))
+                    }
+                    if (fieldsCfg.showFolderSize) {
+                        val totalBytes = item.videos.sumOf { it.size.coerceAtLeast(0L) }
+                        folderParts.add(HiddenMediaAndPlaylistHelper.formatBytesReadable(totalBytes))
+                    }
+                    if (fieldsCfg.showPath || isTreeMode) {
+                        val parentDir = item.videos.firstOrNull()?.path?.substringBeforeLast('/')?.substringAfter("/0/", "")
+                        if (!parentDir.isNullOrBlank()) folderParts.add(parentDir)
+                    }
+                    if (item.isHidden) {
+                        folderParts.add(ctx.getString(R.string.hidden_item_badge))
+                    }
+                    binding.tvSubtitle.text = folderParts.joinToString("  •  ")
                     val folderKey = SelectionViewModel.keyForFolder(item)
                     val isFolderSelected = isSelectionMode && selectedItemKeys.contains(folderKey)
                     applySelectionVisual(ctx, isFolderSelected, accentColor)
@@ -579,7 +603,11 @@ class MediaAdapter(
                     }
                 }
                 is VideoItem -> {
-                    binding.tvTitle.text = if (item.isHidden) "👁️‍🗨️ ${item.title}" else item.title
+                    val fieldsCfg = PlaybackStore.getDisplayFieldsConfig(ctx)
+                    binding.thumbContainer.visibility = if (fieldsCfg.showThumbnails) View.VISIBLE else View.GONE
+                    binding.tvTitle.maxLines = if (fieldsCfg.showFullName) 4 else 2
+                    val displayName = if (fieldsCfg.showFileExtension) item.title else item.title.substringBeforeLast('.')
+                    binding.tvTitle.text = if (item.isHidden) "👁️‍🗨️ $displayName" else displayName
                     val durationStr = formatDuration(item.duration)
                     binding.tvDurationBadge.text = durationStr
                     binding.tvDurationBadge.visibility = View.VISIBLE
@@ -606,18 +634,35 @@ class MediaAdapter(
                         binding.tvNewBadge.visibility = View.GONE
                     }
 
-                    val sizeMb = String.format(Locale.US, "%.1f MB", item.size / (1024.0 * 1024.0))
-                    val resShort = if (item.width > 0 && item.height > 0) "  •  ${item.getResolutionLabel().substringBefore(" ")}" else ""
-                    val savedPos = PlaybackStore.getSavedPosition(ctx, item.uri)
-                    val resumeBadge = if (savedPos > 3_000L) {
-                        "  •  ⏸ " + ctx.getString(R.string.stopped_at_format, PlaybackStore.formatTime(savedPos))
-                    } else {
-                        ""
+                    val vidParts = mutableListOf<String>()
+                    if (fieldsCfg.showFileSize) {
+                        vidParts.add(HiddenMediaAndPlaylistHelper.formatBytesReadable(item.size))
                     }
-                    val hiddenVidTag = if (item.isHidden) "  •  " + ctx.getString(R.string.hidden_item_badge) else ""
-                    binding.tvSubtitle.text = "$sizeMb$resShort$resumeBadge$hiddenVidTag"
+                    if (fieldsCfg.showResolution && item.width > 0 && item.height > 0) {
+                        vidParts.add(item.getResolutionLabel().substringBefore(" "))
+                    }
+                    if (fieldsCfg.showDate && item.dateAddedSec > 0L) {
+                        val fmt = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                        vidParts.add(fmt.format(java.util.Date(item.dateAddedSec * 1000L)))
+                    }
+                    if (fieldsCfg.showPath && item.path.isNotBlank()) {
+                        val rel = item.path.substringBeforeLast('/').substringAfter("/0/", item.folderName)
+                        if (rel.isNotBlank()) vidParts.add(rel)
+                    }
+                    if (fieldsCfg.showProgress) {
+                        val savedPos = PlaybackStore.getSavedPosition(ctx, item.uri)
+                        if (savedPos > 3_000L) {
+                            vidParts.add("⏸ " + ctx.getString(R.string.stopped_at_format, PlaybackStore.formatTime(savedPos)))
+                        }
+                    }
+                    if (item.isHidden) {
+                        vidParts.add(ctx.getString(R.string.hidden_item_badge))
+                    }
+                    binding.tvSubtitle.text = vidParts.joinToString("  •  ")
 
-                    thumbJob = VideoThumbnailLoader.loadVideoThumbnail(ctx, item, binding.ivIcon, accentColor)
+                    if (fieldsCfg.showThumbnails) {
+                        thumbJob = VideoThumbnailLoader.loadVideoThumbnail(ctx, item, binding.ivIcon, accentColor)
+                    }
                     val videoKey = SelectionViewModel.keyForVideo(item)
                     val isVideoSelected = isSelectionMode && selectedItemKeys.contains(videoKey)
                     applySelectionVisual(ctx, isVideoSelected, accentColor)

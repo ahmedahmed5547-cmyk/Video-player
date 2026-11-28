@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Deep Midnight Slate Polygonal Mosaic Background (Crystal Prism) -->
+    <path android:fillColor="#161A26" android:pathData="M0,0 H108 V108 H0 Z" />
+    <path android:fillColor="#1F2433" android:pathData="M0,0 L54,0 L30,34 Z" />
+    <path android:fillColor="#262C3D" android:pathData="M54,0 L108,0 L78,34 Z" />
+    <path android:fillColor="#1B202E" android:pathData="M54,0 L78,34 L30,34 Z" />
+    <path android:fillColor="#181D2B" android:pathData="M0,0 L30,34 L0,68 Z" />
+    <path android:fillColor="#222838" android:pathData="M108,0 L108,68 L78,34 Z" />
+    <path android:fillColor="#202536" android:pathData="M30,34 L78,34 L54,70 Z" />
+    <path android:fillColor="#141824" android:pathData="M0,68 L30,34 L28,108 L0,108 Z" />
+    <path android:fillColor="#1D2231" android:pathData="M30,34 L54,70 L28,108 Z" />
+    <path android:fillColor="#1E2434" android:pathData="M78,34 L108,68 L108,108 L80,108 Z" />
+    <path android:fillColor="#191E2C" android:pathData="M78,34 L80,108 L54,70 Z" />
+    <path android:fillColor="#161B28" android:pathData="M28,108 L54,70 L80,108 Z" />
+</vector>

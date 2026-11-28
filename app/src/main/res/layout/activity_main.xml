@@ -511,6 +511,17 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/iptvHeaderBar" />
 
+    <!-- In-Place Shorts / Reels Vertical Swipe Feed -->
+    <FrameLayout
+        android:id="@+id/shortsTabContainer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/bottomNavBar"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/toolbarCard" />
+
     <!-- In-Place Audio Library Tab (hosted above persistent bottomNavBar so bottom bar never hides or flickers) -->
     <LinearLayout
         android:id="@+id/audioTabContainer"
@@ -803,6 +814,33 @@
                 android:importantForAccessibility="no"
                 android:src="@drawable/ic_nav_video_filled"
                 android:tint="#38BDF8" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/tabShorts"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:minWidth="48dp"
+            android:minHeight="48dp"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/tab_shorts">
+
+            <View
+                android:id="@+id/pillTabShorts"
+                android:layout_width="56dp"
+                android:layout_height="34dp"
+                android:layout_gravity="center" />
+
+            <ImageView
+                android:id="@+id/ivTabShorts"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_nav_shorts_outline"
+                android:tint="#94A3B8" />
         </FrameLayout>
 
         <FrameLayout

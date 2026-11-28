@@ -296,4 +296,28 @@ object HiddenMediaAndPlaylistHelper {
             }
         }
     }
+
+    /**
+     * Resolves the effective LibVLC decoder mode (0=HW+, 1=HW, 2=SW).
+     * - If the user explicitly chose HW+ (0), HW (1), or SW (2), returns it unchanged (stays fixed).
+     * - If set to Auto (3), chooses the optimal decoder based on the video format/container/stream:
+     *   * Legacy/tricky containers (.avi, .flv, .wmv, .rmvb, .vob, .mpg, .mpeg, .3gp) or Hi10p -> SW (2)
+     *   * Standard MP4/MOV/M4V local videos -> HW (1)
+     *   * MKV/WEBM/TS/4K/HDR/IPTV streams -> HW+ (0)
+     */
+    fun resolveEffectiveDecoderMode(
+        configuredMode: Int,
+        uriString: String,
+        title: String,
+        isStreamOrIptv: Boolean
+    ): Int {
+        if (configuredMode in 0..2) return configuredMode
+        if (isStreamOrIptv) return 0 // HW+ for live streams & IPTV
+        val sample = (title + " " + uriString.substringBefore("?")).lowercase(Locale.ROOT)
+        val legacySwHints = listOf(".avi", ".flv", ".wmv", ".rmvb", ".vob", ".mpg", ".mpeg", ".3gp", "hi10p", "10bit")
+        if (legacySwHints.any { sample.contains(it) }) return 2 // SW
+        val standardHwExts = listOf(".mp4", ".mov", ".m4v")
+        if (standardHwExts.any { sample.contains(it) }) return 1 // HW
+        return 0 // HW+ default for MKV, WEBM, TS, HEVC, unknown
+    }
 }

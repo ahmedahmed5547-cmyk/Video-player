@@ -85,8 +85,8 @@ android {
         applicationId = "com.pureplayer.video"
         minSdk = 24
         targetSdk = 36
-        versionCode = 9028
-        versionName = "90.28"
+        versionCode = 9029
+        versionName = "90.29"
 
         buildConfigField("String", "SUBDL_API_KEY", "\"\"")
 

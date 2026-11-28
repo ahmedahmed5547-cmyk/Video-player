@@ -136,6 +136,26 @@ object PlaybackStore {
     private const val KEY_ANDROID_AUTO_AUTO_RESUME = "vexo_android_auto_auto_resume_v1"
     private const val KEY_ANDROID_AUTO_AUDIO_ONLY = "vexo_android_auto_audio_only_v1"
     private const val KEY_ANDROID_AUTO_MINIMAL_DISPLAY = "vexo_android_auto_minimal_display_v1"
+    private const val KEY_PLAYER_ASPECT_MODE_IDX = "vexo_player_aspect_mode_idx_v1"
+    private const val KEY_DEFAULT_PROMPT_VIDEO_PLAYS = "vexo_default_prompt_video_plays_v1"
+    private const val KEY_DEFAULT_PROMPT_SESSIONS = "vexo_default_prompt_sessions_v1"
+    private const val KEY_DEFAULT_PROMPT_DONT_ASK = "vexo_default_prompt_dont_ask_v1"
+    private const val KEY_DEFAULT_PROMPT_LAST_SHOWN_MS = "vexo_default_prompt_last_shown_ms_v1"
+    private const val KEY_MEDIA_VIEW_MODE = "vexo_media_view_mode_v1"
+    const val VIEW_MODE_FOLDER = 0
+    const val VIEW_MODE_TREE = 1
+    const val VIEW_MODE_LIBRARY = 2
+    private const val KEY_FIELD_THUMBNAILS = "vexo_field_thumbnails_v1"
+    private const val KEY_FIELD_FULL_NAME = "vexo_field_full_name_v1"
+    private const val KEY_FIELD_FILE_EXT = "vexo_field_file_ext_v1"
+    private const val KEY_FIELD_PATH = "vexo_field_path_v1"
+    private const val KEY_FIELD_TOTAL_VIDEOS = "vexo_field_total_videos_v1"
+    private const val KEY_FIELD_TOTAL_DURATION = "vexo_field_total_duration_v1"
+    private const val KEY_FIELD_FOLDER_SIZE = "vexo_field_folder_size_v1"
+    private const val KEY_FIELD_FILE_SIZE = "vexo_field_file_size_v1"
+    private const val KEY_FIELD_RESOLUTION = "vexo_field_resolution_v1"
+    private const val KEY_FIELD_DATE = "vexo_field_date_v1"
+    private const val KEY_FIELD_PROGRESS = "vexo_field_progress_v1"
 
     // Vault Auto-Lock modes:
     // 0 = Immediately when leaving Vault section (safest default)
@@ -530,12 +550,17 @@ object PlaybackStore {
     }
 
 
-    // 0 = HW+ (Default), 1 = HW, 2 = SW (Software CPU)
+    // 0 = HW+, 1 = HW, 2 = SW (Software CPU), 3 = Auto (Smart per-video default)
+    const val DECODER_MODE_HW_PLUS = 0
+    const val DECODER_MODE_HW = 1
+    const val DECODER_MODE_SW = 2
+    const val DECODER_MODE_AUTO = 3
+
     fun getDecoderModeIndex(context: Context): Int =
-        prefs(context).getInt(KEY_DECODER_MODE_IDX, 0).coerceIn(0, 2)
+        prefs(context).getInt(KEY_DECODER_MODE_IDX, DECODER_MODE_AUTO).coerceIn(0, 3)
 
     fun setDecoderModeIndex(context: Context, index: Int) {
-        prefs(context).edit().putInt(KEY_DECODER_MODE_IDX, index.coerceIn(0, 2)).apply()
+        prefs(context).edit().putInt(KEY_DECODER_MODE_IDX, index.coerceIn(0, 3)).apply()
     }
 
     fun isAutoPipEnabled(context: Context): Boolean =
@@ -981,10 +1006,10 @@ object PlaybackStore {
     }
 
     fun getSortOrderMode(context: Context): Int =
-        prefs(context).getInt(KEY_SORT_ORDER_MODE, 0).coerceIn(0, 6)
+        prefs(context).getInt(KEY_SORT_ORDER_MODE, 0).coerceIn(0, 7)
 
     fun setSortOrderMode(context: Context, mode: Int) {
-        prefs(context).edit().putInt(KEY_SORT_ORDER_MODE, mode.coerceIn(0, 6)).apply()
+        prefs(context).edit().putInt(KEY_SORT_ORDER_MODE, mode.coerceIn(0, 7)).apply()
     }
 
     fun markVideoOpened(context: Context, uri: Uri) {
@@ -1102,6 +1127,86 @@ object PlaybackStore {
         audioOnlyOnCar = isAndroidAutoAudioOnlyOnCar(context),
         minimalCarDisplay = isAndroidAutoMinimalDisplay(context)
     )
+
+    // --- Player Aspect Ratio Persistence (v90.29) ---
+    fun getPlayerAspectModeIndex(context: Context, maxIndex: Int = 5): Int =
+        prefs(context).getInt(KEY_PLAYER_ASPECT_MODE_IDX, 0).coerceIn(0, maxIndex.coerceAtLeast(0))
+
+    fun setPlayerAspectModeIndex(context: Context, index: Int) {
+        prefs(context).edit().putInt(KEY_PLAYER_ASPECT_MODE_IDX, index.coerceAtLeast(0)).apply()
+    }
+
+    // --- Default Video Player Prompt Counters (v90.29) ---
+    fun getDefaultPromptVideoPlayCount(context: Context): Int =
+        prefs(context).getInt(KEY_DEFAULT_PROMPT_VIDEO_PLAYS, 0).coerceAtLeast(0)
+
+    fun incrementDefaultPromptVideoPlayCount(context: Context) {
+        val next = getDefaultPromptVideoPlayCount(context) + 1
+        prefs(context).edit().putInt(KEY_DEFAULT_PROMPT_VIDEO_PLAYS, next).apply()
+    }
+
+    fun getDefaultPromptSessionCount(context: Context): Int =
+        prefs(context).getInt(KEY_DEFAULT_PROMPT_SESSIONS, 0).coerceAtLeast(0)
+
+    fun incrementDefaultPromptSessionCount(context: Context) {
+        val next = getDefaultPromptSessionCount(context) + 1
+        prefs(context).edit().putInt(KEY_DEFAULT_PROMPT_SESSIONS, next).apply()
+    }
+
+    fun isDefaultPromptDontAskAgain(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_DEFAULT_PROMPT_DONT_ASK, false)
+
+    fun setDefaultPromptDontAskAgain(context: Context, dontAsk: Boolean) {
+        prefs(context).edit().putBoolean(KEY_DEFAULT_PROMPT_DONT_ASK, dontAsk).apply()
+    }
+
+    fun getDefaultPromptLastShownMs(context: Context): Long =
+        prefs(context).getLong(KEY_DEFAULT_PROMPT_LAST_SHOWN_MS, 0L).coerceAtLeast(0L)
+
+    fun setDefaultPromptLastShownMs(context: Context, tsMs: Long) {
+        prefs(context).edit().putLong(KEY_DEFAULT_PROMPT_LAST_SHOWN_MS, tsMs).apply()
+    }
+
+    // --- Media View Mode & Display Fields (v90.29) ---
+    fun getMediaViewMode(context: Context): Int =
+        prefs(context).getInt(KEY_MEDIA_VIEW_MODE, VIEW_MODE_FOLDER).coerceIn(VIEW_MODE_FOLDER, VIEW_MODE_LIBRARY)
+
+    fun setMediaViewMode(context: Context, mode: Int) {
+        prefs(context).edit().putInt(KEY_MEDIA_VIEW_MODE, mode.coerceIn(VIEW_MODE_FOLDER, VIEW_MODE_LIBRARY)).apply()
+    }
+
+    fun getDisplayFieldsConfig(context: Context): MediaDisplayFieldsConfig {
+        val p = prefs(context)
+        return MediaDisplayFieldsConfig(
+            showThumbnails = p.getBoolean(KEY_FIELD_THUMBNAILS, true),
+            showFullName = p.getBoolean(KEY_FIELD_FULL_NAME, false),
+            showFileExtension = p.getBoolean(KEY_FIELD_FILE_EXT, true),
+            showPath = p.getBoolean(KEY_FIELD_PATH, false),
+            showTotalVideos = p.getBoolean(KEY_FIELD_TOTAL_VIDEOS, true),
+            showTotalDuration = p.getBoolean(KEY_FIELD_TOTAL_DURATION, false),
+            showFolderSize = p.getBoolean(KEY_FIELD_FOLDER_SIZE, false),
+            showFileSize = p.getBoolean(KEY_FIELD_FILE_SIZE, true),
+            showResolution = p.getBoolean(KEY_FIELD_RESOLUTION, true),
+            showDate = p.getBoolean(KEY_FIELD_DATE, false),
+            showProgress = p.getBoolean(KEY_FIELD_PROGRESS, true)
+        )
+    }
+
+    fun saveDisplayFieldsConfig(context: Context, cfg: MediaDisplayFieldsConfig) {
+        prefs(context).edit()
+            .putBoolean(KEY_FIELD_THUMBNAILS, cfg.showThumbnails)
+            .putBoolean(KEY_FIELD_FULL_NAME, cfg.showFullName)
+            .putBoolean(KEY_FIELD_FILE_EXT, cfg.showFileExtension)
+            .putBoolean(KEY_FIELD_PATH, cfg.showPath)
+            .putBoolean(KEY_FIELD_TOTAL_VIDEOS, cfg.showTotalVideos)
+            .putBoolean(KEY_FIELD_TOTAL_DURATION, cfg.showTotalDuration)
+            .putBoolean(KEY_FIELD_FOLDER_SIZE, cfg.showFolderSize)
+            .putBoolean(KEY_FIELD_FILE_SIZE, cfg.showFileSize)
+            .putBoolean(KEY_FIELD_RESOLUTION, cfg.showResolution)
+            .putBoolean(KEY_FIELD_DATE, cfg.showDate)
+            .putBoolean(KEY_FIELD_PROGRESS, cfg.showProgress)
+            .apply()
+    }
 
     fun formatTime(timeMs: Long): String {
         val totalSeconds = TimeUnit.MILLISECONDS.toSeconds(timeMs).coerceAtLeast(0L)

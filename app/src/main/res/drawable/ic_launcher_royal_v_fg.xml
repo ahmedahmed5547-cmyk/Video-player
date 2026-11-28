@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Faceted Champagne-Gold Metallic V Emblem -->
+    <path android:fillColor="#E5D5B7" android:pathData="M24,29 L38,29 L54,67 L46,79 Z" />
+    <path android:fillColor="#B89F74" android:pathData="M38,29 L54,67 L45,57 L32,29 Z" />
+    <path android:fillColor="#F5EAD6" android:pathData="M24,29 L32,29 L45,57 L36,53 Z" />
+    <path android:fillColor="#D4BC94" android:pathData="M84,29 L70,29 L54,67 L62,79 Z" />
+    <path android:fillColor="#9A825B" android:pathData="M70,29 L54,67 L63,57 L76,29 Z" />
+    <path android:fillColor="#EFE2C9" android:pathData="M84,29 L76,29 L63,57 L72,53 Z" />
+    <path android:fillColor="#C6AD82" android:pathData="M46,79 L54,67 L62,79 L54,84 Z" />
+
+    <!-- Overlapping Luminous Cyber-Blue Faceted Play Triangle -->
+    <path android:fillColor="#44020617" android:pathData="M42,32 L81,55 L42,78 Z" />
+    <path android:fillColor="#67E8F9" android:pathData="M40,29 L48,34 L48,54 L40,54 Z" />
+    <path android:fillColor="#22D3EE" android:pathData="M40,54 L48,54 L48,74 L40,79 Z" />
+    <path android:fillColor="#38BDF8" android:pathData="M40,29 L79,54 L67,54 L48,34 Z" />
+    <path android:fillColor="#2563EB" android:pathData="M40,79 L48,74 L67,54 L79,54 Z" />
+    <path android:fillColor="#0284C7" android:pathData="M48,43 L67,54 L48,54 Z" />
+    <path android:fillColor="#1D4ED8" android:pathData="M48,54 L67,54 L48,65 Z" />
+    <path android:fillColor="#AAFFFFFF" android:pathData="M40,29 L42.2,30.5 L42.2,54 L40,54 Z" />
+</vector>
