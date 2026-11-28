@@ -294,18 +294,6 @@
                 android:textSize="12sp"
                 android:textStyle="bold" />
 
-            <ImageButton
-                android:id="@+id/btnOrientation"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
-                android:layout_marginEnd="4dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/setting_default_orientation"
-                android:padding="8dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_player_screen_rotation"
-                android:tint="#E6FFFFFF" />
-
             <TextView
                 android:id="@+id/tvSleepTimerBadge"
                 android:layout_width="wrap_content"
@@ -589,6 +577,18 @@
                     android:textColor="#38BDF8"
                     android:textSize="13sp"
                     android:textStyle="bold" />
+
+                <ImageButton
+                    android:id="@+id/btnOrientation"
+                    android:layout_width="@dimen/player_action_btn_size"
+                    android:layout_height="@dimen/player_action_btn_size"
+                    android:layout_marginStart="8dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/setting_default_orientation"
+                    android:padding="6dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_player_screen_rotation"
+                    android:tint="#FFFFFF" />
 
                 <ImageButton
                     android:id="@+id/btnAspectRatio"

@@ -915,7 +915,7 @@ Any series, movie, or channel you play will appear here automatically so you can
     <string name="clear_cache_btn_clear">Clear</string>
     <string name="clear_cache_freed_toast">Freed %1$s</string>
     <string name="changelog_v90_30_title">v%1$s — Shorts Fix, Smooth Performance, Clear Cache &amp; Obsidian Dark Icon</string>
-    <string name="changelog_v90_30_desc">• Fixed Shorts → Videos tab freeze/blank screen bug and added proper surface/decoder release on tab leave, back navigation, and onStop.
+    <string name="changelog_v90_30_desc" formatted="false">• Fixed Shorts → Videos tab freeze/blank screen bug and added proper surface/decoder release on tab leave, back navigation, and onStop.
 • Upgraded Shorts side actions (Share, Volume/Mute, Fullscreen) to calm, minimal Instagram-style outline vector icons inside subtle 40% black badges.
 • Improved overall smoothness with DiffUtil, stable IDs, off-main-thread Shorts filtering, and in-memory Display Fields caching.
 • Added Settings → Clear cache with per-category size breakdown and checkboxes while keeping all user data, IPTV, Vault, and videos 100% safe.

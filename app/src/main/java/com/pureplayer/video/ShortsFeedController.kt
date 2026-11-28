@@ -272,7 +272,7 @@ class ShortsFeedController(
     }
 
     private fun effectivePoolLimit(): Int {
-        return if (PlaybackStore.isBatterySaverEnabled(activity)) 1 else MAX_POOL_SIZE
+        return if (BatteryOptimizationManager.isBatterySaverActive(activity)) 1 else MAX_POOL_SIZE
     }
 
     private fun obtainEntryForPosition(targetPos: Int, keepWindow: Set<Int>): PooledPlayerEntry {
@@ -419,7 +419,7 @@ class ShortsFeedController(
 
         // Battery & thermal optimization: keep ONLY current + next (never 3 concurrent hardware decoders).
         // When Battery Saver is ON, keep strictly 1 active player with zero background prewarm.
-        val allowPrewarm = !PlaybackStore.isBatterySaverEnabled(activity)
+        val allowPrewarm = !BatteryOptimizationManager.isBatterySaverActive(activity)
         val keepWindow = if (allowPrewarm) {
             setOf(position, position + 1).filter { it in shortsList.indices }.toSet()
         } else {

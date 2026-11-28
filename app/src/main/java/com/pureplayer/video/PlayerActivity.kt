@@ -2265,7 +2265,7 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
         binding.btnPlayPause.imageTintList = ColorStateList.valueOf(accent)
         binding.btnUnlock.imageTintList = ColorStateList.valueOf(accent)
         binding.btnDecoder.setTextColor(accent)
-        binding.btnOrientation.imageTintList = ColorStateList.valueOf(Color.parseColor("#E6FFFFFF"))
+        binding.btnOrientation.imageTintList = ColorStateList.valueOf(Color.WHITE)
         binding.btnSpeed.setTextColor(accent)
         binding.btnSubFontUp.setTextColor(accent)
         binding.btnResetSubPos.setTextColor(accent)
@@ -2602,25 +2602,18 @@ class PlayerActivity : AppCompatActivity(), IVLCVout.OnNewVideoLayoutListener {
             } else {
                 ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             }
-            if (playerOrientationMode == PlaybackStore.ORIENTATION_MODE_AUTO_VIDEO) {
-                // Respect manual override for THIS video only; next video returns to Auto!
-                manualOrientationOverrideForCurrentVideo = true
-                currentManualRequestedOrientation = nextTarget
-            }
+            // Instant 1-tap toggle between Portrait and Landscape (no long-press menu)
+            manualOrientationOverrideForCurrentVideo = true
+            currentManualRequestedOrientation = nextTarget
             applyRequestedOrientationIfDifferent(nextTarget)
             val label = if (nextTarget == ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT) {
                 getString(R.string.orientation_portrait)
             } else {
                 getString(R.string.orientation_landscape)
             }
-            binding.btnOrientation.contentDescription = getOrientationLabel(playerOrientationMode)
+            binding.btnOrientation.contentDescription = label
             showToastIndicator(label)
             scheduleHideControls()
-        }
-
-        binding.btnOrientation.setOnLongClickListener {
-            showPlayerOrientationModeDialog()
-            true
         }
 
         binding.btnSleepTimer.setOnClickListener {
