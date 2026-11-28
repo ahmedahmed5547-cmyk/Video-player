@@ -1175,7 +1175,11 @@ object PlaybackStore {
         prefs(context).edit().putInt(KEY_MEDIA_VIEW_MODE, mode.coerceIn(VIEW_MODE_FOLDER, VIEW_MODE_LIBRARY)).apply()
     }
 
+    @Volatile
+    private var cachedDisplayFields: MediaDisplayFieldsConfig? = null
+
     fun getDisplayFieldsConfig(context: Context): MediaDisplayFieldsConfig {
+        cachedDisplayFields?.let { return it }
         val p = prefs(context)
         return MediaDisplayFieldsConfig(
             showThumbnails = p.getBoolean(KEY_FIELD_THUMBNAILS, true),
@@ -1189,10 +1193,11 @@ object PlaybackStore {
             showResolution = p.getBoolean(KEY_FIELD_RESOLUTION, true),
             showDate = p.getBoolean(KEY_FIELD_DATE, false),
             showProgress = p.getBoolean(KEY_FIELD_PROGRESS, true)
-        )
+        ).also { cachedDisplayFields = it }
     }
 
     fun saveDisplayFieldsConfig(context: Context, cfg: MediaDisplayFieldsConfig) {
+        cachedDisplayFields = cfg
         prefs(context).edit()
             .putBoolean(KEY_FIELD_THUMBNAILS, cfg.showThumbnails)
             .putBoolean(KEY_FIELD_FULL_NAME, cfg.showFullName)

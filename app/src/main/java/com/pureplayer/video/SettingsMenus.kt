@@ -337,6 +337,22 @@ internal fun MainActivity.showProSettingsDialog(clearStack: Boolean = false) {
         )
     ) else emptyList()) + listOf(
         PremiumMenuItem(
+            iconEmoji = "🧹",
+            title = getString(R.string.clear_cache_title),
+            subtitle = getString(R.string.clear_cache_row_sub),
+            statusChip = if (AppCacheManager.lastKnownTotalBytes >= 0L) {
+                HiddenMediaAndPlaylistHelper.formatBytesReadable(AppCacheManager.lastKnownTotalBytes)
+            } else {
+                lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { AppCacheManager.computeBreakdown(applicationContext) }
+                null
+            },
+            onClick = {
+                showClearCacheDialog {
+                    showProSettingsDialog(clearStack = false)
+                }
+            }
+        ),
+        PremiumMenuItem(
             iconEmoji = "🔋",
             title = getString(R.string.battery_saver_title),
             subtitle = if (BatteryOptimizationManager.isBatterySaverActive(this)) getString(R.string.battery_saver_status_on) else getString(R.string.battery_saver_status_off),
@@ -1034,11 +1050,19 @@ internal fun MainActivity.showChangelogPage() {
     val allConfiguredReleases = listOf(
         ChangelogReleaseEntry(
             version = verName,
+            date = "2026-11-28",
+            iconEmoji = "🚀",
+            title = getString(R.string.changelog_v90_30_title, verName),
+            description = getString(R.string.changelog_v90_30_desc),
+            isLatest = true
+        ),
+        ChangelogReleaseEntry(
+            version = "90.29",
             date = "2026-11-27",
             iconEmoji = "💎",
-            title = getString(R.string.changelog_v90_29_title, verName),
+            title = getString(R.string.changelog_v90_29_title, "90.29"),
             description = getString(R.string.changelog_v90_29_desc),
-            isLatest = true
+            isLatest = false
         ),
         ChangelogReleaseEntry(
             version = "90.28",

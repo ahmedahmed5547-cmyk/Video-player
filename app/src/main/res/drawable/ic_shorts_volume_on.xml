@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Minimal Instagram-Reels outline volume-on icon -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M11,5L6.5,9H3.5C2.95,9 2.5,9.45 2.5,10V14C2.5,14.55 2.95,15 3.5,15H6.5L11,19V5Z"
+        android:strokeWidth="1.8"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M15.2,8.8C16.7,10.3 16.7,13.7 15.2,15.2"
+        android:strokeWidth="1.8"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M18.2,6.2C21.1,9.1 21.1,14.9 18.2,17.8"
+        android:strokeWidth="1.8"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+</vector>

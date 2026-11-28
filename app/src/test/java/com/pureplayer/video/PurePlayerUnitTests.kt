@@ -1092,4 +1092,10 @@ class PurePlayerUnitTests {
         assertEquals(180_000L, ShortsFeedPolicy.MAX_SHORT_DURATION_MS)
         assertEquals(300_000L, ShortsFeedPolicy.MAX_VERTICAL_SHORT_MS)
     }
+
+    @Test
+    fun cacheSizeBreakdown_sumsAllCategoriesAccurately() {
+        val b = CacheSizeBreakdown(1000L, 2000L, 500L, 1500L, 3000L)
+        assertEquals(8000L, b.totalBytes)
+    }
 }

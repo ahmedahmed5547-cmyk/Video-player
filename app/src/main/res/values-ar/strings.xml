@@ -675,7 +675,7 @@
     <string name="sub_bilingual_off_sub">عرض النص المترجم فقط</string>
     <string name="setting_app_icon_title">أيقونة التطبيق</string>
     <string name="setting_app_icon_sub">اختر نمط أيقونة V Player على الشاشة الرئيسية</string>
-    <string name="icon_style_default">الافتراضية</string>
+    <string name="icon_style_default">أوبسيديان داكن (الأساسية)</string>
     <string name="icon_style_default_sub">أيقونة V Player الأصلية</string>
     <string name="icon_style_material_you">Material You</string>
     <string name="icon_style_material_you_sub">تتكيّف مع ألوان الخلفية</string>
@@ -905,4 +905,21 @@
     <string name="shorts_share_failed">تعذّر مشاركة هذا الفيديو</string>
     <string name="shorts_mute_btn">كتم / تشغيل الصوت</string>
     <string name="shorts_open_full_btn">فتح في المشغّل الكامل</string>
+    <!-- v90.30 مسح الكاشات، إصلاح الشورتس، وأيقونة أوبسيديان داكن -->
+    <string name="clear_cache_title">مسح الكاشات</string>
+    <string name="clear_cache_row_sub">تحرير المصغرات والملفات المؤقتة وكاش الفهرس</string>
+    <string name="clear_cache_safe_note">لن يتم حذف إعداداتك أو الثيمات أو مصادر IPTV أو الخزنة أو سجل المشاهدة أو فيديوهاتك أبداً.</string>
+    <string name="clear_cache_cat_thumbs">كاش الصور المصغرة</string>
+    <string name="clear_cache_cat_preload">كاش التحميل المسبق للفيديو والشورتس</string>
+    <string name="clear_cache_cat_folders">كاش قائمة المجلدات</string>
+    <string name="clear_cache_cat_subs">كاش الترجمات المترجمة المؤقتة</string>
+    <string name="clear_cache_cat_other">ملفات مؤقتة أخرى</string>
+    <string name="clear_cache_btn_clear">مسح</string>
+    <string name="clear_cache_freed_toast">تم تحرير %1$s</string>
+    <string name="changelog_v90_30_title">الإصدار %1$s — إصلاح الشورتس، سلاسة الأداء، مسح الكاشات، وأيقونة أوبسيديان داكن</string>
+    <string name="changelog_v90_30_desc">• إصلاح مشكلة التجمّد واختفاء المجلدات عند العودة من «شورتس» إلى «الفيديوهات» مع تحرير السطح والمشغّل فوراً عند مغادرة التبويب أو الضغط على رجوع.
+• استبدال أيقونات الشورتس (المشاركة، الصوت/الكتم، الشاشة الكاملة) بأيقونات متجهية رفيعة وهادئة بأسلوب Instagram داخل دوائر شبه شفافة.
+• تحسين السلاسة العامة عبر DiffUtil والمعرّفات الثابتة والفلترة خارج الخيط الرئيسي وتخزين إعدادات العرض في الذاكرة.
+• إضافة «مسح الكاشات» في الإعدادات مع عرض حجم كل قسم وخيارات تحديد آمنة تحفظ كل بيانات المستخدم وفيديوهاته.
+• تعيين أيقونة Obsidian Dark كأيقونة التطبيق الأساسية (مع إبقاء الأيقونة المضلّعة متاحة ضمن الأيقونات الـ 8).</string>
 </resources>

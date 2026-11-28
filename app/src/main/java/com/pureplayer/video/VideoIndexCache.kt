@@ -73,4 +73,17 @@ object VideoIndexCache {
             file.writeText(arr.toString(), Charsets.UTF_8)
         } catch (e: Exception) { Log.w("VideoIndexCache", "Handled non-fatal exception: ${e.javaClass.simpleName}") }
     }
+
+    fun getCacheSizeBytes(context: Context): Long {
+        val file = File(context.filesDir, CACHE_FILE_NAME)
+        return if (file.exists()) file.length().coerceAtLeast(0L) else 0L
+    }
+
+    fun clearCache(context: Context): Long {
+        memoryVideos = null
+        val file = File(context.filesDir, CACHE_FILE_NAME)
+        val len = if (file.exists()) file.length().coerceAtLeast(0L) else 0L
+        runCatching { if (file.exists()) file.delete() }
+        return len
+    }
 }

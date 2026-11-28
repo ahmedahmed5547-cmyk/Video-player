@@ -72,6 +72,14 @@ object VideoThumbnailLoader {
     fun cancelAllPending() {
         scopeJob.cancelChildren()
     }
+
+    fun getMemoryCacheBytes(): Long = memoryCache.size().toLong() * 1024L
+
+    fun clearMemoryCache(): Long {
+        val beforeBytes = getMemoryCacheBytes()
+        memoryCache.evictAll()
+        return beforeBytes
+    }
     private val loadSemaphore = Semaphore(4)
 
     fun loadVideoThumbnail(context: Context, video: VideoItem, imageView: ImageView, accentColor: Int): Job {

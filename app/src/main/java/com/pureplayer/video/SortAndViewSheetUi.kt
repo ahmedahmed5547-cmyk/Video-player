@@ -453,7 +453,7 @@ internal fun MainActivity.showCalmSortAndViewSheet() {
                 refreshLiveLibraryAndAdapter()
                 updateResumeLastFab()
                 runCatching { audioLibraryViewModel.refreshAudioLibrary() }
-                shortsFeedController?.refreshData(allDiscoveredVideos)
+                shortsFeedController?.markDirtyIfHidden(allDiscoveredVideos)
                 VexoPlaybackService.notifyLibraryChanged(this)
                 if (checked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
                     dialog.dismiss()

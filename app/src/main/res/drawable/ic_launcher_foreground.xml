@@ -4,63 +4,12 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Subtle drop shadow for 3D depth -->
     <path
-        android:fillColor="#44020617"
-        android:pathData="M37,31 L81,55.5 L37,80 Z" />
-
-    <!-- Left Pillar Facets (Bright Luminous Cyan) -->
-    <path
-        android:fillColor="#67E8F9"
-        android:pathData="M35,28 L44,33 L44,54 L35,54 Z" />
-    <path
-        android:fillColor="#22D3EE"
-        android:pathData="M35,54 L44,54 L44,75 L35,80 Z" />
-    <path
-        android:fillColor="#A5F3FC"
-        android:pathData="M35,28 L44,33 L39,43 Z" />
-
-    <!-- Upper Arm Facets (Cyan -> Electric Blue) -->
+        android:fillColor="#0E1422"
+        android:strokeColor="#2238BDF8"
+        android:strokeWidth="1.5"
+        android:pathData="M54,54m-29,0a29,29 0,1 1,58 0a29,29 0,1 1,-58 0" />
     <path
         android:fillColor="#38BDF8"
-        android:pathData="M35,28 L59,41.5 L53,46.5 L44,33 Z" />
-    <path
-        android:fillColor="#0EA5E9"
-        android:pathData="M59,41.5 L79,54 L67,54 L53,46.5 Z" />
-    <path
-        android:fillColor="#7DD3FC"
-        android:pathData="M44,33 L53,46.5 L44,44 Z" />
-
-    <!-- Lower Arm Facets (Electric Blue -> Deep Indigo/Violet) -->
-    <path
-        android:fillColor="#3B82F6"
-        android:pathData="M35,80 L44,75 L53,61.5 L59,66.5 Z" />
-    <path
-        android:fillColor="#6366F1"
-        android:pathData="M59,66.5 L53,61.5 L67,54 L79,54 Z" />
-    <path
-        android:fillColor="#2563EB"
-        android:pathData="M44,75 L44,64 L53,61.5 Z" />
-
-    <!-- Inner Bevel Facets for Hollow Crystal Prism Depth -->
-    <path
-        android:fillColor="#0284C7"
-        android:pathData="M44,44 L53,46.5 L44,54 Z" />
-    <path
-        android:fillColor="#1D4ED8"
-        android:pathData="M44,54 L53,61.5 L44,64 Z" />
-    <path
-        android:fillColor="#4F46E5"
-        android:pathData="M53,46.5 L67,54 L53,61.5 L58,54 Z" />
-
-    <!-- Crisp Specular Rim Highlights -->
-    <path
-        android:fillColor="#AAFFFFFF"
-        android:pathData="M35,28 L37.2,29.3 L37.2,54 L35,54 Z" />
-    <path
-        android:fillColor="#88E0F2FE"
-        android:pathData="M35,28 L59,41.5 L57.5,42.8 L35,30.2 Z" />
-    <path
-        android:fillColor="#99A5F3FC"
-        android:pathData="M67,54 L79,54 L72,55.8 Z" />
+        android:pathData="M43,35L74,54L43,73Z" />
 </vector>

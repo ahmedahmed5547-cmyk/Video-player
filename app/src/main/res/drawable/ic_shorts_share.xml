@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Minimal Instagram-style thin-outline paper-plane share icon (1.8dp stroke, rounded caps/joins) -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M21,3L3,10.2L10.3,13.1L13.2,20.5L21,3Z"
+        android:strokeWidth="1.8"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M21,3L10.3,13.1"
+        android:strokeWidth="1.8"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
